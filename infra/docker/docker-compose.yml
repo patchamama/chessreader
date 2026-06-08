@@ -1,0 +1,23 @@
+services:
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.web
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    ports:
+      - "8080:8080"
+    volumes:
+      - sqlite-data:/var/www/api/storage
+    environment:
+      - APP_ENV=production
+
+volumes:
+  sqlite-data:

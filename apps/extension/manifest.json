@@ -1,0 +1,6 @@
+{
+  "manifest_version": 3,
+  "name": "Chess Ebook Parser",
+  "version": "0.1.0",
+  "description": "Parse and display chess games from ebooks directly in your browser."
+}

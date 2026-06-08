@@ -1,0 +1,15 @@
+FROM php:8.5-fpm-alpine
+WORKDIR /var/www/api
+
+RUN apk add --no-cache nginx && \
+    docker-php-ext-enable opcache
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+COPY apps/api/composer.json apps/api/composer.lock* ./
+RUN composer install --no-dev --optimize-autoloader --no-interaction
+
+COPY apps/api .
+
+EXPOSE 8080
+CMD ["php", "-S", "0.0.0.0:8080", "-t", "public"]

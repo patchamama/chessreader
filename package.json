@@ -1,0 +1,15 @@
+{
+  "name": "chess-ebook-webparser",
+  "private": true,
+  "scripts": {
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:e2e": "echo 'TODO: e2e tests'",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  }
+}

@@ -1,0 +1,16 @@
+# Stage 1: build
+FROM node:24-alpine AS builder
+WORKDIR /app
+RUN npm install -g pnpm
+COPY package.json pnpm-workspace.yaml ./
+COPY apps/web/package.json apps/web/
+COPY packages/chess-shared/package.json packages/chess-shared/
+RUN pnpm install --frozen-lockfile
+COPY apps/web apps/web
+COPY packages/chess-shared packages/chess-shared
+RUN pnpm --filter web build
+
+# Stage 2: serve
+FROM nginx:alpine
+COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
+EXPOSE 80
