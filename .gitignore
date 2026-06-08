@@ -5,3 +5,5 @@ storage/
 *.sqlite
 dist/
 .env
+*.tsbuildinfo
+.phpunit.result.cache

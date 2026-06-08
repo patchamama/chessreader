@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit;
 
-use App\Presentation\HealthController;
+use App\Presentation\Health\HealthController;
 use App\Tests\TestCase;
 
 class HealthControllerTest extends TestCase
