@@ -1,0 +1,50 @@
+{
+  "description": "Nested variation: 1. e4 e5 2. Nf3 (2. d4 (2. c4)) 2... Nc6",
+  "inputText": "1. e4 e5 2. Nf3 (2. d4 (2. c4)) 2... Nc6",
+  "expectedMainline": [
+    {
+      "san": "e4",
+      "from": "e2",
+      "to": "e4",
+      "fenFields123": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq",
+      "moveNumber": 1,
+      "color": "white"
+    },
+    {
+      "san": "e5",
+      "from": "e7",
+      "to": "e5",
+      "fenFields123": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq",
+      "moveNumber": 1,
+      "color": "black"
+    },
+    {
+      "san": "Nf3",
+      "from": "g1",
+      "to": "f3",
+      "fenFields123": "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq",
+      "moveNumber": 2,
+      "color": "white"
+    },
+    {
+      "san": "Nc6",
+      "from": "b8",
+      "to": "c6",
+      "fenFields123": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq",
+      "moveNumber": 2,
+      "color": "black"
+    }
+  ],
+  "outerVariation": {
+    "san": "d4",
+    "from": "d2",
+    "to": "d4",
+    "fenFields123": "rnbqkbnr/pppp1ppp/8/4p3/3PP3/8/PPP2PPP/RNBQKBNR b KQkq"
+  },
+  "innerVariation": {
+    "san": "c4",
+    "from": "c2",
+    "to": "c4",
+    "fenFields123": "rnbqkbnr/pppp1ppp/8/4p3/2P1P3/8/PP1P1PPP/RNBQKBNR b KQkq"
+  }
+}

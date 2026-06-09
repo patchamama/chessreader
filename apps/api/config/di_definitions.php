@@ -11,6 +11,11 @@ use App\Application\Auth\RegisterUserHandler;
 use App\Application\Auth\RejectUserHandler;
 use App\Application\Ingestion\ParseWebsiteHandler;
 use App\Application\Ingestion\ProcessEpubHandler;
+use App\Application\Recognition\RecognizeMovesHandler;
+use App\Infrastructure\Chess\Recognition\SanRecognizer;
+use App\Infrastructure\Chess\Recognition\SpanishNotationNormalizer;
+use App\Infrastructure\Chess\Recognition\VariationParser;
+use App\Presentation\Recognition\RecognitionController;
 use App\Application\Library\GetChapterHandler;
 use App\Application\Library\ListBooksHandler;
 use App\Domain\Auth\UserRepository;
@@ -163,5 +168,21 @@ return [
             $c->get(ProcessEpubHandler::class),
             $c->get(ParseWebsiteHandler::class),
         );
+    },
+
+    SpanishNotationNormalizer::class => fn() => new SpanishNotationNormalizer(),
+    SanRecognizer::class             => fn() => new SanRecognizer(),
+    VariationParser::class           => fn() => new VariationParser(),
+
+    RecognizeMovesHandler::class => function (ContainerInterface $c) {
+        return new RecognizeMovesHandler(
+            $c->get(SpanishNotationNormalizer::class),
+            $c->get(SanRecognizer::class),
+            $c->get(VariationParser::class),
+        );
+    },
+
+    RecognitionController::class => function (ContainerInterface $c) {
+        return new RecognitionController($c->get(RecognizeMovesHandler::class));
     },
 ];

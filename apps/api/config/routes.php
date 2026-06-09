@@ -7,6 +7,7 @@ use App\Presentation\Auth\AuthController;
 use App\Presentation\Health\HealthController;
 use App\Presentation\Ingestion\IngestionController;
 use App\Presentation\Library\LibraryController;
+use App\Presentation\Recognition\RecognitionController;
 use App\Presentation\Middleware\AuthMiddleware;
 use App\Presentation\Middleware\RequireAdminMiddleware;
 use App\Presentation\Middleware\RequireApprovedMiddleware;
@@ -28,6 +29,11 @@ return function (App $app): void {
         $group->post('/users/{id}/approve', [AdminController::class, 'approve']);
         $group->post('/users/{id}/reject', [AdminController::class, 'reject']);
     })->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
+
+    // Recognition route (require JWT + Approved)
+    $app->group('/api/recognition', function (RouteCollectorProxy $group) {
+        $group->post('/parse', [RecognitionController::class, 'parse']);
+    })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
 
     // Library routes (require JWT + Approved)
     $app->group('/api/library', function (RouteCollectorProxy $group) {
