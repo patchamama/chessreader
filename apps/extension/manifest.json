@@ -1,6 +1,24 @@
 {
   "manifest_version": 3,
   "name": "Chess Ebook Parser",
-  "version": "0.1.0",
-  "description": "Parse and display chess games from ebooks directly in your browser."
+  "version": "0.10.0",
+  "description": "Make chess blogs and sites interactive — detect games, view interactive boards.",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "dist/popup/index.html",
+    "default_title": "Chess Ebook Parser"
+  },
+  "options_page": "dist/options/index.html",
+  "background": {
+    "service_worker": "dist/background/serviceWorker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["dist/content/contentScript.js"],
+      "run_at": "document_idle"
+    }
+  ]
 }
