@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter, createHashRouter, Navigate } from 'react-router-dom'
 import AppLayout from './AppLayout'
 import LoginForm from '../features/auth/components/LoginForm'
 import RegisterForm from '../features/auth/components/RegisterForm'
@@ -8,6 +8,7 @@ import PendingUsersTable from '../features/admin/components/PendingUsersTable'
 import LibraryGrid from '../features/library/components/LibraryGrid'
 import BookReader from '../features/library/components/BookReader'
 import WebparserView from '../features/webparser/components/WebparserView'
+import { isDemoHost } from '../shared/env/devMode'
 
 function PendingPage() {
   return (
@@ -20,7 +21,7 @@ function PendingPage() {
   )
 }
 
-export const router = createBrowserRouter([
+const routes = [
   {
     element: <AppLayout />,
     children: [
@@ -62,4 +63,9 @@ export const router = createBrowserRouter([
       },
     ],
   },
-])
+]
+
+// Hash router for GitHub Pages (no server-side routing); browser router everywhere else.
+export const router = isDemoHost()
+  ? createHashRouter(routes)
+  : createBrowserRouter(routes)

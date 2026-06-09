@@ -4,6 +4,8 @@
 
 ChessReader parses chess content — EPUBs, public URLs, plain text — recognises move notation in Spanish and English, builds a full game tree, and lets you step through every move on a live board with Stockfish evaluation. A companion browser extension brings the same experience to any chess blog you visit.
 
+**[Live Demo →](https://patchamama.github.io/chessreader/)** — no login required, no backend needed. Runs entirely in the browser with mock data.
+
 ---
 
 ## Features
