@@ -23,7 +23,9 @@ use App\Infrastructure\Chess\Engine\UciStockfishEngine;
 use App\Infrastructure\Chess\Recognition\SanRecognizer;
 use App\Infrastructure\Chess\Recognition\SpanishNotationNormalizer;
 use App\Infrastructure\Chess\Recognition\VariationParser;
+use App\Application\Webparser\ParseWebpageHandler;
 use App\Presentation\Recognition\RecognitionController;
+use App\Presentation\Webparser\WebparserController;
 use App\Application\Library\GetChapterHandler;
 use App\Application\Library\ListBooksHandler;
 use App\Domain\Auth\UserRepository;
@@ -153,6 +155,8 @@ return [
         );
     },
 
+    \App\Application\Ingestion\Port\HtmlFetcher::class => fn(ContainerInterface $c) => $c->get(GuzzleHtmlFetcher::class),
+
     ZipEpubExtractor::class  => fn() => new ZipEpubExtractor(),
     NcxTocParser::class      => fn() => new NcxTocParser(),
     OpfManifestParser::class => fn() => new OpfManifestParser(),
@@ -229,6 +233,19 @@ return [
             $c->get(EvaluatePositionHandler::class),
             $c->get(EvaluateGameHandler::class),
         );
+    },
+
+    // Webparser
+    ParseWebpageHandler::class => function (ContainerInterface $c) {
+        return new ParseWebpageHandler(
+            $c->get(\App\Application\Ingestion\Port\HtmlFetcher::class),
+            $c->get(ReadabilityExtractor::class),
+            $c->get(RecognizeMovesHandler::class),
+        );
+    },
+
+    WebparserController::class => function (ContainerInterface $c) {
+        return new WebparserController($c->get(ParseWebpageHandler::class));
     },
 
     // Diagram

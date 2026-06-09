@@ -10,6 +10,7 @@ use App\Presentation\Health\HealthController;
 use App\Presentation\Ingestion\IngestionController;
 use App\Presentation\Library\LibraryController;
 use App\Presentation\Recognition\RecognitionController;
+use App\Presentation\Webparser\WebparserController;
 use App\Presentation\Middleware\AuthMiddleware;
 use App\Presentation\Middleware\RequireAdminMiddleware;
 use App\Presentation\Middleware\RequireApprovedMiddleware;
@@ -46,6 +47,11 @@ return function (App $app): void {
     // Diagram routes (require JWT + Approved)
     $app->group('/api/diagrams', function (RouteCollectorProxy $group) {
         $group->post('/regenerate', [DiagramController::class, 'regenerate']);
+    })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
+
+    // Webparser routes (require JWT + Approved)
+    $app->group('/api/webparser', function (RouteCollectorProxy $group) {
+        $group->post('/parse', [WebparserController::class, 'parse']);
     })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
 
     // Library routes (require JWT + Approved)

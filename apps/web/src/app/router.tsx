@@ -6,6 +6,7 @@ import RequireAdmin from '../features/auth/guards/RequireAdmin'
 import PendingUsersTable from '../features/admin/components/PendingUsersTable'
 import LibraryGrid from '../features/library/components/LibraryGrid'
 import BookReader from '../features/library/components/BookReader'
+import WebparserView from '../features/webparser/components/WebparserView'
 
 function PendingPage() {
   return <div><h1>Account Pending</h1><p>Your account is awaiting admin approval.</p></div>
@@ -28,6 +29,14 @@ export const router = createBrowserRouter([
     element: (
       <RequireApproved>
         <BookReader />
+      </RequireApproved>
+    ),
+  },
+  {
+    path: '/webparser',
+    element: (
+      <RequireApproved>
+        <WebparserView />
       </RequireApproved>
     ),
   },
