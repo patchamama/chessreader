@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { createStockfishWorker } from './stockfishWorker'
+import { useSettingsStore, STOCKFISH_VERSIONS } from '../settings/settingsStore'
 
 export interface EvalResult {
   scoreCp?: number
@@ -9,10 +10,12 @@ export interface EvalResult {
   loading: boolean
 }
 
-// FEN → EvalResult cache (module-level, survives re-renders but resets on page reload)
 const evalCache = new Map<string, Omit<EvalResult, 'loading'>>()
 
 export function useStockfishEval(fen: string): EvalResult {
+  const stockfishVersion = useSettingsStore((s) => s.stockfishVersion)
+  const sfUrl = STOCKFISH_VERSIONS[stockfishVersion].url
+
   const [result, setResult] = useState<EvalResult>(() => {
     const cached = evalCache.get(fen)
     return cached ? { ...cached, loading: false } : { loading: true }
@@ -21,33 +24,43 @@ export function useStockfishEval(fen: string): EvalResult {
   const workerRef = useRef<Worker | null>(null)
   const fenRef    = useRef<string>(fen)
 
+  // Recreate worker when sfUrl changes
   useEffect(() => {
-    // Create worker once
-    if (!workerRef.current) {
-      const worker = createStockfishWorker()
-
-      worker.onmessage = (event: MessageEvent) => {
-        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
-        if (data.type !== 'eval') return
-        // Discard stale replies (fen changed since request was sent)
-        if (data.fen !== fenRef.current) return
-
-        const evalData: Omit<EvalResult, 'loading'> = {
-          scoreCp:  data.scoreCp,
-          mate:     data.mate,
-          bestMove: data.bestMove,
-          depth:    data.depth,
-        }
-        evalCache.set(data.fen, evalData)
-        setResult({ ...evalData, loading: false })
-      }
-
-      workerRef.current = worker
+    if (workerRef.current) {
+      workerRef.current.terminate()
+      workerRef.current = null
     }
+    evalCache.clear()
 
+    const worker = createStockfishWorker(sfUrl)
+    worker.onmessage = (event: MessageEvent) => {
+      const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+      if (data.type !== 'eval') return
+      if (data.fen !== fenRef.current) return
+      const evalData: Omit<EvalResult, 'loading'> = {
+        scoreCp:  data.scoreCp,
+        mate:     data.mate,
+        bestMove: data.bestMove,
+        depth:    data.depth,
+      }
+      evalCache.set(data.fen, evalData)
+      setResult({ ...evalData, loading: false })
+    }
+    workerRef.current = worker
+
+    setResult({ loading: true })
+    workerRef.current.postMessage({ type: 'evaluate', fen: fenRef.current })
+
+    return () => {
+      worker.terminate()
+      workerRef.current = null
+    }
+  }, [sfUrl])
+
+  useEffect(() => {
     fenRef.current = fen
+    if (!workerRef.current) return
 
-    // Check cache before posting
     const cached = evalCache.get(fen)
     if (cached) {
       setResult({ ...cached, loading: false })

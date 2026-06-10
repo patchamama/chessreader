@@ -1,4 +1,4 @@
-import { useSettingsStore, BOARD_THEMES, FONT_FAMILIES, type BoardTheme, type FontFamily, type EvalBarDirection } from './settingsStore'
+import { useSettingsStore, BOARD_THEMES, FONT_FAMILIES, STOCKFISH_VERSIONS, type BoardTheme, type FontFamily, type EvalBarDirection, type StockfishVersion } from './settingsStore'
 
 interface SettingsPanelProps {
   onClose: () => void
@@ -63,6 +63,18 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
             </button>
           ))}
         </div>
+
+        {/* Stockfish version */}
+        <label className={labelClass}>Stockfish engine</label>
+        <select
+          value={s.stockfishVersion}
+          onChange={(e) => s.set({ stockfishVersion: e.target.value as StockfishVersion })}
+          className={inputClass}
+        >
+          {(Object.entries(STOCKFISH_VERSIONS) as [StockfishVersion, typeof STOCKFISH_VERSIONS[StockfishVersion]][]).map(([key, v]) => (
+            <option key={key} value={key}>{v.label}</option>
+          ))}
+        </select>
 
         {/* Font family */}
         <label className={labelClass}>Font family</label>

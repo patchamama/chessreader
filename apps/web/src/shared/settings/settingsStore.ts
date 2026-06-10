@@ -21,6 +21,27 @@ export const BOARD_THEMES: Record<BoardTheme, { light: string; dark: string; lab
 
 export type EvalBarDirection = 'horizontal' | 'vertical'
 
+export type StockfishVersion = 'sf10-jsdelivr' | 'sf16-jsdelivr' | 'sf10-cdnjs' | 'sf9-cdnjs'
+
+export const STOCKFISH_VERSIONS: Record<StockfishVersion, { url: string; label: string }> = {
+  'sf10-jsdelivr': {
+    url: 'https://cdn.jsdelivr.net/npm/stockfish.js@10/stockfish.js',
+    label: 'Stockfish 10 (jsDelivr)',
+  },
+  'sf16-jsdelivr': {
+    url: 'https://cdn.jsdelivr.net/npm/stockfish@16/src/stockfish-nnue-16-single.js',
+    label: 'Stockfish 16 (jsDelivr)',
+  },
+  'sf10-cdnjs': {
+    url: 'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js',
+    label: 'Stockfish 10 (cdnjs)',
+  },
+  'sf9-cdnjs': {
+    url: 'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/9.0/stockfish.js',
+    label: 'Stockfish 9 (cdnjs)',
+  },
+}
+
 export type FontFamily = 'serif' | 'sans' | 'mono'
 export const FONT_FAMILIES: Record<FontFamily, { css: string; label: string }> = {
   serif: { css: 'Georgia, Times New Roman, serif', label: 'Serif' },
@@ -31,6 +52,7 @@ export const FONT_FAMILIES: Record<FontFamily, { css: string; label: string }> =
 export interface AppSettings {
   boardTheme: BoardTheme
   evalBarDirection: EvalBarDirection
+  stockfishVersion: StockfishVersion
   fontFamily: FontFamily
   fontSize: number        // 12–22 px
   bgColor: string         // hex
@@ -41,6 +63,7 @@ export interface AppSettings {
 const DEFAULT: AppSettings = {
   boardTheme: 'classic',
   evalBarDirection: 'horizontal',
+  stockfishVersion: 'sf10-jsdelivr',
   fontFamily: 'serif',
   fontSize: 16,
   bgColor: '#ffffff',

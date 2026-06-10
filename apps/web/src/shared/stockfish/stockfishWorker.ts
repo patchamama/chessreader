@@ -13,11 +13,11 @@
  *   OUT { type: 'lines', fen, lines: [{idx, pv, scoreCp?, mate?, depth}] }
  */
 
-const SF_CDN = 'https://cdn.jsdelivr.net/npm/stockfish.js@10/stockfish.js'
+export const SF_DEFAULT_URL = 'https://cdn.jsdelivr.net/npm/stockfish.js@10/stockfish.js'
 
-export function createStockfishWorker(): Worker {
+export function createStockfishWorker(sfUrl: string = SF_DEFAULT_URL): Worker {
   const wrapperCode = `
-const SF_URL = '${SF_CDN}';
+const SF_URL = '${sfUrl}';
 
 let sf            = null;
 let engineReady   = false;
