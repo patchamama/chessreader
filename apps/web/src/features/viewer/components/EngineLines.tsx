@@ -28,7 +28,8 @@ function pvToSegments(fen: string, pv: string[]): PvSegment[] {
     let moveNum = parseInt(fenParts[5] ?? '1', 10)
     let isWhiteTurn = (fenParts[1] ?? 'w') === 'w'
     const result: PvSegment[] = []
-    const slice = pv.slice(0, 5)
+    // Show up to 10 plies (10 half-moves total) of the best line
+    const slice = pv.slice(0, 10)
 
     for (let i = 0; i < slice.length; i++) {
       const uci = slice[i]
@@ -50,7 +51,7 @@ function pvToSegments(fen: string, pv: string[]): PvSegment[] {
     }
     return result
   } catch {
-    return pv.slice(0, 5).map((uci, i) => ({ label: uci, pvIndex: i }))
+    return pv.slice(0, 10).map((uci, i) => ({ label: uci, pvIndex: i }))
   }
 }
 

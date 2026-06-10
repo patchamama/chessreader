@@ -29,8 +29,10 @@ export default function InlineGame({ treeId, game, fullText }: InlineGameProps) 
 
   const activateThis = () => setActiveTree(treeId)
 
+  // Centered relative to the board; in vertical mode pl-3 offsets the eval bar (w-2 + gap-1)
+  // and mt-4 clears the score label hanging below the bar
   const navButtons = (
-    <div className="flex gap-1 mt-1">
+    <div className={`flex gap-1 justify-center ${evalDirection === 'vertical' ? 'pl-3 mt-4' : 'mt-1'}`}>
       <button
         aria-label="Go to start"
         className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"

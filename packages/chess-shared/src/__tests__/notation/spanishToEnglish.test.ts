@@ -89,4 +89,25 @@ describe('spanishToEnglish (full text)', () => {
     const english = '7. O-O d3 8. Qb3 Qf6'
     expect(spanishToEnglish(english)).toBe('7. O-O d3 8. Qb3 Qf6')
   });
+
+  it('Spanish prose words do not trigger Spanish detection (regression)', () => {
+    // "Después" (D+e) and "Cada" (C+a) must NOT count as Spanish piece moves;
+    // English moves like Re1/Rxa1 must survive intact
+    const text = 'Después de la apertura: 10. Re1 Nge7 11. Ba3 b5 12. Qxb5 Rb8 y cada bando lucha.'
+    const result = spanishToEnglish(text)
+    expect(result).toContain('Re1')
+    expect(result).toContain('Rb8')
+    expect(result).toContain('Después')
+    expect(result).not.toContain('Ke1')
+  });
+
+  it('Spanish prose words are not converted even in Spanish notation text', () => {
+    // In genuine Spanish notation, prose like "Cada" must not become "Nada"
+    const text = 'Cada jugada: 1. e4 e5 2. Cf3 Cc6 3. Ac4 también Torre.'
+    const result = spanishToEnglish(text)
+    expect(result).toContain('Cada')
+    expect(result).toContain('también')
+    expect(result).toContain('Nf3')
+    expect(result).toContain('Bc4')
+  });
 });

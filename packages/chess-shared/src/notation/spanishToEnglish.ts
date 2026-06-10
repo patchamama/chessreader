@@ -59,11 +59,16 @@ export function spanishTokenToEnglish(token: string): string {
  * a square or 'x'), and no Spanish-only markers (C, D, T before squares) are
  * found, treat as English.
  */
+// Strict SAN tail after a piece letter: optional disambiguation file/rank,
+// optional capture marker, then a target square. This prevents prose words
+// like "Después" (D+e) or "Cada" (C+a) from being mistaken for moves.
+const SAN_TAIL = '[a-h1-8]?x?[a-h][1-8]'
+
 function isEnglishNotation(text: string): boolean {
-  // English piece letters: K, Q, R, B, N — any before a square/capture
-  const hasEnglish = /(?:^|[\s(])[KQRBN](?=[a-h1-8x+#])/.test(text)
-  // Spanish-only piece letters: C (Caballo), D (Dama), T (Torre) — A (Alfil) excluded since B is common
-  const hasSpanish  = /(?:^|[\s(])[CDT](?=[a-h1-8x+#])/.test(text)
+  // English piece letters: K, Q, R, B, N followed by a full SAN move shape
+  const hasEnglish = new RegExp(`(?:^|[\\s(])[KQRBN]${SAN_TAIL}`).test(text)
+  // Spanish-only piece letters: C (Caballo), D (Dama), T (Torre)
+  const hasSpanish  = new RegExp(`(?:^|[\\s(])[CDT]${SAN_TAIL}`).test(text)
   return hasEnglish && !hasSpanish
 }
 
@@ -86,19 +91,21 @@ export function spanishToEnglish(text: string): string {
 
   // Replace Spanish piece letters that start a SAN token.
   // A SAN token starts after whitespace, '(', or beginning of string,
-  // and begins with an uppercase piece letter.
+  // and the piece letter must be followed by a FULL SAN move shape
+  // (so prose like "Cada" or "Después" is never converted).
   // Use a placeholder for Torre (T=Rook) so R->K substitution doesn't clobber it
+  const tail = `(?=${SAN_TAIL})`;
   result = result
     // T (Torre/Rook) -> placeholder — must come BEFORE R (Rey/King)
-    .replace(/(?<=^|[\s(])T(?=[a-h1-8x\+#=\?\!])/g, '\x00ROOK\x00')
+    .replace(new RegExp(`(?<=^|[\\s(])T${tail}`, 'g'), '\x00ROOK\x00')
     // C (Caballo/Knight) -> N
-    .replace(/(?<=^|[\s(])C(?=[a-h1-8x\+#=\?\!])/g, 'N')
+    .replace(new RegExp(`(?<=^|[\\s(])C${tail}`, 'g'), 'N')
     // A (Alfil/Bishop) -> B
-    .replace(/(?<=^|[\s(])A(?=[a-h1-8x\+#=\?\!])/g, 'B')
+    .replace(new RegExp(`(?<=^|[\\s(])A${tail}`, 'g'), 'B')
     // D (Dama/Queen) -> Q
-    .replace(/(?<=^|[\s(])D(?=[a-h1-8x\+#=\?\!])/g, 'Q')
-    // R (Rey/King) -> K  — only in Spanish context (no K/N/Q already present)
-    .replace(/(?<=^|[\s(])R(?=[a-h1-8x\+#=\?\!])/g, 'K')
+    .replace(new RegExp(`(?<=^|[\\s(])D${tail}`, 'g'), 'Q')
+    // R (Rey/King) -> K  — only in Spanish context (no English markers present)
+    .replace(new RegExp(`(?<=^|[\\s(])R${tail}`, 'g'), 'K')
     // Restore Rook placeholder
     .replace(/\x00ROOK\x00/g, 'R');
 

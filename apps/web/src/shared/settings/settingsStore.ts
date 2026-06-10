@@ -61,8 +61,8 @@ export interface AppSettings {
 }
 
 const DEFAULT: AppSettings = {
-  boardTheme: 'classic',
-  evalBarDirection: 'horizontal',
+  boardTheme: 'blue',
+  evalBarDirection: 'vertical',
   stockfishVersion: 'sf10-jsdelivr',
   fontFamily: 'serif',
   fontSize: 16,

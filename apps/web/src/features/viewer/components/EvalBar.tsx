@@ -29,18 +29,19 @@ export default function EvalBar({ fen }: EvalBarProps) {
   if (direction === 'vertical') {
     return (
       <div
-        className="flex flex-col items-center self-stretch shrink-0"
+        className="relative w-2 shrink-0 self-stretch"
         aria-label={`Evaluation: ${label}`}
         data-depth={depth}
       >
-        {/* Vertical bar — half width, full height of the board */}
-        <div className="relative w-2 flex-1 bg-gray-800 rounded overflow-hidden border border-gray-600">
+        {/* Bar fills exactly the stretched height (= board height) */}
+        <div className="absolute inset-0 bg-gray-800 rounded overflow-hidden border border-gray-600">
           <div
             className="absolute bottom-0 left-0 right-0 bg-white transition-all duration-500"
             style={{ height: `${whitePct}%` }}
           />
         </div>
-        <span className="text-[9px] font-mono font-semibold mt-0.5 opacity-60">
+        {/* Score hangs below the bar without affecting layout width */}
+        <span className="absolute top-full left-1/2 -translate-x-1/2 mt-0.5 text-[9px] font-mono font-semibold opacity-60 whitespace-nowrap">
           {label}
         </span>
       </div>
