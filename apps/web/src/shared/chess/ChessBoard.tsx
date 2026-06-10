@@ -1,5 +1,6 @@
 import { Chessboard } from 'react-chessboard'
 import type { CSSProperties } from 'react'
+import { useSettingsStore, BOARD_THEMES } from '../settings/settingsStore'
 
 export interface LastMove {
   from: string
@@ -17,10 +18,13 @@ const HIGHLIGHT_STYLE: CSSProperties = {
 }
 
 export default function ChessBoard({ fen, orientation, lastMove }: ChessBoardProps) {
+  const boardTheme = useSettingsStore((s) => s.boardTheme)
+  const theme = BOARD_THEMES[boardTheme]
+
   const squareStyles: Record<string, CSSProperties> = {}
   if (lastMove) {
     squareStyles[lastMove.from] = HIGHLIGHT_STYLE
-    squareStyles[lastMove.to] = HIGHLIGHT_STYLE
+    squareStyles[lastMove.to]   = HIGHLIGHT_STYLE
   }
 
   return (
@@ -31,6 +35,8 @@ export default function ChessBoard({ fen, orientation, lastMove }: ChessBoardPro
         squareStyles,
         allowDragging: false,
         showAnimations: false,
+        lightSquareStyle: { backgroundColor: theme.light },
+        darkSquareStyle:  { backgroundColor: theme.dark },
       }}
     />
   )

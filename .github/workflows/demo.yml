@@ -22,29 +22,30 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 11
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
-      - name: Install JS dependencies
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build chess-shared
         run: pnpm --filter @chess-ebook/chess-shared build
 
-      - name: Build demo
+      - name: Build web (demo)
         working-directory: apps/web
         env:
           VITE_BASE_PATH: /chessreader/
         run: pnpm build
 
-      - name: Copy mockServiceWorker.js to dist
-        # Vite copies public/ into dist/ but mockServiceWorker.js is gitignored in some setups.
-        # Copy explicitly to ensure it lands at /chessreader/mockServiceWorker.js on Pages.
-        run: cp apps/web/public/mockServiceWorker.js apps/web/dist/mockServiceWorker.js
+      - name: Ensure mockServiceWorker.js in dist
+        run: |
+          if [ -f apps/web/public/mockServiceWorker.js ]; then
+            cp apps/web/public/mockServiceWorker.js apps/web/dist/mockServiceWorker.js
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -6,21 +6,26 @@ interface ViewerState {
   orientation: 'white' | 'black'
   /** whether viewer is currently inside a variation per treeId */
   isInVariation: Record<string, boolean>
+  /** last treeId the user interacted with (for keyboard navigation) */
+  activeTreeId: string | null
 
   selectNode: (treeId: string, nodeId: string, inVariation: boolean) => void
   flipOrientation: () => void
   goToStart: (treeId: string) => void
+  setActiveTree: (treeId: string) => void
 }
 
 export const useViewerStore = create<ViewerState>((set) => ({
   currentNodeId: {},
   orientation: 'white',
   isInVariation: {},
+  activeTreeId: null,
 
   selectNode: (treeId, nodeId, inVariation) =>
     set((s) => ({
       currentNodeId: { ...s.currentNodeId, [treeId]: nodeId },
       isInVariation: { ...s.isInVariation, [treeId]: inVariation },
+      activeTreeId: treeId,
     })),
 
   flipOrientation: () =>
@@ -31,4 +36,6 @@ export const useViewerStore = create<ViewerState>((set) => ({
       currentNodeId: { ...s.currentNodeId, [treeId]: null },
       isInVariation: { ...s.isInVariation, [treeId]: false },
     })),
+
+  setActiveTree: (treeId) => set({ activeTreeId: treeId }),
 }))

@@ -1,18 +1,28 @@
+import { useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useChapter } from '../api/libraryApi'
 import { recognizeGames } from '@chess-ebook/chess-shared'
+import type { GameTree } from '@chess-ebook/chess-shared'
 import InlineGame from '../../viewer/components/InlineGame'
+import { useKeyboardNavigation } from '../../viewer/hooks/useKeyboardNavigation'
 
-/**
- * BookReader — EPIC-5 implementation.
- *
- * Fetches a chapter, runs recognizeGames over the text content,
- * and renders the prose with InlineGame boards for each recognized game.
- */
 export default function BookReader() {
   const { bookId } = useParams<{ bookId: string }>()
   const id = Number(bookId)
   const { data, isLoading } = useChapter(id, 0)
+
+  const html      = data?.html ?? ''
+  const plainText = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  const games     = useMemo(() => recognizeGames(plainText), [plainText])
+
+  // Build treeId → GameTree map for keyboard navigation
+  const treesMap = useMemo<Map<string, GameTree>>(() => {
+    const m = new Map<string, GameTree>()
+    games.forEach((g, i) => m.set(`book-${id}-game-${i}`, g.tree))
+    return m
+  }, [games, id])
+
+  useKeyboardNavigation(treesMap)
 
   if (isLoading) {
     return (
@@ -22,12 +32,6 @@ export default function BookReader() {
       </div>
     )
   }
-
-  const html = data?.html ?? ''
-  // Strip HTML tags to get plain text for move recognition
-  const plainText = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
-
-  const games = recognizeGames(plainText)
 
   return (
     <div className="p-4 max-w-3xl mx-auto">

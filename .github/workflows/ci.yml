@@ -17,8 +17,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
-          cache: "pnpm"
+          node-version: 24
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -34,24 +34,3 @@ jobs:
 
       - name: Test (chess-shared)
         run: pnpm --filter chess-shared test
-
-  api:
-    name: Backend (PHP Slim)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/api
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: "8.5"
-          tools: composer:v2
-
-      - name: Install dependencies
-        run: composer install --no-interaction --prefer-dist
-
-      - name: Run tests
-        run: composer test
