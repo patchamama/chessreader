@@ -1,4 +1,4 @@
-import { Chess } from 'chess.js'
+import { Chess, type Square } from 'chess.js'
 import { useEngineLines, type EngineLine } from '../../../shared/stockfish/useEngineLines'
 
 interface EngineLinesProps {
@@ -22,10 +22,10 @@ function movesLabel(fen: string, pv: string[]): string {
     return pv
       .slice(0, 5)
       .map((uci) => {
-        const from = uci.slice(0, 2) as any
-        const to   = uci.slice(2, 4) as any
-        const promo = uci[4]
-        const move = chess.move({ from, to, promotion: promo || 'q' })
+        const from  = uci.slice(0, 2) as Square
+        const to    = uci.slice(2, 4) as Square
+        const promo = uci[4] as 'q' | 'r' | 'b' | 'n' | undefined
+        const move  = chess.move({ from, to, promotion: promo ?? 'q' })
         return move ? move.san : uci
       })
       .join(' ')
@@ -38,11 +38,11 @@ function fenAfterMoves(fen: string, pv: string[], upTo: number): string | null {
   try {
     const chess = new Chess(fen)
     for (let i = 0; i < upTo; i++) {
-      const uci  = pv[i]
-      const from = uci.slice(0, 2) as any
-      const to   = uci.slice(2, 4) as any
-      const promo = uci[4]
-      const ok = chess.move({ from, to, promotion: promo || 'q' })
+      const uci   = pv[i]
+      const from  = uci.slice(0, 2) as Square
+      const to    = uci.slice(2, 4) as Square
+      const promo = uci[4] as 'q' | 'r' | 'b' | 'n' | undefined
+      const ok    = chess.move({ from, to, promotion: promo ?? 'q' })
       if (!ok) return null
     }
     return chess.fen()
@@ -71,7 +71,6 @@ export default function EngineLines({ fen, onPreviewFen }: EngineLinesProps) {
 
         return (
           <div key={line.idx} className="flex items-start gap-2">
-            {/* Score badge */}
             <span
               className={`shrink-0 w-10 text-right font-semibold ${
                 (line.scoreCp ?? 0) >= 0 || (line.mate ?? 0) > 0
@@ -82,7 +81,6 @@ export default function EngineLines({ fen, onPreviewFen }: EngineLinesProps) {
               {score}
             </span>
 
-            {/* Moves — each clickable */}
             <span className="flex flex-wrap gap-1">
               {moves.map((san, i) => (
                 <button

@@ -29,7 +29,7 @@ describe('RegisterForm', () => {
       isPending: false,
       error: null,
       isSuccess: false,
-    } as any)
+    } as unknown as ReturnType<typeof useRegisterMutation>)
   })
 
   it('shows required errors on empty submit', async () => {
@@ -60,7 +60,7 @@ describe('RegisterForm', () => {
       isPending: false,
       error: { message: 'Email already registered' },
       isSuccess: false,
-    } as any)
+    } as unknown as ReturnType<typeof useRegisterMutation>)
 
     render(<RegisterForm />, { wrapper })
     expect(screen.getByText(/email already registered/i)).toBeInTheDocument()

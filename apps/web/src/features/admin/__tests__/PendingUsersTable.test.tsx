@@ -30,9 +30,9 @@ describe('PendingUsersTable', () => {
 
   beforeEach(() => {
     vi.resetAllMocks()
-    mockUsePending.mockReturnValue({ data: pendingUsers, isLoading: false, error: null } as any)
-    mockUseApprove.mockReturnValue({ mutateAsync, isPending: false } as any)
-    mockUseReject.mockReturnValue({ mutateAsync, isPending: false } as any)
+    mockUsePending.mockReturnValue({ data: pendingUsers, isLoading: false, error: null } as unknown as ReturnType<typeof usePendingUsers>)
+    mockUseApprove.mockReturnValue({ mutateAsync, isPending: false } as unknown as ReturnType<typeof useApproveUser>)
+    mockUseReject.mockReturnValue({ mutateAsync, isPending: false } as unknown as ReturnType<typeof useRejectUser>)
   })
 
   it('renders one row per pending user', () => {

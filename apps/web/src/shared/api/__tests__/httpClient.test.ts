@@ -15,11 +15,11 @@ const mockGetState = vi.mocked(useAuthStore.getState)
 describe('httpClient', () => {
   beforeEach(() => {
     vi.resetAllMocks()
-    mockGetState.mockReturnValue({ token: null } as any)
+    mockGetState.mockReturnValue({ token: null } as unknown as ReturnType<typeof useAuthStore.getState>)
   })
 
   it('includes Authorization header when token is present', async () => {
-    mockGetState.mockReturnValue({ token: 'my.jwt.token' } as any)
+    mockGetState.mockReturnValue({ token: 'my.jwt.token' } as unknown as ReturnType<typeof useAuthStore.getState>)
 
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,

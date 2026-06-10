@@ -9,7 +9,7 @@ import { useViewerStore } from '../store/viewerStore'
 
 // Mock useChapter to return chess prose
 vi.mock('../../library/api/libraryApi', () => ({
-  useChapter: (_bookId: number, _chapterOrder: number) => ({
+  useChapter: () => ({
     data: {
       title: 'Chapter 1',
       html: '<p>After 1. e4 e5 2. Nf3 Nc6 the game continues.</p>',

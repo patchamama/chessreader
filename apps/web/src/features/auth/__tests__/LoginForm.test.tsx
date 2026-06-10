@@ -34,7 +34,7 @@ describe('LoginForm', () => {
       isPending: false,
       error: null,
       isSuccess: false,
-    } as any)
+    } as unknown as ReturnType<typeof useLoginMutation>)
   })
 
   it('shows required errors on empty submit', async () => {

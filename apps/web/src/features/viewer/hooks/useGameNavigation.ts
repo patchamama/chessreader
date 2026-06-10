@@ -116,7 +116,7 @@ export function useGameNavigation(treeId: string, tree: GameTree): GameNavigatio
       }
     }
     // Fallback: find the variation parent from variations map
-    for (const [parentId, _lines] of tree.variations.entries()) {
+    for (const [parentId] of tree.variations.entries()) {
       if (parentId !== 'root' && tree.mainline.includes(parentId)) {
         storeSelectNode(treeId, parentId, false)
         return

@@ -64,9 +64,15 @@ export default function InlineGame({ treeId, game, fullText }: InlineGameProps) 
     <div className="my-4 flex flex-col gap-2">
       <div className="flex gap-4 items-start">
 
-        {/* Left column: board area */}
-        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-        <div className="shrink-0 w-52" onClick={activateThis}>
+        {/* Left column: board area — click activates keyboard nav for this game */}
+        <div
+          role="region"
+          aria-label="Chess board"
+          className="shrink-0 w-52"
+          onClick={activateThis}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') activateThis() }}
+          tabIndex={0}
+        >
           {evalDirection === 'vertical' ? (
             // Vertical eval bar sits left of the board
             <div className="flex gap-1 items-start">

@@ -30,7 +30,7 @@ describe('UploadBookForm', () => {
       isError: false,
       error: null,
       reset: vi.fn(),
-    } as any)
+    } as unknown as ReturnType<typeof useUploadBook>)
   })
 
   it('renders file tab and url tab', () => {
@@ -85,7 +85,7 @@ describe('UploadBookForm', () => {
       isError: false,
       error: null,
       reset: vi.fn(),
-    } as any)
+    } as unknown as ReturnType<typeof useUploadBook>)
 
     render(<UploadBookForm />, { wrapper })
     expect(screen.getByRole('button', { name: /uploading/i })).toBeDisabled()
@@ -98,7 +98,7 @@ describe('UploadBookForm', () => {
       isError: true,
       error: new Error('EPUB processing failed'),
       reset: vi.fn(),
-    } as any)
+    } as unknown as ReturnType<typeof useUploadBook>)
 
     render(<UploadBookForm />, { wrapper })
     expect(screen.getByRole('alert')).toBeInTheDocument()
