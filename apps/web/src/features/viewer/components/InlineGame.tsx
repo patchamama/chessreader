@@ -100,6 +100,7 @@ export default function InlineGame({ treeId, game, fullText }: InlineGameProps) 
             game={game}
             activeNodeId={currentNodeId}
             onSelectNode={(id) => selectNode(id, false)}
+            onPreviewFen={setPreviewFen}
           />
           <VariationTree
             tree={game.tree}

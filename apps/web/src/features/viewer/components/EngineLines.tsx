@@ -16,17 +16,26 @@ function formatScore(line: EngineLine): string {
   return '?'
 }
 
-/** Convert up to 5 UCI moves from a FEN into numbered SAN notation.
- *  Returns segments like ["1. Re1", "Nf3", "2. b4", "exf6", "3. ..."] */
-function pvToSegments(fen: string, pv: string[]): string[] {
+interface PvSegment {
+  /** display text, e.g. "1. Re1" or "Nf3" */
+  label: string
+  /** index into pv[] this segment corresponds to (for fenAfterMoves) */
+  pvIndex: number
+}
+
+/**
+ * Converts up to 5 UCI moves into display segments with proper SAN numbering.
+ * Format: "7. O-O dxc3 8. Qb3 Qf6 9. Bg5"
+ * When first move is black: "5... c5 6. Nf3 Nc6"
+ */
+function pvToSegments(fen: string, pv: string[]): PvSegment[] {
   try {
-    const chess  = new Chess(fen)
-    const result: string[] = []
-    const slice  = pv.slice(0, 5)
-    // Determine starting move number and whose turn from FEN
+    const chess      = new Chess(fen)
     const fenParts   = fen.split(' ')
-    let moveNum      = parseInt(fenParts[5] ?? '1')
+    let moveNum      = parseInt(fenParts[5] ?? '1', 10)
     let isWhiteTurn  = (fenParts[1] ?? 'w') === 'w'
+    const result: PvSegment[] = []
+    const slice = pv.slice(0, 5)
 
     for (let i = 0; i < slice.length; i++) {
       const uci   = slice[i]
@@ -36,20 +45,20 @@ function pvToSegments(fen: string, pv: string[]): string[] {
       const move  = chess.move({ from, to, promotion: promo ?? 'q' })
       if (!move) break
 
-      const san = move.san
+      let label: string
       if (isWhiteTurn) {
-        result.push(`${moveNum}. ${san}`)
+        label = `${moveNum}. ${move.san}`
       } else {
-        // If very first move is black, show "N... san"
-        if (i === 0) result.push(`${moveNum}... ${san}`)
-        else result.push(san)
+        // First move is black → show ellipsis prefix; subsequent black moves need no number
+        label = i === 0 ? `${moveNum}... ${move.san}` : move.san
         moveNum++
       }
+      result.push({ label, pvIndex: i })
       isWhiteTurn = !isWhiteTurn
     }
     return result
   } catch {
-    return pv.slice(0, 5)
+    return pv.slice(0, 5).map((uci, i) => ({ label: uci, pvIndex: i }))
   }
 }
 
@@ -70,45 +79,42 @@ function fenAfterMoves(fen: string, pv: string[], upTo: number): string | null {
 }
 
 export default function EngineLines({ fen, onPreviewFen }: EngineLinesProps) {
+  // Only show the best line (first one)
   const { lines, loading } = useEngineLines(fen, 5)
 
   if (loading && lines.length === 0) {
-    return (
-      <p className="text-[11px] opacity-50 italic">SF10 · calculando…</p>
-    )
+    return <span className="text-[11px] opacity-40 italic">SF10 · …</span>
   }
 
-  return (
-    <div className="flex flex-col gap-0.5">
-      {lines.map((line) => {
-        const score    = formatScore(line)
-        const segments = pvToSegments(fen, line.pv)
+  const best = lines[0]
+  if (!best) return null
 
-        return (
-          <p key={line.idx} className="text-[11px] leading-snug">
-            {/* "SF10 · score" prefix inherits text color */}
-            <span className="font-semibold opacity-70 mr-1">SF10 · {score}</span>
-            {segments.map((seg, i) => (
-              <button
-                key={i}
-                className="mr-0.5 hover:underline hover:opacity-80 transition-opacity"
-                style={{ all: 'unset', cursor: 'pointer' }}
-                onMouseEnter={() => {
-                  const f = fenAfterMoves(fen, line.pv, i + 1)
-                  if (f) onPreviewFen(f)
-                }}
-                onMouseLeave={() => onPreviewFen(null)}
-                onClick={() => {
-                  const f = fenAfterMoves(fen, line.pv, i + 1)
-                  if (f) onPreviewFen(f)
-                }}
-              >
-                {seg}
-              </button>
-            ))}
-          </p>
-        )
-      })}
-    </div>
+  const score    = formatScore(best)
+  const segments = pvToSegments(fen, best.pv)
+
+  return (
+    <p className="text-[11px] leading-snug">
+      <span className="font-semibold opacity-70">SF10 · {score}</span>
+      {segments.map(({ label, pvIndex }) => (
+        <span key={pvIndex}>
+          {' '}
+          <button
+            style={{ all: 'unset', cursor: 'pointer' }}
+            className="hover:underline hover:opacity-70 transition-opacity"
+            onMouseEnter={() => {
+              const f = fenAfterMoves(fen, best.pv, pvIndex + 1)
+              if (f) onPreviewFen(f)
+            }}
+            onMouseLeave={() => onPreviewFen(null)}
+            onClick={() => {
+              const f = fenAfterMoves(fen, best.pv, pvIndex + 1)
+              if (f) onPreviewFen(f)
+            }}
+          >
+            {label}
+          </button>
+        </span>
+      ))}
+    </p>
   )
 }
