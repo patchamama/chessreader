@@ -30,7 +30,7 @@ export default function InlineGame({ treeId, game, fullText }: InlineGameProps) 
   const activateThis = () => setActiveTree(treeId)
 
   const navButtons = (
-    <div className="flex gap-1">
+    <div className="flex gap-1 mt-1">
       <button
         aria-label="Go to start"
         className="px-2 py-1 text-xs bg-gray-100 rounded hover:bg-gray-200"
@@ -54,9 +54,21 @@ export default function InlineGame({ treeId, game, fullText }: InlineGameProps) 
     </div>
   )
 
-  const enginePanel = (
-    <div className="bg-gray-900 rounded p-1.5">
-      <EngineLines fen={fen} onPreviewFen={setPreviewFen} />
+  const boardArea = evalDirection === 'vertical' ? (
+    // Vertical: bar left of board, both stretch to same height
+    <div className="flex gap-1 items-stretch">
+      <EvalBar fen={displayFen} />
+      <div className="flex-1 flex flex-col">
+        <ChessBoard fen={displayFen} orientation={orientation} lastMove={lastMove} />
+        {navButtons}
+      </div>
+    </div>
+  ) : (
+    // Horizontal: bar below board
+    <div className="flex flex-col">
+      <ChessBoard fen={displayFen} orientation={orientation} lastMove={lastMove} />
+      {navButtons}
+      <EvalBar fen={displayFen} />
     </div>
   )
 
@@ -64,7 +76,7 @@ export default function InlineGame({ treeId, game, fullText }: InlineGameProps) 
     <div className="my-4 flex flex-col gap-2">
       <div className="flex gap-4 items-start">
 
-        {/* Left column: board area — click activates keyboard nav for this game */}
+        {/* Left column: board + eval bar + engine lines */}
         <div
           role="region"
           aria-label="Chess board"
@@ -73,24 +85,12 @@ export default function InlineGame({ treeId, game, fullText }: InlineGameProps) 
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') activateThis() }}
           tabIndex={0}
         >
-          {evalDirection === 'vertical' ? (
-            // Vertical eval bar sits left of the board
-            <div className="flex gap-1 items-start">
-              <EvalBar fen={displayFen} />
-              <div className="flex-1 flex flex-col gap-1">
-                <ChessBoard fen={displayFen} orientation={orientation} lastMove={lastMove} />
-                {navButtons}
-              </div>
-            </div>
-          ) : (
-            // Horizontal eval bar goes below the board
-            <div className="flex flex-col gap-1">
-              <ChessBoard fen={displayFen} orientation={orientation} lastMove={lastMove} />
-              {navButtons}
-              <EvalBar fen={displayFen} />
-            </div>
-          )}
-          {enginePanel}
+          {boardArea}
+
+          {/* Engine lines — no background box, inherits page text color */}
+          <div className="mt-1.5">
+            <EngineLines fen={fen} onPreviewFen={setPreviewFen} />
+          </div>
         </div>
 
         {/* Right column: move text + variation tree */}

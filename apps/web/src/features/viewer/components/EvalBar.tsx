@@ -29,21 +29,20 @@ export default function EvalBar({ fen }: EvalBarProps) {
   if (direction === 'vertical') {
     return (
       <div
-        className="flex flex-col items-center gap-1 shrink-0"
+        className="flex flex-col items-center self-stretch shrink-0"
         aria-label={`Evaluation: ${label}`}
         data-depth={depth}
       >
-        {/* Vertical bar — white rises from bottom */}
-        <div className="relative w-4 h-32 bg-gray-800 rounded overflow-hidden border border-gray-600">
+        {/* Vertical bar — half width, full height of the board */}
+        <div className="relative w-2 flex-1 bg-gray-800 rounded overflow-hidden border border-gray-600">
           <div
             className="absolute bottom-0 left-0 right-0 bg-white transition-all duration-500"
             style={{ height: `${whitePct}%` }}
           />
         </div>
-        <span className={`text-[10px] font-mono font-semibold ${isWhite ? 'text-gray-800' : 'text-gray-500'}`}>
+        <span className="text-[9px] font-mono font-semibold mt-0.5 opacity-60">
           {label}
         </span>
-        {loading && <span className="text-[9px] text-gray-400 animate-pulse">…</span>}
       </div>
     )
   }
