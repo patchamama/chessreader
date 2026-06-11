@@ -34,6 +34,92 @@ class UserTest extends TestCase
         $this->assertSame($createdAt, $user->createdAt());
     }
 
+    public function testDefaultLoginCountAndLastReadBookId(): void
+    {
+        $user = new User(
+            new UserId(1),
+            'alice@test.com',
+            'hash',
+            Role::User,
+            RegistrationStatus::Pending,
+            new DateTimeImmutable(),
+        );
+
+        $this->assertSame(0, $user->loginCount());
+        $this->assertNull($user->lastReadBookId());
+    }
+
+    public function testWithLoginCountReturnsNewImmutableInstance(): void
+    {
+        $user = new User(
+            new UserId(1),
+            'alice@test.com',
+            'hash',
+            Role::User,
+            RegistrationStatus::Pending,
+            new DateTimeImmutable(),
+        );
+
+        $updated = $user->withLoginCount(5);
+
+        $this->assertNotSame($user, $updated);
+        $this->assertSame(5, $updated->loginCount());
+        $this->assertSame(0, $user->loginCount());
+    }
+
+    public function testWithLastReadBookIdReturnsNewImmutableInstance(): void
+    {
+        $user = new User(
+            new UserId(1),
+            'alice@test.com',
+            'hash',
+            Role::User,
+            RegistrationStatus::Pending,
+            new DateTimeImmutable(),
+        );
+
+        $updated = $user->withLastReadBookId(42);
+
+        $this->assertNotSame($user, $updated);
+        $this->assertSame(42, $updated->lastReadBookId());
+        $this->assertNull($user->lastReadBookId());
+    }
+
+    public function testWithLastReadBookIdAcceptsNull(): void
+    {
+        $user = new User(
+            new UserId(1),
+            'alice@test.com',
+            'hash',
+            Role::User,
+            RegistrationStatus::Pending,
+            new DateTimeImmutable(),
+            loginCount: 3,
+            lastReadBookId: 10,
+        );
+
+        $updated = $user->withLastReadBookId(null);
+        $this->assertNull($updated->lastReadBookId());
+    }
+
+    public function testWithPasswordHashReturnsNewImmutableInstance(): void
+    {
+        $user = new User(
+            new UserId(1),
+            'alice@test.com',
+            'old_hash',
+            Role::User,
+            RegistrationStatus::Approved,
+            new DateTimeImmutable(),
+        );
+
+        $updated = $user->withPasswordHash('new_hash');
+
+        $this->assertNotSame($user, $updated);
+        $this->assertSame('new_hash', $updated->passwordHash());
+        $this->assertSame('old_hash', $user->passwordHash());
+    }
+
     public function testWithStatusReturnsNewInstance(): void
     {
         $user = new User(

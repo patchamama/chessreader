@@ -13,5 +13,6 @@ final class Book
         public readonly string     $author,
         public readonly BookStatus $status,
         public readonly string     $createdAt,
+        public readonly string     $description = '',
     ) {}
 }
