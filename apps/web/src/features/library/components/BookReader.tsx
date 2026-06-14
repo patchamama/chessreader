@@ -1,9 +1,9 @@
-import { useMemo, useEffect, useState, useCallback, useRef } from 'react'
+import { useMemo, useEffect, useState, useCallback, useRef, memo, forwardRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useChapter, useTouchBook } from '../api/libraryApi'
 import { recognizeGames, figurineToAscii } from '@chess-ebook/chess-shared'
-import type { GameTree, GameNode } from '@chess-ebook/chess-shared'
-import { useKeyboardNavigation } from '../../viewer/hooks/useKeyboardNavigation'
+import type { GameTree, GameNode, IsolatedMove } from '@chess-ebook/chess-shared'
+import { Chessboard } from 'react-chessboard'
 import { StudyBoard } from './StudyBoard'
 import { VariationChooser } from './VariationChooser'
 import { useStudyBoardStore } from '../store/studyBoardStore'
@@ -11,12 +11,37 @@ import { getProgress, saveProgress } from '../store/readingStore'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { successorOf, hasAlternativesAhead, variationLinesFrom } from '../utils/proseChess'
 
+// The reading pane's innerHTML is set ONCE per chapter and then mutated
+// imperatively (SAN spans, highlight classes) by effects. If React re-rendered
+// this div on every parent state change (click, hover tooltip, variation
+// chooser), its dangerouslySetInnerHTML commit would RESET the innerHTML to the
+// raw `html` string — wiping every span and class we injected, which killed all
+// highlights and interactions. memo() on `html` keeps React's hands off the
+// subtree: it only re-commits when the chapter content actually changes.
+const ProseContent = memo(
+  forwardRef<HTMLDivElement, { html: string }>(function ProseContent({ html }, ref) {
+    return (
+      <div
+        ref={ref}
+        className="epub-content max-w-none"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    )
+  }),
+)
+
 interface ProseChooser {
   top: number
   left: number
   tree: GameTree
   successorId: string
   siblingLines: string[][]
+}
+
+interface MoveTooltip {
+  top: number
+  left: number
+  fen: string
 }
 
 interface ResolvedNode {
@@ -31,38 +56,60 @@ function cleanSan(san: string): string {
   return figurineToAscii(san).trim().replace(/[!?]+$/, '')
 }
 
+/** A resolved SAN occurrence: either a reproducible game move or an isolated one. */
+type ResolvedSan =
+  | { kind: 'node'; value: ResolvedNode }
+  | { kind: 'iso'; value: IsolatedMove }
+
 /**
- * Ordered node resolver. Builds a flat list of every valid recognised node across
- * all games, sorted by source offset, and hands them out IN ORDER per SAN. This
- * maps the i-th DOM occurrence of a SAN to the i-th recognised node with that SAN,
- * so a move that repeats in the text highlights the correct position.
+ * Unified, source-ordered SAN resolver.
+ *
+ * The DOM and the recognised game stream visit the SAME SAN tokens in the SAME
+ * order. So the i-th DOM occurrence of a SAN must map to the i-th recognised
+ * occurrence of that SAN — REGARDLESS of whether it is a real move or an isolated
+ * prose move. The previous design kept two independent cursors (real vs isolated)
+ * which desynced: an isolated `d4` in one paragraph would consume a REAL `d4`
+ * node belonging to a different game later in the chapter, painting prose as a
+ * playable move. Here every occurrence (node or isolated), across all games, is
+ * merged into ONE list per SAN, ordered by charStart, and handed out in order.
  */
-function createNodeResolver(games: ReturnType<typeof recognizeGames>) {
-  const bySan = new Map<string, ResolvedNode[]>()
+function createSanResolver(games: ReturnType<typeof recognizeGames>) {
+  type Entry = { charStart: number; resolved: ResolvedSan }
+  const bySan = new Map<string, Entry[]>()
+
+  const push = (san: string, charStart: number, resolved: ResolvedSan) => {
+    const list = bySan.get(san) ?? []
+    list.push({ charStart, resolved })
+    bySan.set(san, list)
+  }
+
   games.forEach((game, gameIndex) => {
-    const nodes = [...game.tree.nodes.values()]
-      .filter((n) => n.fen && !n.invalid)
-      .sort((a, b) => (a.charStart ?? 0) - (b.charStart ?? 0))
-    for (const node of nodes) {
-      const list = bySan.get(node.san) ?? []
-      list.push({ tree: game.tree, node, gameIndex })
-      bySan.set(node.san, list)
+    for (const node of game.tree.nodes.values()) {
+      if (!node.fen || node.invalid) continue
+      push(node.san, node.charStart ?? 0, {
+        kind: 'node',
+        value: { tree: game.tree, node, gameIndex },
+      })
+    }
+    for (const iso of game.tree.isolatedMoves) {
+      push(cleanSan(iso.san), iso.charStart ?? 0, { kind: 'iso', value: iso })
     }
   })
+
+  // Order each SAN's occurrences by their position in the source text so the
+  // sequence matches the DOM walk order.
+  for (const list of bySan.values()) list.sort((a, b) => a.charStart - b.charStart)
+
   const cursor = new Map<string, number>()
   return {
-    /** peek whether any node exists for this SAN (does not consume) */
-    has(asciiSan: string): boolean {
-      return (bySan.get(asciiSan)?.length ?? 0) > 0
-    },
-    /** consume the next node for this SAN in source order */
-    next(asciiSan: string): ResolvedNode | null {
+    /** consume the next recognised occurrence for this SAN in source order */
+    next(asciiSan: string): ResolvedSan | null {
       const list = bySan.get(asciiSan)
       if (!list || list.length === 0) return null
       const i = cursor.get(asciiSan) ?? 0
-      const resolved = list[Math.min(i, list.length - 1)]
       cursor.set(asciiSan, i + 1)
-      return resolved
+      if (i >= list.length) return null
+      return list[i].resolved
     },
   }
 }
@@ -86,8 +133,13 @@ export default function BookReader() {
   const [showToc, setShowToc] = useState(false)
   const [showStudy, setShowStudy] = useState(true)
   const [chooser, setChooser] = useState<ProseChooser | null>(null)
+  const [tooltip, setTooltip] = useState<MoveTooltip | null>(null)
+  const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Stable ref so the wrapping effect can call setTooltip without being in deps.
+  const setTooltipRef = useRef(setTooltip)
 
   const loadStudyPosition = useStudyBoardStore((s) => s.loadPosition)
+  const setIsolatedHighlight = useStudyBoardStore((s) => s.setIsolatedHighlight)
   const epub = useSettingsStore((s) => s.epub)
   const fontSize = useSettingsStore((s) => s.fontSize)
 
@@ -121,6 +173,12 @@ export default function BookReader() {
     [loadStudyPosition],
   )
 
+  // Stable refs for callbacks used inside the wrapping effect (stable deps = no re-wrap on click).
+  const loadStudyNodeRef = useRef(loadStudyNode)
+  const setChooserRef = useRef(setChooser)
+  const setIsolatedHighlightRef = useRef(setIsolatedHighlight)
+  useEffect(() => { setIsolatedHighlightRef.current = setIsolatedHighlight }, [setIsolatedHighlight])
+
   const rawHtml = data?.html ?? ''
 
   // Rewrite relative img/image src paths to the backend image endpoint
@@ -142,13 +200,9 @@ export default function BookReader() {
   )
   const games = useMemo(() => recognizeGames(plainText), [plainText])
 
-  const treesMap = useMemo<Map<string, GameTree>>(() => {
-    const m = new Map<string, GameTree>()
-    games.forEach((g, i) => m.set(`book-${id}-game-${i}`, g.tree))
-    return m
-  }, [games, id])
-
-  useKeyboardNavigation(treesMap)
+  // Keep refs in sync so the wrapping effect (stable deps) always calls latest version.
+  useEffect(() => { loadStudyNodeRef.current = loadStudyNode }, [loadStudyNode])
+  useEffect(() => { setChooserRef.current = setChooser }, [setChooser])
 
   const activeNodeId = useStudyBoardStore((s) => s.currentNodeId)
   const activeGame = useStudyBoardStore((s) => s.activeGame)
@@ -164,17 +218,24 @@ export default function BookReader() {
     ? `${activeGameIndex}:${activeNodeId}`
     : null
 
-  // After the HTML renders (and on every re-render that restores it), wrap SAN
-  // moves in clickable spans and highlight the move currently active on the
-  // study board. Wrapping and highlighting live in ONE effect because React's
-  // dangerouslySetInnerHTML restores the raw HTML on re-render, wiping spans —
-  // so we must re-wrap before re-highlighting.
+  // Registry mapping a span key → its resolved game move, rebuilt on every wrap.
+  // Event handlers (delegated, mounted once) look up rich objects here by the
+  // span's data-node-id, so re-wrapping never detaches behaviour from spans.
+  const moveRegistry = useRef(new Map<string, ResolvedNode>())
+  // Registry for isolated prose moves: span key → { square, piece }.
+  const isoRegistry = useRef(new Map<string, IsolatedMove>())
+
+  // Wraps SAN moves in spans. Re-runs ONLY when the content changes (new
+  // chapter), NOT on click/hover — the active-move highlight is a separate,
+  // cheap effect below that just toggles a class. This keeps the heavy DOM
+  // surgery out of the click path, so opening the tooltip / variation chooser
+  // never re-wraps (and never wipes) the prose.
   useEffect(() => {
     const container = contentRef.current
     if (!container || !html) return
 
-    // Remove previous markers (idempotent re-wrap).
-    container.querySelectorAll('span[data-san]').forEach((el) => {
+    // Remove previous markers (idempotent re-wrap) — moves and isolated tokens.
+    container.querySelectorAll('span[data-san], span[data-iso-square]').forEach((el) => {
       const parent = el.parentNode
       if (parent) {
         parent.replaceChild(document.createTextNode(el.textContent ?? ''), el)
@@ -182,27 +243,28 @@ export default function BookReader() {
       }
     })
 
+    moveRegistry.current.clear()
+    isoRegistry.current.clear()
+
     if (games.length > 0) {
-      const resolver = createNodeResolver(games)
+      const resolver = createSanResolver(games)
       const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
       const textNodes: Text[] = []
-      let node: Node | null
-      while ((node = walker.nextNode())) {
-        const parent = (node as Text).parentElement
+      let n: Node | null
+      while ((n = walker.nextNode())) {
+        const parent = (n as Text).parentElement
         if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE')) continue
-        textNodes.push(node as Text)
+        textNodes.push(n as Text)
       }
 
+      let isoSeq = 0
       for (const textNode of textNodes) {
         const text = textNode.nodeValue ?? ''
         SAN_RE.lastIndex = 0
-        // start = wrap start (may include a glued move number), san = the SAN group,
-        // wrapText = the visible text (number + SAN).
         const matches: { start: number; end: number; san: string; wrapText: string }[] = []
         let m: RegExpExecArray | null
         let prevEnd = 0
         while ((m = SAN_RE.exec(text)) !== null) {
-          if (!resolver.has(cleanSan(m[1]))) continue
           // Glue an immediately-preceding move number ("19." / "20...") onto the
           // move when only whitespace separates them, within the same text node.
           let wrapStart = m.index
@@ -225,45 +287,49 @@ export default function BookReader() {
           if (match.start > cursor) {
             frag.appendChild(document.createTextNode(text.slice(cursor, match.start)))
           }
-          // Resolve the SPECIFIC node for this occurrence (by SAN only).
-          const resolved = resolver.next(cleanSan(match.san))
-          const span = document.createElement('span')
-          span.setAttribute('data-san', cleanSan(match.san))
-          let isActive = false
-          let hasAlt = false
-          if (resolved) {
-            // Composite key so identical node ids across games don't collide.
-            const spanKey = `${resolved.gameIndex}:${resolved.node.id}`
-            span.setAttribute('data-node-id', spanKey)
-            span.setAttribute('data-game-index', String(resolved.gameIndex))
-            isActive = spanKey === activeSpanKey
-            hasAlt = hasAlternativesAhead(resolved.tree, resolved.node)
-            const captured = resolved
-            span.addEventListener('click', (e) => {
-              if (hasAlt) {
-                e.stopPropagation()
-                // The fork is AT this node: mainline successor vs. variation lines.
-                const successorId = successorOf(captured.tree, captured.node)
-                if (!successorId) return
-                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                setChooser({
-                  top: rect.bottom + 4,
-                  left: rect.left,
-                  tree: captured.tree,
-                  successorId,
-                  siblingLines: variationLinesFrom(captured.tree, captured.node),
-                })
-              } else {
-                loadStudyNode(captured.tree, captured.node)
-              }
-            })
+          const ascii = cleanSan(match.san)
+          const resolved = resolver.next(ascii)
+
+          if (!resolved) {
+            // Neither a game move nor isolated — leave as plain text.
+            frag.appendChild(document.createTextNode(text.slice(match.start, match.end)))
+            cursor = match.end
+            continue
           }
+
+          if (resolved.kind === 'iso') {
+            // Isolated prose move (—d5—, "casilla e4", "Cb5") → board-square highlight.
+            const iso = resolved.value
+            const isoKey = `iso-${isoSeq++}`
+            isoRegistry.current.set(isoKey, iso)
+            const span = document.createElement('span')
+            span.setAttribute('data-iso-square', iso.square)
+            span.setAttribute('data-iso-key', isoKey)
+            span.textContent = match.wrapText
+            span.className =
+              'cursor-pointer rounded px-0.5 font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 ring-1 ring-amber-300'
+            span.title = `Casilla ${iso.square} (jugada aislada)`
+            frag.appendChild(span)
+            cursor = match.end
+            continue
+          }
+
+          const rn = resolved.value
+          const spanKey = `${rn.gameIndex}:${rn.node.id}`
+          moveRegistry.current.set(spanKey, rn)
+          const hasAlt = hasAlternativesAhead(rn.tree, rn.node)
+          const span = document.createElement('span')
+          span.setAttribute('data-san', ascii)
+          span.setAttribute('data-node-id', spanKey)
+          span.setAttribute('data-game-index', String(rn.gameIndex))
+          span.setAttribute('data-has-alt', hasAlt ? '1' : '0')
+          span.setAttribute('data-fen', rn.node.fen)
           span.textContent = match.wrapText
-          const base = isActive
-            ? 'cursor-pointer font-bold bg-yellow-300 rounded px-0.5'
-            : 'cursor-pointer font-medium text-blue-700 underline-offset-2 hover:bg-yellow-100 rounded px-0.5'
-          // A persistent dotted underline signals "this move has alternatives — click to choose".
-          span.className = hasAlt ? `${base} underline decoration-dotted decoration-2` : base
+          // Inactive base styling; the active highlight is applied separately.
+          const baseClass =
+            'cursor-pointer font-medium text-blue-700 underline-offset-2 hover:bg-yellow-100 rounded px-0.5'
+          span.className = hasAlt ? `${baseClass} underline decoration-dotted decoration-2` : baseClass
+
           frag.appendChild(span)
           cursor = match.end
         }
@@ -273,13 +339,118 @@ export default function BookReader() {
         textNode.parentNode?.replaceChild(frag, textNode)
       }
     }
+  }, [html, games])
 
-    // Scroll the active move into view, if present.
-    if (activeSpanKey) {
-      const el = container.querySelector(`span[data-node-id="${CSS.escape(activeSpanKey)}"]`)
-      el?.scrollIntoView?.({ block: 'nearest' })
+  // Active-move highlight — cheap class toggle, decoupled from wrapping. Runs on
+  // every active-node change WITHOUT touching the DOM structure, so clicks and
+  // the tooltip/chooser never disturb the wrapped prose.
+  useEffect(() => {
+    const container = contentRef.current
+    if (!container) return
+    container.querySelectorAll('span[data-node-id]').forEach((el) => {
+      const span = el as HTMLElement
+      const active = span.dataset.nodeId === activeSpanKey
+      span.classList.toggle('font-bold', active)
+      span.classList.toggle('bg-yellow-300', active)
+      // Keep the link colour only while inactive (active is yellow + bold).
+      span.classList.toggle('text-blue-700', !active)
+      if (active) span.scrollIntoView?.({ block: 'nearest' })
+    })
+  }, [activeSpanKey, html, games])
+
+  // Delegated pointer/click handlers — mounted ONCE on the content container.
+  // They read data-* attributes + the registries, so re-wrapping spans (which
+  // destroys per-span listeners) never breaks hover tooltips or clicks.
+  useEffect(() => {
+    const container = contentRef.current
+    if (!container) return
+
+    const findSpan = (target: EventTarget | null): HTMLElement | null => {
+      let el = target as HTMLElement | null
+      while (el && el !== container) {
+        if (el.dataset.nodeId || el.dataset.isoKey) return el
+        el = el.parentElement
+      }
+      return null
     }
-  }, [html, games, loadStudyNode, activeSpanKey])
+
+    const onOver = (e: Event) => {
+      const span = findSpan(e.target)
+      if (!span) return
+      // Isolated prose move → preview its square on the study board on hover.
+      const isoKey = span.dataset.isoKey
+      if (isoKey) {
+        const iso = isoRegistry.current.get(isoKey)
+        if (iso) setIsolatedHighlightRef.current({ square: iso.square, piece: iso.piece })
+        return
+      }
+      const fen = span.dataset.fen
+      if (!fen) return
+      if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
+      tooltipTimer.current = setTimeout(() => {
+        const rect = span.getBoundingClientRect()
+        setTooltipRef.current({ top: rect.bottom + 6, left: rect.left, fen })
+      }, 200)
+    }
+
+    const onOut = (e: Event) => {
+      const span = findSpan(e.target)
+      if (!span || !span.dataset.fen) return
+      // Don't hide if moving into the tooltip itself.
+      const related = (e as MouseEvent).relatedTarget as HTMLElement | null
+      if (related?.closest?.('[data-move-tooltip]')) return
+      if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
+      tooltipTimer.current = setTimeout(() => setTooltipRef.current(null), 150)
+    }
+
+    const onClick = (e: Event) => {
+      const span = findSpan(e.target)
+      if (!span) return
+      if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
+      setTooltipRef.current(null)
+
+      // Isolated prose move → highlight its square on the study board.
+      const isoKey = span.dataset.isoKey
+      if (isoKey) {
+        const iso = isoRegistry.current.get(isoKey)
+        if (iso) setIsolatedHighlightRef.current({ square: iso.square, piece: iso.piece })
+        return
+      }
+
+      const spanKey = span.dataset.nodeId
+      if (!spanKey) return
+      const resolved = moveRegistry.current.get(spanKey)
+      if (!resolved) return
+      const hasAlt = span.dataset.hasAlt === '1'
+      if (hasAlt) {
+        e.stopPropagation()
+        const successorId = successorOf(resolved.tree, resolved.node)
+        if (!successorId) return
+        const rect = span.getBoundingClientRect()
+        setChooserRef.current({
+          top: rect.bottom + 4,
+          left: rect.left,
+          tree: resolved.tree,
+          successorId,
+          siblingLines: variationLinesFrom(resolved.tree, resolved.node),
+        })
+      } else {
+        loadStudyNodeRef.current(resolved.tree, resolved.node)
+      }
+    }
+
+    container.addEventListener('mouseover', onOver)
+    container.addEventListener('mouseout', onOut)
+    container.addEventListener('click', onClick)
+    return () => {
+      container.removeEventListener('mouseover', onOver)
+      container.removeEventListener('mouseout', onOut)
+      container.removeEventListener('click', onClick)
+    }
+    // Re-bind when the content container (re)mounts. It does NOT exist on the
+    // first render while the chapter is loading (isLoading=true), so binding
+    // once with [] would attach to nothing. Re-run once the div appears.
+  }, [isLoading, html])
 
   const pickChooser = useCallback(
     (targetId: string, isVariation: boolean) => {
@@ -428,11 +599,7 @@ export default function BookReader() {
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
             </div>
           ) : (
-            <div
-              ref={contentRef}
-              className="epub-content max-w-none"
-              dangerouslySetInnerHTML={{ __html: html }}
-            />
+            <ProseContent ref={contentRef} html={html} />
           )}
         </main>
 
@@ -469,6 +636,19 @@ export default function BookReader() {
           </svg>
         </button>
       </footer>
+
+      {/* Move hover tooltip — mini board anchored under the hovered move */}
+      {tooltip && (
+        <div
+          data-move-tooltip
+          className="fixed z-50 shadow-xl rounded-lg overflow-hidden border border-slate-200 bg-white"
+          style={{ top: tooltip.top, left: tooltip.left }}
+          onMouseEnter={() => { if (tooltipTimer.current) clearTimeout(tooltipTimer.current) }}
+          onMouseLeave={() => { if (tooltipTimer.current) clearTimeout(tooltipTimer.current); setTooltip(null) }}
+        >
+          <Chessboard options={{ position: tooltip.fen, boardStyle: { width: 220, height: 220 }, allowDragging: false, showAnimations: false }} />
+        </div>
+      )}
 
       {/* Prose variation chooser — anchored under the clicked move */}
       {chooser && (

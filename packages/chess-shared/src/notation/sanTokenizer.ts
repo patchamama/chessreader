@@ -35,7 +35,22 @@ export interface SanToken {
   rawSan?: string;
   /** Determined by context: color of the move that follows this move-number */
   color?: 'white' | 'black';
+  /**
+   * true when this move token is NOT a reproducible game move: it is an isolated
+   * SAN-looking token in prose (e.g. "—d5—", "la casilla e4") that is not chained
+   * back to a move-number through adjacent tokens. Isolated moves must not enter
+   * the game sequence; they are only highlighted as a single square on the board.
+   * Only meaningful for type === 'move'.
+   */
+  isolated?: boolean;
 }
+
+/**
+ * Max char gap (whitespace/punctuation) allowed between two chained tokens.
+ * Real game moves are separated by a space or a "." → gap of 1-2. Isolated prose
+ * moves are separated by words/dashes → gap of 7+. 3 is a safe threshold.
+ */
+const MAX_CHAIN_GAP = 3;
 
 // SAN move pattern (English notation only — caller should normalise Spanish first)
 // Note: no trailing \b because check (+) and mate (#) symbols are non-word chars
@@ -144,21 +159,57 @@ export function tokenize(text: string): SanToken[] {
 
   nonOverlapping.sort((a, b) => a.start - b.start);
 
-  // Assign color to moves based on preceding move-number
+  // Assign color to moves based on preceding move-number.
+  //
+  // Reproducibility chain: a move is a real game move only if it is connected,
+  // through small char gaps, back to a move-number. We track `chainEnd` = the
+  // charEnd of the last token in the live chain. A move-number (re)seeds the
+  // chain; a '(' that opens right after a live chain lets the paren inherit it
+  // (saved/restored on ')'). A move whose gap to the chain is too large is an
+  // isolated prose token (marked `isolated`) and breaks the chain.
   let currentMoveNumber = 1;
   let nextColor: 'white' | 'black' = 'white';
+
+  // chainEnd = charEnd of the last chained token, or null when the chain is dead.
+  let chainEnd: number | null = null;
+  const chainStack: Array<number | null> = [];
+
+  const chained = (start: number): boolean =>
+    chainEnd !== null && start - chainEnd <= MAX_CHAIN_GAP;
 
   for (const { token } of nonOverlapping) {
     if (token.type === 'move-number') {
       currentMoveNumber = token.moveNumber!;
       nextColor = token.isEllipsis ? 'black' : 'white';
+      // A move-number always seeds/keeps the chain alive.
+      chainEnd = token.charEnd;
       tokens.push(token);
     } else if (token.type === 'move') {
       token.moveNumber = currentMoveNumber;
       token.color = nextColor;
       nextColor = nextColor === 'white' ? 'black' : 'white';
+      if (chained(token.charStart)) {
+        chainEnd = token.charEnd;
+      } else {
+        token.isolated = true;
+        chainEnd = null;
+      }
+      tokens.push(token);
+    } else if (token.type === 'variation-open') {
+      // The paren inherits the chain only if it opens adjacent to a live chain.
+      chainStack.push(chainEnd);
+      chainEnd = chained(token.charStart) ? token.charEnd : null;
+      tokens.push(token);
+    } else if (token.type === 'variation-close') {
+      // A move right after ')' continues the enclosing line, so the close paren
+      // anchors the chain at its own position — but only if the line was alive
+      // either before the paren or inside it. A purely-prose paren stays dead.
+      const savedPre = chainStack.length > 0 ? chainStack.pop()! : null;
+      chainEnd = savedPre !== null || chainEnd !== null ? token.charEnd : null;
       tokens.push(token);
     } else {
+      // result / other: does not extend the move chain.
+      chainEnd = null;
       tokens.push(token);
     }
   }

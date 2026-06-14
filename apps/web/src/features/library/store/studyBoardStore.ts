@@ -41,6 +41,13 @@ export interface StudyBoardState {
   /** Legal destination squares for the selected piece. */
   legalTargets: string[]
 
+  /**
+   * Isolated prose move highlight: a single square + piece to overlay on the
+   * CURRENT board position (the piece colour alternates white/black because the
+   * side to move is unknown for a bare prose token). null = no overlay.
+   */
+  isolatedHighlight: { square: string; piece: 'p' | 'n' | 'b' | 'r' | 'q' | 'k' } | null
+
   loadPosition: (game: GameTree, nodeId: string | null, inVariation: boolean) => void
   clearGame: () => void
   setCurrentNode: (nodeId: string | null, inVariation: boolean) => void
@@ -50,6 +57,10 @@ export interface StudyBoardState {
   playMove: (from: string, to: string, baseFen: string) => boolean
   /** Discard the free-play position and any selection. */
   resetPlay: () => void
+  /** Show an isolated prose move as a square overlay (null clears it). */
+  setIsolatedHighlight: (
+    h: { square: string; piece: 'p' | 'n' | 'b' | 'r' | 'q' | 'k' } | null,
+  ) => void
   flip: () => void
   setTool: (m: ToolMode) => void
   setHighlightColor: (c: string) => void
@@ -78,6 +89,7 @@ const INITIAL = {
   playFen: null as string | null,
   selectedSquare: null as string | null,
   legalTargets: [] as string[],
+  isolatedHighlight: null as { square: string; piece: 'p' | 'n' | 'b' | 'r' | 'q' | 'k' } | null,
 }
 
 /** Try a move from `fen`; returns the resulting FEN, or null if illegal. */
@@ -132,6 +144,7 @@ export const useStudyBoardStore = create<StudyBoardState>((set) => ({
         playFen: null,
         selectedSquare: null,
         legalTargets: [],
+        isolatedHighlight: null,
       }
     }),
 
@@ -158,6 +171,7 @@ export const useStudyBoardStore = create<StudyBoardState>((set) => ({
         playFen: null,
         selectedSquare: null,
         legalTargets: [],
+        isolatedHighlight: null,
       }
     }),
 
@@ -189,6 +203,8 @@ export const useStudyBoardStore = create<StudyBoardState>((set) => ({
   },
 
   resetPlay: () => set({ playFen: null, selectedSquare: null, legalTargets: [] }),
+
+  setIsolatedHighlight: (h) => set({ isolatedHighlight: h }),
 
   flip: () => set((s) => ({ orientation: s.orientation === 'white' ? 'black' : 'white' })),
 

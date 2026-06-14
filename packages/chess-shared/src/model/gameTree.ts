@@ -31,6 +31,28 @@ export interface GameNode {
   invalid?: boolean;
 }
 
+/**
+ * An isolated move is a SAN-looking token in prose that is NOT part of a
+ * reproducible game sequence (e.g. "—d5—", "la casilla e4", "un alfil a Cb5").
+ * It is never placed in the move tree; it only marks a single square to
+ * highlight on the study board, with a piece that alternates white/black
+ * (the side to move is unknown for a bare token).
+ */
+export interface IsolatedMove {
+  /** Target square in algebraic, e.g. "d5", "b5". */
+  square: string;
+  /** Piece type to show on the square: 'p','n','b','r','q','k' (lowercase). */
+  piece: 'p' | 'n' | 'b' | 'r' | 'q' | 'k';
+  /** Normalised SAN as parsed (e.g. "d5", "Nb5"). */
+  san: string;
+  /** Original notation as written in the source (e.g. "♘b5", "Cb5"). */
+  rawSan?: string;
+  /** Character offset of the source token (into the normalised recognition text). */
+  charStart?: number;
+  /** Exclusive character offset of the source token. */
+  charEnd?: number;
+}
+
 export interface GameTree {
   /** Starting FEN (standard start if null) */
   startFen: string;
@@ -40,6 +62,8 @@ export interface GameTree {
   mainline: string[];
   /** Variation branches: key = parent node id, value = ordered lists of variation lines (each line is an array of node ids) */
   variations: Map<string, string[][]>;
+  /** Isolated prose moves: board-only square highlights, not part of the sequence. */
+  isolatedMoves: IsolatedMove[];
 }
 
 export function createGameTree(startFen: string): GameTree {
@@ -48,6 +72,7 @@ export function createGameTree(startFen: string): GameTree {
     nodes: new Map(),
     mainline: [],
     variations: new Map(),
+    isolatedMoves: [],
   };
 }
 

@@ -62,7 +62,7 @@ describe('BookReader prose ↔ board highlight sync', () => {
 
     const spanKey = firstSpan!.getAttribute('data-node-id')!
     // Clicking the span loads the game+node (as in production) and highlights it.
-    act(() => {
+    await act(async () => {
       fireEvent.click(firstSpan!)
     })
 
@@ -72,6 +72,27 @@ describe('BookReader prose ↔ board highlight sync', () => {
       expect(active!.className).toContain('font-bold')
     })
     // Exactly one span is highlighted.
+    expect(container.querySelectorAll('span.bg-yellow-300').length).toBe(1)
+  })
+
+  it('does not re-wrap (wipe) the prose when a move is clicked', async () => {
+    const { container } = render(<BookReader />, { wrapper })
+    let spans: HTMLElement[] = []
+    await waitFor(() => {
+      spans = [...container.querySelectorAll<HTMLElement>('span[data-node-id]')]
+      expect(spans.length).toBeGreaterThan(1)
+    })
+    const before = spans.length
+
+    // Regression: the wrapping effect used to depend on the active-node key, so a
+    // click re-ran the unwrap+rewrap DOM surgery and React's innerHTML
+    // reconciliation wiped the spans — killing every highlight and interaction.
+    await act(async () => {
+      fireEvent.click(spans[1])
+    })
+
+    const after = container.querySelectorAll<HTMLElement>('span[data-node-id]')
+    expect(after.length).toBe(before)
     expect(container.querySelectorAll('span.bg-yellow-300').length).toBe(1)
   })
 })

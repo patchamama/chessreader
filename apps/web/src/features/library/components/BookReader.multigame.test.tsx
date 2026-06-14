@@ -62,7 +62,7 @@ describe('BookReader multi-game highlight isolation', () => {
     })
     const e4Spans = [...container.querySelectorAll('span[data-san="e4"]')] as HTMLElement[]
 
-    act(() => {
+    await act(async () => {
       fireEvent.click(e4Spans[0])
     })
 
