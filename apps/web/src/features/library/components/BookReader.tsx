@@ -5,6 +5,7 @@ import { recognizeGames, figurineToAscii } from '@chess-ebook/chess-shared'
 import type { GameTree, GameNode, IsolatedMove } from '@chess-ebook/chess-shared'
 import { Chessboard } from 'react-chessboard'
 import { StudyBoard } from './StudyBoard'
+import { StudyPanelResizer } from './StudyPanelResizer'
 import { VariationChooser } from './VariationChooser'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { getProgress, saveProgress } from '../store/readingStore'
@@ -141,6 +142,7 @@ export default function BookReader() {
   const loadStudyPosition = useStudyBoardStore((s) => s.loadPosition)
   const setIsolatedHighlight = useStudyBoardStore((s) => s.setIsolatedHighlight)
   const epub = useSettingsStore((s) => s.epub)
+  const studyPanelWidth = useSettingsStore((s) => s.studyPanelWidth)
   const fontSize = useSettingsStore((s) => s.fontSize)
 
   const { data, isLoading } = useChapter(id, currentChapter)
@@ -603,10 +605,15 @@ export default function BookReader() {
           )}
         </main>
 
-        {/* Study board pane — sticky, always mounted, visibility toggled */}
+        {/* Drag handle to resize the study panel — only while it's visible. */}
+        {showStudy && <StudyPanelResizer />}
+
+        {/* Study board pane — sticky, always mounted, visibility toggled.
+            Width is user-resizable (px) via the handle; the board fills it. */}
         <aside
-          className={`shrink-0 flex flex-col gap-3 border-l border-slate-200 bg-white px-4 py-5 overflow-y-auto transition-all duration-200 ${
-            showStudy ? 'w-72 xl:w-80' : 'w-0 overflow-hidden px-0 py-0 border-0'
+          style={showStudy ? { width: studyPanelWidth } : undefined}
+          className={`shrink-0 flex flex-col gap-3 bg-white overflow-y-auto ${
+            showStudy ? 'px-4 py-5' : 'w-0 overflow-hidden px-0 py-0'
           }`}
         >
           {showStudy && <StudyBoard />}

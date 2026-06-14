@@ -123,15 +123,6 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           ))}
         </select>
 
-        {/* Board size */}
-        <label className={labelClass}>Board size — {s.boardSize}%</label>
-        <input
-          type="range" min={30} max={100} step={1}
-          value={s.boardSize}
-          onChange={(e) => s.set({ boardSize: Number(e.target.value) })}
-          className="w-full accent-amber-400"
-        />
-
         {/* Behavior toggles */}
         <label className={labelClass}>Board behavior</label>
         <div className="flex flex-col gap-2">

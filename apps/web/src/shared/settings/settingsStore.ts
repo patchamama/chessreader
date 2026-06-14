@@ -120,8 +120,8 @@ export interface AppSettings {
   appTheme: AppTheme
   /** Piece sprite set. */
   pieceTheme: PieceTheme
-  /** Board render size as a percentage of its container (30–100). */
-  boardSize: number
+  /** Width in px of the study-board side panel (drag-resizable). */
+  studyPanelWidth: number
   /** Show file/rank coordinate labels (a–h / 1–8). */
   showBoardLabels: boolean
   /** Tint the whole last-move square instead of a subtle dot. */
@@ -159,7 +159,7 @@ const DEFAULT: AppSettings = {
   epub: DEFAULT_EPUB,
   appTheme: 'light',
   pieceTheme: 'default',
-  boardSize: 100,
+  studyPanelWidth: 320,
   showBoardLabels: true,
   fullSquareHighlight: true,
   playMoveSound: true,

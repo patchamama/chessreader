@@ -87,7 +87,6 @@ export function StudyBoard() {
   const evalDirection = useSettingsStore((s) => s.evalBarDirection)
   const showEval = useSettingsStore((s) => s.showEval)
   const hideEngineArrow = useSettingsStore((s) => s.hideEngineArrow)
-  const boardSize = useSettingsStore((s) => s.boardSize)
   const autoplayDelay = useSettingsStore((s) => s.autoplayDelay)
   const playMoveSound = useMoveSound()
 
@@ -246,7 +245,7 @@ export function StudyBoard() {
   const playMode = toolMode === 'none'
 
   const boardWrapper = (
-    <div className="relative mx-auto w-full" style={{ maxWidth: `${boardSize}%` }}>
+    <div className="relative w-full">
       <ChessBoard
         fen={fen}
         orientation={orientation}

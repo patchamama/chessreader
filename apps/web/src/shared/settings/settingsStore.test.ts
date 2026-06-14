@@ -45,11 +45,11 @@ describe('settingsStore — appearance & behavior settings', () => {
     useSettingsStore.getState().reset()
   })
 
-  it('defaults: light app theme, default piece theme, board 100%, labels/highlight/sound on', () => {
+  it('defaults: light app theme, default piece theme, panel 320px, labels/highlight/sound on', () => {
     const s = useSettingsStore.getState()
     expect(s.appTheme).toBe('light')
     expect(s.pieceTheme).toBe('default')
-    expect(s.boardSize).toBe(100)
+    expect(s.studyPanelWidth).toBe(320)
     expect(s.showBoardLabels).toBe(true)
     expect(s.fullSquareHighlight).toBe(true)
     expect(s.playMoveSound).toBe(true)
@@ -74,10 +74,10 @@ describe('settingsStore — appearance & behavior settings', () => {
   })
 
   it('set patches appearance fields independently', () => {
-    useSettingsStore.getState().set({ pieceTheme: 'alpha', boardSize: 60 })
+    useSettingsStore.getState().set({ pieceTheme: 'alpha', studyPanelWidth: 480 })
     const s = useSettingsStore.getState()
     expect(s.pieceTheme).toBe('alpha')
-    expect(s.boardSize).toBe(60)
+    expect(s.studyPanelWidth).toBe(480)
     expect(s.showBoardLabels).toBe(true)
   })
 
@@ -93,7 +93,7 @@ describe('settingsStore — appearance & behavior settings', () => {
     useSettingsStore.getState().set({
       appTheme: 'dark',
       pieceTheme: 'merida',
-      boardSize: 40,
+      studyPanelWidth: 600,
       showBoardLabels: false,
       fullSquareHighlight: false,
       playMoveSound: false,
@@ -103,7 +103,7 @@ describe('settingsStore — appearance & behavior settings', () => {
     const s = useSettingsStore.getState()
     expect(s.appTheme).toBe('light')
     expect(s.pieceTheme).toBe('default')
-    expect(s.boardSize).toBe(100)
+    expect(s.studyPanelWidth).toBe(320)
     expect(s.showBoardLabels).toBe(true)
     expect(s.fullSquareHighlight).toBe(true)
     expect(s.playMoveSound).toBe(true)
