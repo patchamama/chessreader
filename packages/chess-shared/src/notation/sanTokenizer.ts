@@ -31,6 +31,8 @@ export interface SanToken {
   isEllipsis?: boolean;
   /** Normalised English SAN (only for move tokens) */
   san?: string;
+  /** Original source notation as written (e.g. "♘f3", "Cf3"); set by recognizeGames. */
+  rawSan?: string;
   /** Determined by context: color of the move that follows this move-number */
   color?: 'white' | 'black';
 }

@@ -1,5 +1,6 @@
 export const VERSION = '0.5.0';
 
+export * from './notation/figurineToAscii.js';
 export * from './notation/spanishToEnglish.js';
 export * from './notation/sanTokenizer.js';
 export * from './model/gameTree.js';

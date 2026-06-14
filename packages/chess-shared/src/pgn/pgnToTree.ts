@@ -132,6 +132,7 @@ export function buildGameTree(
       moveNumber: token.moveNumber ?? ctx.moveNumber,
       color: token.color ?? ctx.color,
       parentId,
+      ...(token.rawSan ? { rawSan: token.rawSan } : {}),
       ...(isInvalid ? { invalid: true } : {}),
     };
 

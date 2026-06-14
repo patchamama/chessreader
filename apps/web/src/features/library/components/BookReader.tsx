@@ -1,31 +1,34 @@
 import { useMemo, useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import { Chess } from 'chess.js'
 import { useChapter, useTouchBook } from '../api/libraryApi'
-import { recognizeGames } from '@chess-ebook/chess-shared'
-import type { GameTree } from '@chess-ebook/chess-shared'
+import { recognizeGames, figurineToAscii } from '@chess-ebook/chess-shared'
+import type { GameTree, GameNode } from '@chess-ebook/chess-shared'
 import { useKeyboardNavigation } from '../../viewer/hooks/useKeyboardNavigation'
-import ChessBoard from '../../../shared/chess/ChessBoard'
-import EvalBar from '../../viewer/components/EvalBar'
-import { useViewerStore } from '../../viewer/store/viewerStore'
+import { StudyBoard } from './StudyBoard'
+import { useStudyBoardStore } from '../store/studyBoardStore'
 import { getProgress, saveProgress } from '../store/readingStore'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 
-const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
-
-/** Given a SAN string, find its FEN across all recognised games */
-function fenForSan(san: string, games: ReturnType<typeof recognizeGames>): string | null {
+/** Find the recognised game + node matching an (English) SAN string. */
+function nodeForSan(
+  san: string,
+  games: ReturnType<typeof recognizeGames>,
+): { tree: GameTree; node: GameNode } | null {
   for (const game of games) {
     for (const node of game.tree.nodes.values()) {
-      if (node.san === san && node.fen) return node.fen
+      if (node.san === san && node.fen && !node.invalid) return { tree: game.tree, node }
     }
   }
   return null
 }
 
-// SAN move regex (English notation) — same pattern as sanTokenizer
-const SAN_RE =
-  /(?<![a-zA-Z])(O-O-O|O-O|[KQRBN][a-h1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?[!?]*|[KQRBN][a-h1-8]?[a-h][1-8](?:=[QRBN])?[+#]?[!?]*|[a-h]x?[a-h][1-8](?:=[QRBN])?[+#]?[!?]*|[a-h][1-8](?:=[QRBN])?[+#]?[!?]*)(?=[^a-zA-Z]|$)/g
+// SAN move regex — same as sanTokenizer but the piece class also accepts
+// Unicode chess figurines (♔♚♕♛♖♜♗♝♘♞) so glyph notation in prose is matched.
+const P = 'KQRBN♔♚♕♛♖♜♗♝♘♞'
+const SAN_RE = new RegExp(
+  `(?<![a-zA-Z])(O-O-O|O-O|[${P}][a-h1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?[!?]*|[${P}][a-h1-8]?[a-h][1-8](?:=[QRBN])?[+#]?[!?]*|[a-h]x?[a-h][1-8](?:=[QRBN])?[+#]?[!?]*|[a-h][1-8](?:=[QRBN])?[+#]?[!?]*)(?=[^a-zA-Z]|$)`,
+  'g',
+)
 
 export default function BookReader() {
   const { bookId } = useParams<{ bookId: string }>()
@@ -37,16 +40,10 @@ export default function BookReader() {
   })
   const [showToc, setShowToc] = useState(false)
   const [showStudy, setShowStudy] = useState(true)
-  const [studyInput, setStudyInput] = useState(INITIAL_FEN)
 
-  const studyFenFromStore = useViewerStore((s) => s.studyFen)
-  const setStudyFen = useViewerStore((s) => s.setStudyFen)
-  const studyFen = studyFenFromStore ?? INITIAL_FEN
+  const loadStudyPosition = useStudyBoardStore((s) => s.loadPosition)
   const epub = useSettingsStore((s) => s.epub)
   const fontSize = useSettingsStore((s) => s.fontSize)
-  useEffect(() => {
-    if (studyFenFromStore) setStudyInput(studyFenFromStore)
-  }, [studyFenFromStore])
 
   const { data, isLoading } = useChapter(id, currentChapter)
   const touchBook = useTouchBook()
@@ -70,11 +67,13 @@ export default function BookReader() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
-  const handleFenClick = useCallback((fen: string) => {
-    setStudyFen(fen)
-    setStudyInput(fen)
-    setShowStudy(true)
-  }, [setStudyFen])
+  const loadStudyNode = useCallback(
+    (tree: GameTree, node: GameNode) => {
+      loadStudyPosition(tree, node.id, !tree.mainline.includes(node.id))
+      setShowStudy(true)
+    },
+    [loadStudyPosition],
+  )
 
   const rawHtml = data?.html ?? ''
 
@@ -137,8 +136,9 @@ export default function BookReader() {
       const matches: { start: number; end: number; san: string }[] = []
       let m: RegExpExecArray | null
       while ((m = SAN_RE.exec(text)) !== null) {
-        const san = m[1]
-        if (fenForSan(san, games)) {
+        // Normalise figurine glyphs to ASCII before resolving against node.san
+        const asciiSan = figurineToAscii(m[1]).trim()
+        if (nodeForSan(asciiSan, games)) {
           matches.push({ start: m.index, end: m.index + m[0].length, san: m[0] })
         }
       }
@@ -156,8 +156,8 @@ export default function BookReader() {
         span.className =
           'cursor-pointer font-medium text-blue-700 underline-offset-2 hover:underline hover:bg-yellow-100 rounded px-0.5'
         span.addEventListener('click', () => {
-          const fen = fenForSan(match.san.trim(), games)
-          if (fen) handleFenClick(fen)
+          const found = nodeForSan(figurineToAscii(match.san).trim(), games)
+          if (found) loadStudyNode(found.tree, found.node)
         })
         frag.appendChild(span)
         cursor = match.end
@@ -167,16 +167,7 @@ export default function BookReader() {
       }
       textNode.parentNode?.replaceChild(frag, textNode)
     }
-  }, [html, games, handleFenClick])
-
-  function applyFen() {
-    try {
-      new Chess(studyInput)
-      setStudyFen(studyInput)
-    } catch {
-      // invalid FEN — ignore
-    }
-  }
+  }, [html, games, loadStudyNode])
 
   // Scoped CSS for EPUB rendering based on user settings
   const epubCss = `
@@ -329,44 +320,7 @@ export default function BookReader() {
             showStudy ? 'w-72 xl:w-80' : 'w-0 overflow-hidden px-0 py-0 border-0'
           }`}
         >
-          {showStudy && (
-            <>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 shrink-0">Study Board</p>
-
-              {/* Board */}
-              <div className="w-full shrink-0">
-                <ChessBoard fen={studyFen} orientation="white" />
-              </div>
-
-              {/* Stockfish eval bar — always horizontal in study panel */}
-              <div className="shrink-0">
-                <EvalBar fen={studyFen} direction="horizontal" />
-              </div>
-
-              {/* FEN input */}
-              <div className="flex gap-1.5 shrink-0">
-                <input
-                  value={studyInput}
-                  onChange={(e) => setStudyInput(e.target.value)}
-                  placeholder="FEN…"
-                  className="min-w-0 flex-1 rounded border border-slate-200 px-2 py-1.5 text-xs font-mono focus:border-blue-400 focus:outline-none"
-                />
-                <button
-                  onClick={applyFen}
-                  className="rounded border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100"
-                >
-                  Set
-                </button>
-                <button
-                  onClick={() => { setStudyFen(INITIAL_FEN); setStudyInput(INITIAL_FEN) }}
-                  title="Reset to start position"
-                  className="rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-500 hover:bg-slate-100"
-                >
-                  ↺
-                </button>
-              </div>
-            </>
-          )}
+          {showStudy && <StudyBoard />}
         </aside>
       </div>
 

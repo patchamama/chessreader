@@ -21,6 +21,8 @@ export interface GameNode {
   moveNumber: number;
   color: Color;
   parentId: string | null;
+  /** Original notation as written in the source (e.g. "♘f3", "Cf3"); falls back to `san`. */
+  rawSan?: string;
   /** true when the move was rejected by the chess engine as illegal */
   invalid?: boolean;
 }

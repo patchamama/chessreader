@@ -10,6 +10,7 @@
  */
 
 import { tokenize, type SanToken } from '../notation/sanTokenizer.js';
+import { figurineToAscii } from '../notation/figurineToAscii.js';
 import { spanishToEnglish } from '../notation/spanishToEnglish.js';
 import { buildGameTree } from '../pgn/pgnToTree.js';
 import { type GameTree } from '../model/gameTree.js';
@@ -28,12 +29,21 @@ export interface RecognizedGame {
 }
 
 export function recognizeGames(text: string): RecognizedGame[] {
-  // Normalise Spanish notation first
-  const normalised = spanishToEnglish(text);
+  // Normalise figurine glyphs (♘→N) and then Spanish notation (Cf3→Nf3).
+  // Both transforms are length-preserving for piece letters, so token offsets
+  // stay aligned with the ORIGINAL `text` and we can recover the source token.
+  const normalised = spanishToEnglish(figurineToAscii(text));
 
   const tokens = tokenize(normalised);
 
   if (tokens.length === 0) return [];
+
+  // Attach the original source notation (rawSan) to every move token.
+  for (const token of tokens) {
+    if (token.type === 'move') {
+      token.rawSan = text.slice(token.charStart, token.charEnd);
+    }
+  }
 
   // Split token stream into candidate game sequences.
   // A new game starts when we see a move-number token with value 1 and it's not after a variation-close.
