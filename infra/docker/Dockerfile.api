@@ -6,6 +6,8 @@ RUN apk add --no-cache nginx && \
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
+COPY infra/docker/php.ini /usr/local/etc/php/conf.d/uploads.ini
+
 COPY apps/api/composer.json apps/api/composer.lock* ./
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
