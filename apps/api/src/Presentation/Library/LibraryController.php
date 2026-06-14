@@ -90,6 +90,59 @@ final class LibraryController
         return $response->withHeader('Content-Type', 'application/json');
     }
 
+    public function image(ServerRequestInterface $request, ResponseInterface $response, int $id, string $path): ResponseInterface
+    {
+        $epubFile = __DIR__ . '/../../../storage/books/' . $id . '.epub';
+        if (!is_file($epubFile)) {
+            return $response->withStatus(404);
+        }
+
+        // path arrives URL-encoded; decode and strip leading slashes/dots for safety
+        $innerPath = ltrim(urldecode($path), '/.');
+        // Prevent path traversal
+        if (str_contains($innerPath, '..')) {
+            return $response->withStatus(400);
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($epubFile) !== true) {
+            return $response->withStatus(500);
+        }
+
+        // Try the path directly, then try common sub-dirs
+        $content = $zip->getFromName($innerPath);
+        if ($content === false) {
+            // Search for the basename inside the zip
+            $basename = basename($innerPath);
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $name = $zip->getNameIndex($i);
+                if ($name !== false && basename($name) === $basename) {
+                    $content = $zip->getFromIndex($i);
+                    break;
+                }
+            }
+        }
+        $zip->close();
+
+        if ($content === false) {
+            return $response->withStatus(404);
+        }
+
+        $ext  = strtolower(pathinfo($innerPath, PATHINFO_EXTENSION));
+        $mime = match ($ext) {
+            'png'  => 'image/png',
+            'gif'  => 'image/gif',
+            'webp' => 'image/webp',
+            'svg'  => 'image/svg+xml',
+            default => 'image/jpeg',
+        };
+
+        $response->getBody()->write($content);
+        return $response
+            ->withHeader('Content-Type', $mime)
+            ->withHeader('Cache-Control', 'public, max-age=86400');
+    }
+
     public function touch(ServerRequestInterface $request, ResponseInterface $response, int $id): ResponseInterface
     {
         $authUser = $request->getAttribute('auth_user');

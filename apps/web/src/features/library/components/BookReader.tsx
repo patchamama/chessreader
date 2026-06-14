@@ -76,10 +76,24 @@ export default function BookReader() {
     setShowStudy(true)
   }, [setStudyFen])
 
-  const html = data?.html ?? ''
+  const rawHtml = data?.html ?? ''
+
+  // Rewrite relative img/image src paths to the backend image endpoint
+  const html = useMemo(() => {
+    if (!rawHtml || !id) return rawHtml
+    const rewrite = (_match: string, _dots: string, imgPath: string) =>
+      `src="/api/library/books/${id}/images/${imgPath}"`
+    return rawHtml
+      // <img src="../Images/x.jpg">
+      .replace(/src=["'](?!data:|https?:|\/)(\.\.\/)*([^"']+)["']/g, rewrite)
+      // SVG <image xlink:href="../Images/x.jpg"> or href="..."
+      .replace(/(xlink:href|href)=["'](?!data:|https?:|#|\/)(\.\.\/)*([^"']+\.(jpe?g|png|gif|webp|svg))["']/gi,
+        (_m, attr, _d, imgPath) => `${attr}="/api/library/books/${id}/images/${imgPath}"`)
+  }, [rawHtml, id])
+
   const plainText = useMemo(
-    () => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
-    [html]
+    () => rawHtml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+    [rawHtml]
   )
   const games = useMemo(() => recognizeGames(plainText), [plainText])
 

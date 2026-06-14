@@ -87,8 +87,7 @@ final class ProcessEpubHandler
                     }
                 }
 
-                $inlinedHtml = $this->inlineImages((string) $html, $opfDir);
-                $this->books->saveChapter($bookId, $order, $title, $inlinedHtml);
+                $this->books->saveChapter($bookId, $order, $title, (string) $html);
                 $order++;
             }
 
@@ -102,7 +101,15 @@ final class ProcessEpubHandler
                 createdAt: $book->createdAt,
             ));
 
-            // 9. Cleanup extracted dir
+            // 9. Persist original EPUB for image serving, then cleanup extracted dir
+            $epubStore = dirname($cmd->epubPath, 1); // same dir as tmp — will be moved by caller
+            $storagePath = __DIR__ . '/../../../storage/books/' . $bookId . '.epub';
+            if (!is_dir(dirname($storagePath))) {
+                mkdir(dirname($storagePath), 0755, true);
+            }
+            if (is_file($cmd->epubPath)) {
+                copy($cmd->epubPath, $storagePath);
+            }
             $this->rrmdir($extractDir);
 
             return $bookId;

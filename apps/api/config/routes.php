@@ -65,6 +65,7 @@ return function (App $app): void {
     $app->group('/api/library', function (RouteCollectorProxy $group) {
         $group->get('/books', [LibraryController::class, 'books']);
         $group->get('/books/{id:[0-9]+}/chapters/{n:[0-9]+}', [LibraryController::class, 'chapter']);
+        $group->get('/books/{id:[0-9]+}/images/{path:.+}', [LibraryController::class, 'image']);
         $group->put('/books/{id:[0-9]+}', [LibraryController::class, 'updateBook']);
         $group->post('/books/{id:[0-9]+}/touch', [LibraryController::class, 'touch']);
         $group->post('/upload', [IngestionController::class, 'upload']);
