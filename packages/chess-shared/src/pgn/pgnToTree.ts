@@ -40,11 +40,39 @@ interface BuildContext {
   /** id of the parent of the last move placed (for variation parent tracking) */
   parentBeforeLastMove: string | null;
   /** stack for variation return points: each entry = [chess state to restore, node id to return to] */
-  variationStack: Array<{ fen: string; returnToNodeId: string | null; lineKeyDepth: number }>;
+  variationStack: Array<{
+    fen: string;
+    returnToNodeId: string | null;
+    lineKeyDepth: number;
+    proseLine: string[] | null;
+    /** the line array for THIS paren variation (created lazily on first move) */
+    line: string[] | null;
+  }>;
   /** whether this branch is dead (last move was invalid) */
   dead: boolean;
   moveNumber: number;
   color: 'white' | 'black';
+  /** mainline nodes keyed by "moveNumber:color" — anchors for prose analysis variations */
+  mainlineByKey: Map<string, string>;
+  /** false once the mainline is finished (a result token, or first re-anchor) → prose analysis mode */
+  onMainline: boolean;
+  /** the prose analysis variation line currently being extended (node ids), or null on mainline */
+  proseLine: string[] | null;
+}
+
+function moveKey(moveNumber: number, color: 'white' | 'black'): string {
+  return `${moveNumber}:${color}`;
+}
+
+/** Can `san` be legally played from `fen`? (uses chess.js as the oracle) */
+function isLegalFrom(fen: string, san: string): boolean {
+  try {
+    const c = new Chess(fen);
+    c.move(san);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function buildGameTree(
@@ -65,12 +93,20 @@ export function buildGameTree(
     dead: false,
     moveNumber: 1,
     color: 'white',
+    mainlineByKey: new Map(),
+    onMainline: true,
+    proseLine: null,
   };
 
   for (const token of tokens) {
+    if (token.type === 'result') {
+      // The mainline is complete; anything after is analysis prose.
+      ctx.onMainline = false;
+      continue;
+    }
+
     if (token.type === 'move-number') {
-      if (!ctx.variationStack.length || ctx.variationStack.length === 0) {
-        // mainline context
+      if (ctx.variationStack.length === 0) {
         ctx.moveNumber = token.moveNumber!;
         ctx.color = token.isEllipsis ? 'black' : 'white';
       }
@@ -78,28 +114,33 @@ export function buildGameTree(
     }
 
     if (token.type === 'variation-open') {
-      // Save the CURRENT chess state (after last mainline move) so we can return to it
+      // Save the CURRENT chess state (after last move) so we can return to it
       const currentFen = ctx.chess.fen();
       const currentNodeId = ctx.currentNodeId;
       ctx.variationStack.push({
         fen: currentFen,
         returnToNodeId: currentNodeId,
         lineKeyDepth: ctx.variationStack.length + 1,
+        proseLine: ctx.proseLine,
+        line: null,
       });
       // Load the state BEFORE the last move was played — the variation is an alternative to that move
       ctx.chess.load(ctx.fenBeforeLastMove);
       ctx.currentNodeId = ctx.parentBeforeLastMove;
       ctx.dead = false;
+      // A parenthesised variation is its own line, not the enclosing prose line.
+      ctx.proseLine = null;
       continue;
     }
 
     if (token.type === 'variation-close') {
       if (ctx.variationStack.length > 0) {
         const saved = ctx.variationStack.pop()!;
-        // Restore to the chess state saved at variation-open (i.e. after last mainline move)
         ctx.chess.load(saved.fen);
         ctx.currentNodeId = saved.returnToNodeId;
         ctx.dead = false;
+        // Resume the enclosing prose analysis line (if any) after the paren.
+        ctx.proseLine = saved.proseLine;
       }
       continue;
     }
@@ -109,6 +150,29 @@ export function buildGameTree(
     if (ctx.dead) continue;
 
     const san = token.san!;
+    const inParen = ctx.variationStack.length > 0;
+
+    // ── Prose analysis re-anchoring (validation-driven) ────────────────────
+    // Once past the mainline (a result was seen) and not inside parentheses,
+    // a move that is NOT legal continuing the current line is the start of a
+    // new analysis variation. chess.js decides where it anchors: try the parent
+    // of the mainline move with the same (number,color); fall back to scanning
+    // mainline parents for the first position where the move is legal.
+    if (!inParen && !ctx.onMainline) {
+      const continues = !ctx.dead && isLegalFrom(ctx.chess.fen(), san);
+      if (!continues || ctx.proseLine === null) {
+        const anchor = findProseAnchor(ctx, token);
+        if (anchor) {
+          ctx.chess.load(anchor.parentFen);
+          ctx.currentNodeId = anchor.parentId;
+          ctx.fenBeforeLastMove = anchor.parentFen;
+          ctx.parentBeforeLastMove = anchor.parentId;
+          ctx.dead = false;
+          ctx.proseLine = openProseLine(tree, anchor.parentId);
+        }
+      }
+    }
+
     const parentId = ctx.currentNodeId;
     const fenBeforeMove = ctx.chess.fen();
     const parentFen = fenBeforeMove;
@@ -125,7 +189,9 @@ export function buildGameTree(
     const nodeId = nextId();
     const node: GameNode = {
       id: nodeId,
-      san,
+      // Canonical SAN from chess.js (strips !/?/!! annotations) when legal;
+      // the original token (with glyphs/annotations) is kept in rawSan.
+      san: moveResult?.san ?? san,
       fen: isInvalid ? parentFen : ctx.chess.fen(),
       from: moveResult?.from ?? '',
       to: moveResult?.to ?? '',
@@ -133,48 +199,40 @@ export function buildGameTree(
       color: token.color ?? ctx.color,
       parentId,
       ...(token.rawSan ? { rawSan: token.rawSan } : {}),
+      ...(token.charStart !== undefined
+        ? { charStart: token.charStart, charEnd: token.charEnd }
+        : {}),
       ...(isInvalid ? { invalid: true } : {}),
     };
 
     tree.nodes.set(nodeId, node);
 
-    // Determine if we are on mainline or in a variation
-    // Invalid nodes are kept in tree.nodes (for debugging) but NOT in mainline/variations
-    // so the viewer never navigates to them.
     if (isInvalid) {
       ctx.dead = true;
       continue;
     }
 
-    if (ctx.variationStack.length === 0) {
-      // Mainline
-      tree.mainline.push(nodeId);
-    } else {
-      // Variation: track under parent node
+    if (inParen) {
+      // Parenthesised variation: each '(' owns one line under its branch point,
+      // created lazily on the first move so empty/nested parens don't collide.
       const stackTop = ctx.variationStack[ctx.variationStack.length - 1];
-      const variationParentId = stackTop.returnToNodeId ?? 'root';
-      if (!tree.variations.has(variationParentId)) {
-        tree.variations.set(variationParentId, []);
+      if (stackTop.line === null) {
+        stackTop.line = openProseLine(tree, stackTop.returnToNodeId);
       }
-      const varLines = tree.variations.get(variationParentId)!;
-      // Each variation-open creates a new line at this depth
-      // Use lineKeyDepth as unique key per branch opening
-      const lineKey = `__depth_${stackTop.lineKeyDepth}__`;
-      const lineKeyMap: Map<string, number> = (tree as any).__lineKeyMap ?? ((tree as any).__lineKeyMap = new Map<string, number>());
-      if (!lineKeyMap.has(lineKey)) {
-        lineKeyMap.set(lineKey, varLines.length);
-        varLines.push([]);
-      }
-      const lineIdx = lineKeyMap.get(lineKey)!;
-      varLines[lineIdx].push(nodeId);
+      stackTop.line.push(nodeId);
+    } else if (ctx.proseLine !== null) {
+      // Re-anchored prose analysis line.
+      ctx.proseLine.push(nodeId);
+    } else {
+      // Mainline.
+      tree.mainline.push(nodeId);
+      ctx.mainlineByKey.set(moveKey(node.moveNumber, node.color), nodeId);
     }
 
     ctx.currentNodeId = nodeId;
-    // Track position before this move for future variation branching
     ctx.fenBeforeLastMove = fenBeforeMove;
     ctx.parentBeforeLastMove = parentId;
 
-    // Update move number tracking from token (already set by tokenizer)
     if (token.color === 'black') {
       ctx.moveNumber = (token.moveNumber ?? ctx.moveNumber) + 1;
       ctx.color = 'white';
@@ -184,4 +242,53 @@ export function buildGameTree(
   }
 
   return tree;
+}
+
+/**
+ * Find where a prose analysis move should anchor. The natural candidate is the
+ * PARENT of the mainline move sharing the same (number, color) — the author
+ * writes "19. Be4" to replace mainline move 19. chess.js validates the candidate;
+ * if it fails, scan mainline parents for the first legal anchor.
+ */
+function findProseAnchor(
+  ctx: BuildContext,
+  token: SanToken,
+): { parentId: string | null; parentFen: string } | null {
+  const san = token.san!;
+  const tree = ctx.tree;
+
+  const parentFenOf = (nodeId: string): { parentId: string | null; parentFen: string } => {
+    const node = tree.nodes.get(nodeId)!;
+    const parentId = node.parentId;
+    const parentFen = parentId ? tree.nodes.get(parentId)!.fen : tree.startFen;
+    return { parentId, parentFen };
+  };
+
+  // 1. Direct key match: parent of the mainline move with this (number, color).
+  if (token.moveNumber !== undefined && token.color) {
+    const keyed = ctx.mainlineByKey.get(moveKey(token.moveNumber, token.color));
+    if (keyed) {
+      const cand = parentFenOf(keyed);
+      if (isLegalFrom(cand.parentFen, san)) return cand;
+    }
+  }
+
+  // 2. Fallback: scan all mainline nodes; anchor at the parent of the first
+  //    mainline node from whose preceding position the move is legal.
+  for (const nodeId of tree.mainline) {
+    const cand = parentFenOf(nodeId);
+    if (isLegalFrom(cand.parentFen, san)) return cand;
+  }
+
+  return null;
+}
+
+/** Open a fresh prose-analysis variation line under the given parent node. */
+function openProseLine(tree: GameTree, parentId: string | null): string[] {
+  const key = parentId ?? 'root';
+  if (!tree.variations.has(key)) tree.variations.set(key, []);
+  const lines = tree.variations.get(key)!;
+  const line: string[] = [];
+  lines.push(line);
+  return line;
 }

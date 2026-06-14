@@ -23,6 +23,10 @@ export interface GameNode {
   parentId: string | null;
   /** Original notation as written in the source (e.g. "♘f3", "Cf3"); falls back to `san`. */
   rawSan?: string;
+  /** Character offset of the source token (into the normalised recognition text). */
+  charStart?: number;
+  /** Exclusive character offset of the source token. */
+  charEnd?: number;
   /** true when the move was rejected by the chess engine as illegal */
   invalid?: boolean;
 }

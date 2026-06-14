@@ -39,7 +39,13 @@ export function PenCanvas() {
         canvas.width = w
         canvas.height = h
       }
-      const ctx = canvas.getContext('2d')
+      // jsdom throws on getContext (no canvas backend) — degrade gracefully.
+      let ctx: CanvasRenderingContext2D | null = null
+      try {
+        ctx = canvas.getContext('2d')
+      } catch {
+        return
+      }
       if (!ctx) return
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       if (penData) {
@@ -73,7 +79,12 @@ export function PenCanvas() {
   const onPointerMove = (e: React.PointerEvent) => {
     if (!active || !drawing.current) return
     const canvas = canvasRef.current
-    const ctx = canvas?.getContext('2d')
+    let ctx: CanvasRenderingContext2D | null = null
+    try {
+      ctx = canvas?.getContext('2d') ?? null
+    } catch {
+      return
+    }
     if (!canvas || !ctx || !last.current) return
     const p = pos(e)
 

@@ -46,27 +46,38 @@ export function recognizeGames(text: string): RecognizedGame[] {
   }
 
   // Split token stream into candidate game sequences.
-  // A new game starts when we see a move-number token with value 1 and it's not after a variation-close.
+  //
+  // A `result` token (1-0, …) does NOT close the game: analysis prose with
+  // variations frequently follows the result (e.g. "19. Be4 was stronger"),
+  // and those moves belong to the SAME game. Instead, a result MARKS that any
+  // following content is analysis. A genuinely new game only begins on a fresh
+  // "1." move-number that appears AFTER a result (the PGN convention for
+  // separating consecutive games), or on a "1." when no result has been seen
+  // yet but a previous mainline already started from move 1.
   const gameSequences: SanToken[][] = [];
   let current: SanToken[] = [];
+  let sawMove1 = false;
 
   for (const token of tokens) {
+    // A fresh "1." (white) when the current sequence already has a move 1 and
+    // some moves → the start of a NEW game (back-to-back PGN dump). Post-result
+    // analysis uses higher move numbers (19., 20., …) and stays in this game.
     if (
       token.type === 'move-number' &&
       token.moveNumber === 1 &&
-      !token.isEllipsis &&
-      current.some(t => t.type === 'move')
+      !token.isEllipsis
     ) {
-      // Start of a new game
-      gameSequences.push(current);
-      current = [token];
-    } else if (token.type === 'result' && current.length > 0) {
+      if (sawMove1 && current.some(t => t.type === 'move')) {
+        gameSequences.push(current);
+        current = [];
+      }
+      sawMove1 = true;
       current.push(token);
-      gameSequences.push(current);
-      current = [];
-    } else {
-      current.push(token);
+      continue;
     }
+
+    // Result tokens stay in the sequence (analysis prose may follow).
+    current.push(token);
   }
 
   if (current.some(t => t.type === 'move' || t.type === 'move-number')) {

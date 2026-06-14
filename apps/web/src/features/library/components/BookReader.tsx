@@ -9,17 +9,52 @@ import { useStudyBoardStore } from '../store/studyBoardStore'
 import { getProgress, saveProgress } from '../store/readingStore'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 
-/** Find the recognised game + node matching an (English) SAN string. */
-function nodeForSan(
-  san: string,
-  games: ReturnType<typeof recognizeGames>,
-): { tree: GameTree; node: GameNode } | null {
-  for (const game of games) {
-    for (const node of game.tree.nodes.values()) {
-      if (node.san === san && node.fen && !node.invalid) return { tree: game.tree, node }
+interface ResolvedNode {
+  tree: GameTree
+  node: GameNode
+  gameIndex: number
+}
+
+/** Strip trailing move annotations (!, ?, !!, ?!, …) so a DOM token matches the
+ *  canonical `node.san` (chess.js strips annotations). */
+function cleanSan(san: string): string {
+  return figurineToAscii(san).trim().replace(/[!?]+$/, '')
+}
+
+/**
+ * Ordered node resolver. Builds a flat list of every valid recognised node across
+ * all games, sorted by source offset, and hands them out IN ORDER per SAN. This
+ * maps the i-th DOM occurrence of a SAN to the i-th recognised node with that SAN,
+ * so a move that repeats in the text highlights the correct position.
+ */
+function createNodeResolver(games: ReturnType<typeof recognizeGames>) {
+  const bySan = new Map<string, ResolvedNode[]>()
+  games.forEach((game, gameIndex) => {
+    const nodes = [...game.tree.nodes.values()]
+      .filter((n) => n.fen && !n.invalid)
+      .sort((a, b) => (a.charStart ?? 0) - (b.charStart ?? 0))
+    for (const node of nodes) {
+      const list = bySan.get(node.san) ?? []
+      list.push({ tree: game.tree, node, gameIndex })
+      bySan.set(node.san, list)
     }
+  })
+  const cursor = new Map<string, number>()
+  return {
+    /** peek whether any node exists for this SAN (does not consume) */
+    has(asciiSan: string): boolean {
+      return (bySan.get(asciiSan)?.length ?? 0) > 0
+    },
+    /** consume the next node for this SAN in source order */
+    next(asciiSan: string): ResolvedNode | null {
+      const list = bySan.get(asciiSan)
+      if (!list || list.length === 0) return null
+      const i = cursor.get(asciiSan) ?? 0
+      const resolved = list[Math.min(i, list.length - 1)]
+      cursor.set(asciiSan, i + 1)
+      return resolved
+    },
   }
-  return null
 }
 
 // SAN move regex — same as sanTokenizer but the piece class also accepts
@@ -104,12 +139,18 @@ export default function BookReader() {
 
   useKeyboardNavigation(treesMap)
 
-  // After HTML renders, walk text nodes and wrap SAN moves with clickable spans
+  const activeNodeId = useStudyBoardStore((s) => s.currentNodeId)
+
+  // After the HTML renders (and on every re-render that restores it), wrap SAN
+  // moves in clickable spans and highlight the move currently active on the
+  // study board. Wrapping and highlighting live in ONE effect because React's
+  // dangerouslySetInnerHTML restores the raw HTML on re-render, wiping spans —
+  // so we must re-wrap before re-highlighting.
   useEffect(() => {
     const container = contentRef.current
     if (!container || !html) return
 
-    // Remove previous markers
+    // Remove previous markers (idempotent re-wrap).
     container.querySelectorAll('span[data-san]').forEach((el) => {
       const parent = el.parentNode
       if (parent) {
@@ -118,56 +159,66 @@ export default function BookReader() {
       }
     })
 
-    if (games.length === 0) return
+    if (games.length > 0) {
+      const resolver = createNodeResolver(games)
+      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+      const textNodes: Text[] = []
+      let node: Node | null
+      while ((node = walker.nextNode())) {
+        const parent = (node as Text).parentElement
+        if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE')) continue
+        textNodes.push(node as Text)
+      }
 
-    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
-    const textNodes: Text[] = []
-    let node: Node | null
-    while ((node = walker.nextNode())) {
-      // Skip script/style
-      const parent = (node as Text).parentElement
-      if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE')) continue
-      textNodes.push(node as Text)
+      for (const textNode of textNodes) {
+        const text = textNode.nodeValue ?? ''
+        SAN_RE.lastIndex = 0
+        const matches: { start: number; end: number; san: string }[] = []
+        let m: RegExpExecArray | null
+        while ((m = SAN_RE.exec(text)) !== null) {
+          if (resolver.has(cleanSan(m[1]))) {
+            matches.push({ start: m.index, end: m.index + m[0].length, san: m[0] })
+          }
+        }
+        if (matches.length === 0) continue
+
+        const frag = document.createDocumentFragment()
+        let cursor = 0
+        for (const match of matches) {
+          if (match.start > cursor) {
+            frag.appendChild(document.createTextNode(text.slice(cursor, match.start)))
+          }
+          // Resolve the SPECIFIC node for this occurrence (in source order).
+          const resolved = resolver.next(cleanSan(match.san))
+          const span = document.createElement('span')
+          span.setAttribute('data-san', match.san.trim())
+          let isActive = false
+          if (resolved) {
+            span.setAttribute('data-node-id', resolved.node.id)
+            span.setAttribute('data-game-index', String(resolved.gameIndex))
+            span.addEventListener('click', () => loadStudyNode(resolved.tree, resolved.node))
+            isActive = resolved.node.id === activeNodeId
+          }
+          span.textContent = match.san
+          span.className = isActive
+            ? 'cursor-pointer font-bold bg-yellow-300 rounded px-0.5'
+            : 'cursor-pointer font-medium text-blue-700 underline-offset-2 hover:underline hover:bg-yellow-100 rounded px-0.5'
+          frag.appendChild(span)
+          cursor = match.end
+        }
+        if (cursor < text.length) {
+          frag.appendChild(document.createTextNode(text.slice(cursor)))
+        }
+        textNode.parentNode?.replaceChild(frag, textNode)
+      }
     }
 
-    for (const textNode of textNodes) {
-      const text = textNode.nodeValue ?? ''
-      SAN_RE.lastIndex = 0
-      const matches: { start: number; end: number; san: string }[] = []
-      let m: RegExpExecArray | null
-      while ((m = SAN_RE.exec(text)) !== null) {
-        // Normalise figurine glyphs to ASCII before resolving against node.san
-        const asciiSan = figurineToAscii(m[1]).trim()
-        if (nodeForSan(asciiSan, games)) {
-          matches.push({ start: m.index, end: m.index + m[0].length, san: m[0] })
-        }
-      }
-      if (matches.length === 0) continue
-
-      const frag = document.createDocumentFragment()
-      let cursor = 0
-      for (const match of matches) {
-        if (match.start > cursor) {
-          frag.appendChild(document.createTextNode(text.slice(cursor, match.start)))
-        }
-        const span = document.createElement('span')
-        span.setAttribute('data-san', match.san.trim())
-        span.textContent = match.san
-        span.className =
-          'cursor-pointer font-medium text-blue-700 underline-offset-2 hover:underline hover:bg-yellow-100 rounded px-0.5'
-        span.addEventListener('click', () => {
-          const found = nodeForSan(figurineToAscii(match.san).trim(), games)
-          if (found) loadStudyNode(found.tree, found.node)
-        })
-        frag.appendChild(span)
-        cursor = match.end
-      }
-      if (cursor < text.length) {
-        frag.appendChild(document.createTextNode(text.slice(cursor)))
-      }
-      textNode.parentNode?.replaceChild(frag, textNode)
+    // Scroll the active move into view, if present.
+    if (activeNodeId) {
+      const el = container.querySelector(`span[data-node-id="${CSS.escape(activeNodeId)}"]`)
+      el?.scrollIntoView?.({ block: 'nearest' })
     }
-  }, [html, games, loadStudyNode])
+  }, [html, games, loadStudyNode, activeNodeId])
 
   // Scoped CSS for EPUB rendering based on user settings
   const epubCss = `
