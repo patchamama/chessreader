@@ -42,7 +42,7 @@ function makeRenderSet(set: string): PieceRenderSet {
       const Piece = () => (
         <span
           aria-hidden="true"
-          style={{ display: 'block', width: '100%', height: '100%' }}
+          className="cr-piece-svg"
           dangerouslySetInnerHTML={{ __html: markup }}
         />
       )

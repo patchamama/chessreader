@@ -1,3 +1,19 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Inlined SVG piece sets (leipzig, maestro, …) ship with their own absolute
+ * width/height and varying viewBoxes. Force every set to fill its square so no
+ * theme renders oversized. Applies to current and future SVG sets alike.
+ */
+.cr-piece-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.cr-piece-svg > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
