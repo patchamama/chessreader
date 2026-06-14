@@ -16,6 +16,7 @@ import { type SanToken } from '../notation/sanTokenizer.js';
 import {
   type GameTree,
   type GameNode,
+  type IsolatedMove,
   createGameTree,
 } from '../model/gameTree.js';
 
@@ -56,6 +57,14 @@ interface BuildContext {
   mainlineByKey: Map<string, string>;
   /** false once the mainline is finished (a result token, or first re-anchor) → prose analysis mode */
   onMainline: boolean;
+  /** highest move number reached on the mainline so far (to detect a backtracked move-number) */
+  maxMainlineMoveNumber: number;
+  /**
+   * The move-number the author wrote explicitly right before the next move at
+   * root level (null once consumed). Distinguishes an author-restated ply
+   * ("...3. Nf3") from a number merely carried over from a closed paren.
+   */
+  pendingExplicitNumber: { moveNumber: number; color: 'white' | 'black' } | null;
   /** the prose analysis variation line currently being extended (node ids), or null on mainline */
   proseLine: string[] | null;
 }
@@ -95,6 +104,8 @@ export function buildGameTree(
     color: 'white',
     mainlineByKey: new Map(),
     onMainline: true,
+    maxMainlineMoveNumber: 0,
+    pendingExplicitNumber: null,
     proseLine: null,
   };
 
@@ -109,6 +120,13 @@ export function buildGameTree(
       if (ctx.variationStack.length === 0) {
         ctx.moveNumber = token.moveNumber!;
         ctx.color = token.isEllipsis ? 'black' : 'white';
+        // Remember the author's explicit number for the next root-level move,
+        // so a restated ply ("...3. Nf3") is distinguishable from a number
+        // carried over implicitly (e.g. a move right after a closed paren).
+        ctx.pendingExplicitNumber = {
+          moveNumber: token.moveNumber!,
+          color: token.isEllipsis ? 'black' : 'white',
+        };
       }
       continue;
     }
@@ -147,10 +165,37 @@ export function buildGameTree(
 
     if (token.type !== 'move') continue;
 
+    // Isolated prose move: not a reproducible sequence move. Record it as a
+    // board-only square highlight and do NOT touch the chess state / tree path.
+    if (token.isolated) {
+      const iso = parseIsolatedMove(token);
+      if (iso) tree.isolatedMoves.push(iso);
+      continue;
+    }
+
     if (ctx.dead) continue;
 
     const san = token.san!;
     const inParen = ctx.variationStack.length > 0;
+
+    // ── Backtracked move-number on the mainline ────────────────────────────
+    // Opening theory written in prose never emits a result token, yet still
+    // introduces alternatives: "3. Nc3 Bb4 ... Si las blancas jugaban 3. Nf3".
+    // A move RE-STATES an earlier ply when its (number,color) is already on the
+    // mainline, or its number sits below the highest number reached. Either way
+    // it cannot be a real continuation, so it opens an analysis variation. A
+    // normal black reply (same number, not yet seen) is NOT a regression.
+    // Leaving the mainline hands it to the re-anchor logic below, which
+    // validates the anchor with chess.js.
+    const explicit = !inParen ? ctx.pendingExplicitNumber : null;
+    if (!inParen) ctx.pendingExplicitNumber = null;
+    if (!inParen && ctx.onMainline && explicit) {
+      const restatesPly = ctx.mainlineByKey.has(moveKey(explicit.moveNumber, explicit.color));
+      const regresses = explicit.moveNumber < ctx.maxMainlineMoveNumber;
+      if (restatesPly || regresses) {
+        ctx.onMainline = false;
+      }
+    }
 
     // ── Prose analysis re-anchoring (validation-driven) ────────────────────
     // Once past the mainline (a result was seen) and not inside parentheses,
@@ -227,6 +272,9 @@ export function buildGameTree(
       // Mainline.
       tree.mainline.push(nodeId);
       ctx.mainlineByKey.set(moveKey(node.moveNumber, node.color), nodeId);
+      if (node.moveNumber > ctx.maxMainlineMoveNumber) {
+        ctx.maxMainlineMoveNumber = node.moveNumber;
+      }
     }
 
     ctx.currentNodeId = nodeId;
@@ -281,6 +329,41 @@ function findProseAnchor(
   }
 
   return null;
+}
+
+/**
+ * Parse a bare (isolated) SAN token into a square + piece for board highlight.
+ * No chess context: we only need the destination square and the moving piece.
+ * Pawn moves ("d5", "exd5") → pawn; piece moves ("Nb5", "Bxf3") → that piece.
+ * Castling and anything without a clear destination square are ignored (null).
+ */
+function parseIsolatedMove(token: SanToken): IsolatedMove | null {
+  const san = token.san!;
+  // Strip annotations / check / mate / promotion to isolate the core.
+  const core = san.replace(/[+#!?]+$/g, '').replace(/=[QRBN]$/i, '');
+  // Destination is the LAST file+rank pair in the token.
+  const dest = core.match(/([a-h][1-8])(?!.*[a-h][1-8])/);
+  if (!dest) return null;
+  const square = dest[1];
+
+  const lead = core[0];
+  const piece: IsolatedMove['piece'] =
+    lead === 'N' ? 'n'
+    : lead === 'B' ? 'b'
+    : lead === 'R' ? 'r'
+    : lead === 'Q' ? 'q'
+    : lead === 'K' ? 'k'
+    : 'p';
+
+  return {
+    square,
+    piece,
+    san,
+    ...(token.rawSan ? { rawSan: token.rawSan } : {}),
+    ...(token.charStart !== undefined
+      ? { charStart: token.charStart, charEnd: token.charEnd }
+      : {}),
+  };
 }
 
 /** Open a fresh prose-analysis variation line under the given parent node. */
