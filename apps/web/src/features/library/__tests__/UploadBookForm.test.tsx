@@ -39,9 +39,9 @@ describe('UploadBookForm', () => {
     expect(screen.getByRole('tab', { name: /url/i })).toBeInTheDocument()
   })
 
-  it('file tab shows file input by default', () => {
+  it('file tab shows drop zone by default', () => {
     render(<UploadBookForm />, { wrapper })
-    expect(screen.getByLabelText(/epub file/i)).toBeInTheDocument()
+    expect(screen.getByText(/drop an epub here/i)).toBeInTheDocument()
   })
 
   it('url tab shows url input when selected', async () => {
@@ -55,7 +55,7 @@ describe('UploadBookForm', () => {
     render(<UploadBookForm />, { wrapper })
 
     const file = new File(['epub content'], 'test.epub', { type: 'application/epub+zip' })
-    const input = screen.getByLabelText(/epub file/i)
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
     await userEvent.upload(input, file)
 
     const submitBtn = screen.getByRole('button', { name: /upload/i })

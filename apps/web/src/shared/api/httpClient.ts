@@ -17,8 +17,12 @@ export async function httpClient<T = unknown>(
   const { token } = useAuthStore.getState()
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...(init.headers as Record<string, string>),
+  }
+
+  // Don't set Content-Type for FormData — browser must set it with the multipart boundary.
+  if (!(init.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json'
   }
 
   if (token) {
