@@ -74,7 +74,9 @@ export function useStudyNavigation(): StudyNavResult {
     [tree, successorId],
   )
 
-  const hasChoiceAhead = !isInVariation && successorId !== null && siblingLines.length > 0
+  // A fork exists whenever the successor has sibling variations — this holds
+  // both on the mainline AND inside an analysis line (don't gate on isInVariation).
+  const hasChoiceAhead = successorId !== null && siblingLines.length > 0
 
   const canNext = successorId !== null
   const canPrev = currentNodeId !== null

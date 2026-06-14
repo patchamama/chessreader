@@ -5,9 +5,19 @@ import { recognizeGames, figurineToAscii } from '@chess-ebook/chess-shared'
 import type { GameTree, GameNode } from '@chess-ebook/chess-shared'
 import { useKeyboardNavigation } from '../../viewer/hooks/useKeyboardNavigation'
 import { StudyBoard } from './StudyBoard'
+import { VariationChooser } from './VariationChooser'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { getProgress, saveProgress } from '../store/readingStore'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
+import { successorOf, hasAlternativesAhead } from '../utils/proseChess'
+
+interface ProseChooser {
+  top: number
+  left: number
+  tree: GameTree
+  successorId: string
+  siblingLines: string[][]
+}
 
 interface ResolvedNode {
   tree: GameTree
@@ -75,6 +85,7 @@ export default function BookReader() {
   })
   const [showToc, setShowToc] = useState(false)
   const [showStudy, setShowStudy] = useState(true)
+  const [chooser, setChooser] = useState<ProseChooser | null>(null)
 
   const loadStudyPosition = useStudyBoardStore((s) => s.loadPosition)
   const epub = useSettingsStore((s) => s.epub)
@@ -173,12 +184,26 @@ export default function BookReader() {
       for (const textNode of textNodes) {
         const text = textNode.nodeValue ?? ''
         SAN_RE.lastIndex = 0
-        const matches: { start: number; end: number; san: string }[] = []
+        // start = wrap start (may include a glued move number), san = the SAN group,
+        // wrapText = the visible text (number + SAN).
+        const matches: { start: number; end: number; san: string; wrapText: string }[] = []
         let m: RegExpExecArray | null
+        let prevEnd = 0
         while ((m = SAN_RE.exec(text)) !== null) {
-          if (resolver.has(cleanSan(m[1]))) {
-            matches.push({ start: m.index, end: m.index + m[0].length, san: m[0] })
-          }
+          if (!resolver.has(cleanSan(m[1]))) continue
+          // Glue an immediately-preceding move number ("19." / "20...") onto the
+          // move when only whitespace separates them, within the same text node.
+          let wrapStart = m.index
+          const before = text.slice(prevEnd, m.index)
+          const numMatch = /(\d+\.(?:\.\.)?)\s*$/.exec(before)
+          if (numMatch) wrapStart = prevEnd + numMatch.index
+          matches.push({
+            start: wrapStart,
+            end: m.index + m[0].length,
+            san: m[1],
+            wrapText: text.slice(wrapStart, m.index + m[0].length),
+          })
+          prevEnd = m.index + m[0].length
         }
         if (matches.length === 0) continue
 
@@ -188,21 +213,42 @@ export default function BookReader() {
           if (match.start > cursor) {
             frag.appendChild(document.createTextNode(text.slice(cursor, match.start)))
           }
-          // Resolve the SPECIFIC node for this occurrence (in source order).
+          // Resolve the SPECIFIC node for this occurrence (by SAN only).
           const resolved = resolver.next(cleanSan(match.san))
           const span = document.createElement('span')
-          span.setAttribute('data-san', match.san.trim())
+          span.setAttribute('data-san', cleanSan(match.san))
           let isActive = false
+          let hasAlt = false
           if (resolved) {
             span.setAttribute('data-node-id', resolved.node.id)
             span.setAttribute('data-game-index', String(resolved.gameIndex))
-            span.addEventListener('click', () => loadStudyNode(resolved.tree, resolved.node))
             isActive = resolved.node.id === activeNodeId
+            hasAlt = hasAlternativesAhead(resolved.tree, resolved.node)
+            const captured = resolved
+            span.addEventListener('click', (e) => {
+              if (hasAlt) {
+                e.stopPropagation()
+                const successorId = successorOf(captured.tree, captured.node)
+                if (!successorId) return
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                setChooser({
+                  top: rect.bottom + 4,
+                  left: rect.left,
+                  tree: captured.tree,
+                  successorId,
+                  siblingLines: captured.tree.variations.get(successorId) ?? [],
+                })
+              } else {
+                loadStudyNode(captured.tree, captured.node)
+              }
+            })
           }
-          span.textContent = match.san
-          span.className = isActive
+          span.textContent = match.wrapText
+          const base = isActive
             ? 'cursor-pointer font-bold bg-yellow-300 rounded px-0.5'
-            : 'cursor-pointer font-medium text-blue-700 underline-offset-2 hover:underline hover:bg-yellow-100 rounded px-0.5'
+            : 'cursor-pointer font-medium text-blue-700 underline-offset-2 hover:bg-yellow-100 rounded px-0.5'
+          // A persistent dotted underline signals "this move has alternatives — click to choose".
+          span.className = hasAlt ? `${base} underline decoration-dotted decoration-2` : base
           frag.appendChild(span)
           cursor = match.end
         }
@@ -219,6 +265,16 @@ export default function BookReader() {
       el?.scrollIntoView?.({ block: 'nearest' })
     }
   }, [html, games, loadStudyNode, activeNodeId])
+
+  const pickChooser = useCallback(
+    (targetId: string, isVariation: boolean) => {
+      if (!chooser) return
+      loadStudyPosition(chooser.tree, targetId, isVariation)
+      setShowStudy(true)
+      setChooser(null)
+    },
+    [chooser, loadStudyPosition],
+  )
 
   // Scoped CSS for EPUB rendering based on user settings
   const epubCss = `
@@ -398,6 +454,20 @@ export default function BookReader() {
           </svg>
         </button>
       </footer>
+
+      {/* Prose variation chooser — anchored under the clicked move */}
+      {chooser && (
+        <div className="fixed z-50" style={{ top: chooser.top, left: chooser.left }}>
+          <VariationChooser
+            tree={chooser.tree}
+            mainlineId={chooser.successorId}
+            siblingLines={chooser.siblingLines}
+            onPickMainline={() => pickChooser(chooser.successorId, false)}
+            onPickLine={(i) => pickChooser(chooser.siblingLines[i][0], true)}
+            onClose={() => setChooser(null)}
+          />
+        </div>
+      )}
     </div>
   )
 }
