@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, waitFor, act } from '@testing-library/react'
+import { render, waitFor, act, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -51,26 +51,27 @@ describe('BookReader prose ↔ board highlight sync', () => {
     })
   })
 
-  it('highlights the active move span when currentNodeId changes', async () => {
+  it('highlights only the clicked move span', async () => {
     const { container } = render(<BookReader />, { wrapper })
 
-    let firstSpan: Element | null = null
+    let firstSpan: HTMLElement | null = null
     await waitFor(() => {
       firstSpan = container.querySelector('span[data-node-id]')
       expect(firstSpan).toBeTruthy()
     })
 
-    const nodeId = firstSpan!.getAttribute('data-node-id')!
-    // Drive the store as the study board would on navigation.
+    const spanKey = firstSpan!.getAttribute('data-node-id')!
+    // Clicking the span loads the game+node (as in production) and highlights it.
     act(() => {
-      useStudyBoardStore.setState({ currentNodeId: nodeId })
+      fireEvent.click(firstSpan!)
     })
 
     await waitFor(() => {
-      const active = container.querySelector(`span[data-node-id="${nodeId}"]`)
-      expect(active).toBeTruthy()
+      const active = container.querySelector(`span[data-node-id="${spanKey}"]`)
       expect(active!.className).toContain('bg-yellow-300')
       expect(active!.className).toContain('font-bold')
     })
+    // Exactly one span is highlighted.
+    expect(container.querySelectorAll('span.bg-yellow-300').length).toBe(1)
   })
 })

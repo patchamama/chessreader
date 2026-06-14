@@ -151,6 +151,18 @@ export default function BookReader() {
   useKeyboardNavigation(treesMap)
 
   const activeNodeId = useStudyBoardStore((s) => s.currentNodeId)
+  const activeGame = useStudyBoardStore((s) => s.activeGame)
+  // node ids are only unique WITHIN a game (the counter resets per game), so the
+  // same "node-1" exists in every recognised game. Identify the active game so a
+  // click highlights only the clicked occurrence, not every game's "node-1".
+  const activeGameIndex = useMemo(
+    () => games.findIndex((g) => g.tree === activeGame),
+    [games, activeGame],
+  )
+  // Composite, globally-unique span key.
+  const activeSpanKey = activeNodeId !== null && activeGameIndex >= 0
+    ? `${activeGameIndex}:${activeNodeId}`
+    : null
 
   // After the HTML renders (and on every re-render that restores it), wrap SAN
   // moves in clickable spans and highlight the move currently active on the
@@ -220,9 +232,11 @@ export default function BookReader() {
           let isActive = false
           let hasAlt = false
           if (resolved) {
-            span.setAttribute('data-node-id', resolved.node.id)
+            // Composite key so identical node ids across games don't collide.
+            const spanKey = `${resolved.gameIndex}:${resolved.node.id}`
+            span.setAttribute('data-node-id', spanKey)
             span.setAttribute('data-game-index', String(resolved.gameIndex))
-            isActive = resolved.node.id === activeNodeId
+            isActive = spanKey === activeSpanKey
             hasAlt = hasAlternativesAhead(resolved.tree, resolved.node)
             const captured = resolved
             span.addEventListener('click', (e) => {
@@ -260,11 +274,11 @@ export default function BookReader() {
     }
 
     // Scroll the active move into view, if present.
-    if (activeNodeId) {
-      const el = container.querySelector(`span[data-node-id="${CSS.escape(activeNodeId)}"]`)
+    if (activeSpanKey) {
+      const el = container.querySelector(`span[data-node-id="${CSS.escape(activeSpanKey)}"]`)
       el?.scrollIntoView?.({ block: 'nearest' })
     }
-  }, [html, games, loadStudyNode, activeNodeId])
+  }, [html, games, loadStudyNode, activeSpanKey])
 
   const pickChooser = useCallback(
     (targetId: string, isVariation: boolean) => {
