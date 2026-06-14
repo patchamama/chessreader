@@ -5,7 +5,7 @@ import EvalBar from '../../viewer/components/EvalBar'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { useStudyNavigation } from '../hooks/useStudyNavigation'
-import { TurnBadge, MoveStatusRow } from './TurnIndicator'
+import { MoveStatusRow } from './TurnIndicator'
 import { AnnotationToolbar } from './AnnotationToolbar'
 import { PenCanvas } from './PenCanvas'
 import { VariationChooser } from './VariationChooser'
@@ -49,13 +49,20 @@ export function StudyBoard() {
   const autoplay = useStudyBoardStore((s) => s.autoplay)
   const setAutoplay = useStudyBoardStore((s) => s.setAutoplay)
   const clearGame = useStudyBoardStore((s) => s.clearGame)
+  const playFen = useStudyBoardStore((s) => s.playFen)
+  const selectedSquare = useStudyBoardStore((s) => s.selectedSquare)
+  const legalTargets = useStudyBoardStore((s) => s.legalTargets)
+  const selectSquare = useStudyBoardStore((s) => s.selectSquare)
+  const playMove = useStudyBoardStore((s) => s.playMove)
 
   const nav = useStudyNavigation()
   const [showChooser, setShowChooser] = useState(false)
   const [fenInput, setFenInput] = useState(INITIAL_FEN)
 
-  // Board FEN: game-driven when a game is active, else the raw FEN input.
-  const fen = activeGame ? nav.fen : fenInput
+  // The navigation/base position (game-driven or manual FEN).
+  const baseFen = activeGame ? nav.fen : fenInput
+  // The displayed position: a free-play position takes precedence once the user moves.
+  const fen = playFen ?? baseFen
 
   // Autoplay loop.
   useEffect(() => {
@@ -86,6 +93,7 @@ export function StudyBoard() {
   const onSquareClick = (square: string) => {
     if (toolMode === 'highlight') toggleHighlight(square)
     else if (toolMode === 'eraser') eraseAt(square)
+    else if (toolMode === 'none') selectSquare(square, baseFen) // click-to-move
   }
 
   const applyFen = () => {
@@ -97,24 +105,32 @@ export function StudyBoard() {
     }
   }
 
+  // Pieces are draggable only when no annotation tool is active (play mode).
+  const playMode = toolMode === 'none'
+
   const boardWrapper = (
     <div className="relative w-full">
       <ChessBoard
         fen={fen}
         orientation={orientation}
-        lastMove={activeGame ? nav.lastMove : null}
+        lastMove={!playFen && activeGame ? nav.lastMove : null}
         arrows={annotations.arrows}
         allowDrawingArrows={toolMode === 'arrows'}
         onArrowsChange={setArrows}
         customSquareStyles={highlightStyles}
         onSquareClick={onSquareClick}
+        allowDragging={playMode}
+        onPieceDrop={playMode ? (from, to) => playMove(from, to, baseFen) : undefined}
+        selectedSquare={playMode ? selectedSquare : null}
+        legalTargets={playMode ? legalTargets : []}
       />
       <PenCanvas />
-      <TurnBadge fen={fen} />
     </div>
   )
 
-  const statusRow = <MoveStatusRow fen={fen} node={activeGame ? nav.node : null} />
+  // Show "After …" only while following the game; once the user plays freely,
+  // show whose turn it is from the live position.
+  const statusRow = <MoveStatusRow fen={fen} node={!playFen && activeGame ? nav.node : null} />
 
   return (
     <div className="flex flex-col gap-3">

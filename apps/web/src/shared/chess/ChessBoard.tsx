@@ -20,12 +20,30 @@ interface ChessBoardProps {
   onArrowsChange?: (arrows: Arrow[]) => void
   /** Extra square styles (e.g. annotation highlights), merged AFTER lastMove. */
   customSquareStyles?: Record<string, CSSProperties>
-  /** Fired when a square is clicked (used by highlight/eraser tools). */
+  /** Fired when a square is clicked (used by highlight/eraser tools AND click-to-move). */
   onSquareClick?: (square: string) => void
+  /** Enable drag-to-move. */
+  allowDragging?: boolean
+  /** Drag completion handler; return true to accept the move. */
+  onPieceDrop?: (from: string, to: string) => boolean
+  /** The selected source square (click-to-move) to highlight. */
+  selectedSquare?: string | null
+  /** Legal destination squares to highlight as move dots. */
+  legalTargets?: string[]
 }
 
 const HIGHLIGHT_STYLE: CSSProperties = {
   backgroundColor: 'rgba(255, 214, 10, 0.5)',
+}
+
+const SELECTED_STYLE: CSSProperties = {
+  backgroundColor: 'rgba(56, 142, 255, 0.45)',
+}
+
+// A small centred dot marking a legal destination.
+const TARGET_STYLE: CSSProperties = {
+  background:
+    'radial-gradient(circle, rgba(56,142,255,0.55) 22%, transparent 24%)',
 }
 
 export default function ChessBoard({
@@ -37,6 +55,10 @@ export default function ChessBoard({
   onArrowsChange,
   customSquareStyles,
   onSquareClick,
+  allowDragging,
+  onPieceDrop,
+  selectedSquare,
+  legalTargets,
 }: ChessBoardProps) {
   const boardTheme = useSettingsStore((s) => s.boardTheme)
   const theme = BOARD_THEMES[boardTheme]
@@ -51,6 +73,15 @@ export default function ChessBoard({
       squareStyles[sq] = { ...squareStyles[sq], ...style }
     }
   }
+  // Click-to-move overlays (drawn on top of last-move / annotations).
+  if (selectedSquare) {
+    squareStyles[selectedSquare] = { ...squareStyles[selectedSquare], ...SELECTED_STYLE }
+  }
+  if (legalTargets) {
+    for (const sq of legalTargets) {
+      squareStyles[sq] = { ...squareStyles[sq], ...TARGET_STYLE }
+    }
+  }
 
   return (
     <Chessboard
@@ -58,12 +89,18 @@ export default function ChessBoard({
         position: fen,
         boardOrientation: orientation,
         squareStyles,
-        allowDragging: false,
+        allowDragging: allowDragging ?? false,
         showAnimations: false,
         allowDrawingArrows: allowDrawingArrows ?? false,
         ...(arrows ? { arrows } : {}),
         ...(onArrowsChange ? { onArrowsChange: ({ arrows }) => onArrowsChange(arrows) } : {}),
         ...(onSquareClick ? { onSquareClick: ({ square }) => onSquareClick(square) } : {}),
+        ...(onPieceDrop
+          ? {
+              onPieceDrop: ({ sourceSquare, targetSquare }) =>
+                targetSquare ? onPieceDrop(sourceSquare, targetSquare) : false,
+            }
+          : {}),
         lightSquareStyle: { backgroundColor: theme.light },
         darkSquareStyle:  { backgroundColor: theme.dark },
       }}

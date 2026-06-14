@@ -62,4 +62,20 @@ describe('StudyBoard', () => {
     // vertical bar uses w-2 self-stretch
     expect(container.querySelector('.self-stretch')).toBeTruthy()
   })
+
+  it('shows exactly ONE turn indicator (the in-board badge was removed)', () => {
+    useSettingsStore.setState({ evalBarDirection: 'horizontal' })
+    render(<StudyBoard />)
+    expect(screen.getAllByLabelText(/to move/i)).toHaveLength(1)
+  })
+
+  it('reflects a freely played move on the board (playFen takes over)', () => {
+    render(<StudyBoard />)
+    // Simulate a click-to-move via the store as the board would.
+    useStudyBoardStore.getState().selectSquare('e2', INITIAL_FEN)
+    useStudyBoardStore.getState().selectSquare('e4', INITIAL_FEN)
+    expect(useStudyBoardStore.getState().playFen).toMatch(/4P3/)
+  })
 })
+
+const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
