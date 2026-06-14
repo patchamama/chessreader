@@ -5,6 +5,8 @@ import { useAuthStore } from '../features/auth/store/authStore'
 import { isLocalhostHost } from '../shared/env/devMode'
 import { useSettingsStore, FONT_FAMILIES } from '../shared/settings/settingsStore'
 import SettingsPanel from '../shared/settings/SettingsPanel'
+import { NotesPanel } from '../shared/notes/NotesPanel'
+import { countPending, useNotesStore } from '../shared/notes/notesStore'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -18,6 +20,10 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const devMode = isLocalhostHost() && !token
   const [showSettings, setShowSettings] = useState(false)
+  const [showNotes, setShowNotes] = useState(false)
+  const notesContent = useNotesStore((s) => s.content)
+  const notesPending = countPending(notesContent)
+  const showNotesButton = isLocalhostHost() || user?.role === 'admin'
 
   const settings = useSettingsStore()
 
@@ -68,6 +74,21 @@ export default function AppLayout() {
           <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-xs text-slate-400">
             v{APP_VERSION}
           </span>
+          {showNotesButton && (
+            <button
+              onClick={() => setShowNotes((v) => !v)}
+              aria-label="Open notes"
+              className="relative rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
+              title="Notes"
+            >
+              Notes
+              {notesPending > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-0.5 rounded-full bg-amber-500 text-[9px] font-bold text-black leading-none">
+                  {notesPending}
+                </span>
+              )}
+            </button>
+          )}
           <button
             onClick={() => setShowSettings(true)}
             aria-label="Open settings"
@@ -102,6 +123,7 @@ export default function AppLayout() {
       </main>
 
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+      {showNotes && <NotesPanel onClose={() => setShowNotes(false)} />}
     </div>
   )
 }
