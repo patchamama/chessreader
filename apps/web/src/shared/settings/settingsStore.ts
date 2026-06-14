@@ -77,12 +77,25 @@ export const APP_THEME_PRESETS: Record<AppTheme, { bgColor: string; textColor: s
   dark:  { bgColor: '#1a1a1a', textColor: '#e8e8e8', label: 'Dark'  },
 }
 
-export type PieceTheme = 'default' | 'alpha' | 'merida'
+export type PieceTheme =
+  | 'default'
+  | 'alpha'
+  | 'merida'
+  | 'leipzig'
+  | 'maestro'
+  | 'fantasy'
+  | 'cardinal'
+  | 'staunty'
 
 export const PIECE_THEMES: Record<PieceTheme, { label: string }> = {
-  default: { label: 'Default' },
-  alpha:   { label: 'Alpha'   },
-  merida:  { label: 'Merida'  },
+  default:  { label: 'Default'  },
+  alpha:    { label: 'Alpha'    },
+  merida:   { label: 'Merida'   },
+  leipzig:  { label: 'Leipzig'  },
+  maestro:  { label: 'Maestro'  },
+  fantasy:  { label: 'Fantasy'  },
+  cardinal: { label: 'Cardinal' },
+  staunty:  { label: 'Staunty'  },
 }
 
 export interface AppSettings {
