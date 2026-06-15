@@ -59,4 +59,43 @@ class EvaluationTest extends TestCase
 
         $this->assertArrayNotHasKey('bestMove', $arr);
     }
+
+    public function test_pv_and_engine_name_default_to_null(): void
+    {
+        $eval = Evaluation::fromCp(34, 'e2e4', 20);
+
+        $this->assertNull($eval->pv);
+        $this->assertNull($eval->engineName);
+    }
+
+    public function test_with_pv_and_engine_name_carries_them(): void
+    {
+        $eval = Evaluation::fromCp(34, 'e2e4', 20)
+            ->withPv(['e2e4', 'e7e5', 'g1f3'])
+            ->withEngineName('Stockfish 18');
+
+        $this->assertSame(['e2e4', 'e7e5', 'g1f3'], $eval->pv);
+        $this->assertSame('Stockfish 18', $eval->engineName);
+        $this->assertSame(34, $eval->scoreCp);
+        $this->assertSame('e2e4', $eval->bestMove);
+    }
+
+    public function test_to_array_includes_pv_and_engine_name_when_present(): void
+    {
+        $arr = Evaluation::fromCp(34, 'e2e4', 20)
+            ->withPv(['e2e4', 'e7e5'])
+            ->withEngineName('Stockfish 18')
+            ->toArray();
+
+        $this->assertSame(['e2e4', 'e7e5'], $arr['pv']);
+        $this->assertSame('Stockfish 18', $arr['engineName']);
+    }
+
+    public function test_to_array_omits_pv_and_engine_name_when_absent(): void
+    {
+        $arr = Evaluation::fromCp(34, 'e2e4', 20)->toArray();
+
+        $this->assertArrayNotHasKey('pv', $arr);
+        $this->assertArrayNotHasKey('engineName', $arr);
+    }
 }

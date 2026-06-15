@@ -94,4 +94,44 @@ class UciParserTest extends TestCase
         $this->expectException(\RuntimeException::class);
         $this->parser->parse([]);
     }
+
+    public function test_captures_pv_line_from_last_info(): void
+    {
+        $lines = [
+            'info depth 5 score cp 10 pv e2e4 e7e5',
+            'info depth 20 score cp 34 pv e2e4 e7e5 g1f3 b8c6',
+            'bestmove e2e4 ponder e7e5',
+        ];
+
+        $eval = $this->parser->parse($lines);
+
+        $this->assertSame(['e2e4', 'e7e5', 'g1f3', 'b8c6'], $eval->pv);
+    }
+
+    public function test_pv_is_null_when_info_has_no_pv_token(): void
+    {
+        $lines = [
+            'info depth 1 score cp 0',
+            'bestmove e2e4',
+        ];
+
+        $eval = $this->parser->parse($lines);
+
+        $this->assertNull($eval->pv);
+    }
+
+    public function test_captures_engine_name_from_id_line(): void
+    {
+        $lines = [
+            'id name Stockfish 18',
+            'id author the Stockfish developers',
+            'uciok',
+            'info depth 20 score cp 34 pv e2e4',
+            'bestmove e2e4',
+        ];
+
+        $eval = $this->parser->parse($lines);
+
+        $this->assertSame('Stockfish 18', $eval->engineName);
+    }
 }

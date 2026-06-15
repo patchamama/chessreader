@@ -68,6 +68,7 @@ use App\Presentation\Library\LibraryController;
 use App\Presentation\Middleware\AuthMiddleware;
 use App\Presentation\Middleware\RequireAdminMiddleware;
 use App\Presentation\Middleware\RequireApprovedMiddleware;
+use App\Presentation\Notes\NotesController;
 use Doctrine\DBAL\Connection;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseFactoryInterface;
@@ -239,6 +240,12 @@ return [
         );
     },
 
+    NotesController::class => function (ContainerInterface $c) {
+        $settings   = $c->get('settings');
+        $storageDir = $settings['storage_dir'] ?? dirname(__DIR__) . '/storage';
+        return new NotesController($storageDir);
+    },
+
     \App\Application\Ingestion\Port\HtmlFetcher::class => fn(ContainerInterface $c) => $c->get(GuzzleHtmlFetcher::class),
 
     ZipEpubExtractor::class  => fn() => new ZipEpubExtractor(),
@@ -334,8 +341,18 @@ return [
 
     // Diagram
     DiagramRenderer::class => function (ContainerInterface $c) {
-        $pieceDir = dirname(__DIR__, 3) . '/css/images/pieces/merida';
-        return new SvgBoardRenderer($pieceDir);
+        $root      = dirname(__DIR__, 3);
+        $pieceDir  = $root . '/css/images/pieces/merida';
+        $feAssets  = $root . '/apps/web/src/shared/chess/pieces/assets';
+        // Selectable piece sets: merida (server) + the inlined FE asset sets.
+        $sets = ['merida' => $pieceDir];
+        foreach (['cardinal', 'fantasy', 'leipzig', 'maestro', 'staunty'] as $set) {
+            $dir = $feAssets . '/' . $set;
+            if (is_dir($dir)) {
+                $sets[$set] = $dir;
+            }
+        }
+        return new SvgBoardRenderer($pieceDir, $sets);
     },
 
     PngExporter::class => fn() => new ResvgPngExporter(),

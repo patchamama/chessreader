@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Presentation\Diagram;
 
 use App\Application\Diagram\Command\RegenerateDiagramCommand;
+use App\Application\Diagram\DiagramRenderOptions;
 use App\Application\Diagram\RegenerateDiagramHandler;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use Slim\Psr7\Factory\ResponseFactory;
 
 final class DiagramController
 {
@@ -20,8 +20,11 @@ final class DiagramController
     /**
      * POST /api/diagrams/regenerate
      *
-     * Body: { fen: string, filename?: string, depth?: int, exportPng?: bool }
-     * Response 200: { svg: string, footer: string, png?: base64 string }
+     * Body: {
+     *   fen: string, filename?: string, depth?: int, exportPng?: bool,
+     *   lightColor?: string, darkColor?: string, pieceSet?: string, coordinates?: bool
+     * }
+     * Response 200: { svg: string, footer: string, eval: object, png?: base64 string }
      */
     public function regenerate(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
@@ -36,12 +39,20 @@ final class DiagramController
             return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
         }
 
-        $command = new RegenerateDiagramCommand($fenValue, $filename, $depth, $exportPng);
+        $options = new DiagramRenderOptions(
+            lightColor:  isset($body['lightColor']) ? (string) $body['lightColor'] : null,
+            darkColor:   isset($body['darkColor']) ? (string) $body['darkColor'] : null,
+            pieceSet:    isset($body['pieceSet']) ? (string) $body['pieceSet'] : null,
+            coordinates: isset($body['coordinates']) && (bool) $body['coordinates'],
+        );
+
+        $command = new RegenerateDiagramCommand($fenValue, $filename, $depth, $exportPng, $options);
         $result  = $this->regenerateHandler->handle($command);
 
         $payload = [
             'svg'    => $result['svg'],
             'footer' => $result['footer'],
+            'eval'   => $result['eval'],
         ];
 
         if (isset($result['png'])) {

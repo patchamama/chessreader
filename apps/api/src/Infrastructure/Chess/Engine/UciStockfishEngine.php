@@ -35,6 +35,13 @@ final class UciStockfishEngine implements ChessEngine
             $process->stop();
         }
 
+        // The `id name …` line arrives during the UCI handshake (consumed before
+        // `go`), so re-inject it here for the parser to pick up the engine version.
+        $engineName = $process->engineName();
+        if ($engineName !== null) {
+            array_unshift($lines, 'id name ' . $engineName);
+        }
+
         return $this->parser->parse($lines);
     }
 }

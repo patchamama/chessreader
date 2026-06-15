@@ -17,8 +17,17 @@ final class StockfishProcess
     /** @var resource */
     private $stdout;
 
+    /** Engine identity line value (e.g. "Stockfish 18"), captured during the UCI handshake. */
+    private ?string $engineName = null;
+
     public function __construct(private readonly string $binaryPath)
     {
+    }
+
+    /** The engine name reported via `id name …` during startup, if seen. */
+    public function engineName(): ?string
+    {
+        return $this->engineName;
     }
 
     public function start(): void
@@ -97,7 +106,14 @@ final class StockfishProcess
         stream_set_blocking($this->stdout, true);
         while (!feof($this->stdout)) {
             $line = fgets($this->stdout);
-            if ($line !== false && str_starts_with(trim($line), $marker)) {
+            if ($line === false) {
+                continue;
+            }
+            $trimmed = trim($line);
+            if (str_starts_with($trimmed, 'id name ')) {
+                $this->engineName = trim(substr($trimmed, strlen('id name ')));
+            }
+            if (str_starts_with($trimmed, $marker)) {
                 break;
             }
         }

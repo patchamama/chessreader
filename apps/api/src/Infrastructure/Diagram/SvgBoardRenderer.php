@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Diagram;
 
+use App\Application\Diagram\DiagramRenderOptions;
 use App\Application\Diagram\Port\DiagramRenderer;
 use App\Domain\Chess\Fen;
 
 /**
- * Renders an 8x8 chess board SVG from a FEN position using Merida piece SVGs.
+ * Renders an 8x8 chess board SVG from a FEN position.
  * Pieces are embedded inline as <symbol> elements so the whole output is self-contained.
+ *
+ * Board colors, piece set and coordinates are configurable via DiagramRenderOptions.
  */
 final class SvgBoardRenderer implements DiagramRenderer
 {
@@ -17,7 +20,7 @@ final class SvgBoardRenderer implements DiagramRenderer
     private const BOARD_SIZE  = self::SQUARE_SIZE * 8;
     private const FOOTER_H    = 22;
 
-    /** Colors for light/dark squares */
+    /** Default colors for light/dark squares (classic) */
     private const COLOR_LIGHT = '#f0d9b5';
     private const COLOR_DARK  = '#b58863';
 
@@ -27,28 +30,48 @@ final class SvgBoardRenderer implements DiagramRenderer
         'k' => 'bK', 'q' => 'bQ', 'r' => 'bR', 'b' => 'bB', 'n' => 'bN', 'p' => 'bP',
     ];
 
-    /** @var array<string,string> Loaded SVG paths for each piece key */
-    private array $pieceSvg = [];
+    /** @var array<string,string> set name → directory of piece SVGs */
+    private array $pieceSetDirs;
 
+    /** @var array<string,array<string,string>> set name → (piece key → inner SVG), loaded lazily */
+    private array $loadedSets = [];
+
+    /**
+     * @param string                $pieceDir     Default piece set directory (the fallback set).
+     * @param array<string,string>  $pieceSetDirs Optional named set → directory map for selectable sets.
+     */
     public function __construct(
         private readonly string $pieceDir,
+        array $pieceSetDirs = [],
     ) {
-        $this->loadPieceSvgs();
+        // The default directory is always available under the reserved key "".
+        $this->pieceSetDirs = array_merge(['' => $pieceDir], $pieceSetDirs);
     }
 
-    public function renderSvg(Fen $fen, ?string $footerText = null, bool $coordinates = false): string
-    {
+    public function renderSvg(
+        Fen $fen,
+        ?string $footerText = null,
+        bool $coordinates = false,
+        ?DiagramRenderOptions $options = null,
+    ): string {
+        $options ??= DiagramRenderOptions::default();
+
+        $light       = $options->lightColor ?? self::COLOR_LIGHT;
+        $dark        = $options->darkColor ?? self::COLOR_DARK;
+        $showCoords  = $coordinates || $options->coordinates;
+        $pieceSvg    = $this->pieceSetFor($options->pieceSet);
+
         $hasFooter  = $footerText !== null && $footerText !== '';
-        $coordExtra = $coordinates ? self::SQUARE_SIZE : 0;
+        $coordExtra = $showCoords ? self::SQUARE_SIZE : 0;
         $totalH     = self::BOARD_SIZE + ($hasFooter ? self::FOOTER_H : 0) + $coordExtra;
         $totalW     = self::BOARD_SIZE + $coordExtra;
 
         $svg  = $this->openSvg($totalW, $totalH);
-        $svg .= $this->renderSymbols();
-        $svg .= $this->renderSquares($coordExtra);
+        $svg .= $this->renderSymbols($pieceSvg);
+        $svg .= $this->renderSquares($coordExtra, $light, $dark);
         $svg .= $this->renderPieces($fen, $coordExtra);
 
-        if ($coordinates) {
+        if ($showCoords) {
             $svg .= $this->renderCoordinates();
         }
 
@@ -73,10 +96,11 @@ final class SvgBoardRenderer implements DiagramRenderer
         );
     }
 
-    private function renderSymbols(): string
+    /** @param array<string,string> $pieceSvg */
+    private function renderSymbols(array $pieceSvg): string
     {
         $out = '';
-        foreach ($this->pieceSvg as $key => $inner) {
+        foreach ($pieceSvg as $key => $inner) {
             $out .= sprintf(
                 '<symbol id="piece-%s" viewBox="0 0 50 50">%s</symbol>',
                 $key,
@@ -86,13 +110,13 @@ final class SvgBoardRenderer implements DiagramRenderer
         return $out;
     }
 
-    private function renderSquares(int $offset): string
+    private function renderSquares(int $offset, string $light, string $dark): string
     {
         $out = '';
         for ($rank = 0; $rank < 8; $rank++) {
             for ($file = 0; $file < 8; $file++) {
                 $isLight = ($rank + $file) % 2 === 0;
-                $color   = $isLight ? self::COLOR_LIGHT : self::COLOR_DARK;
+                $color   = $isLight ? $light : $dark;
                 $x       = $offset + $file * self::SQUARE_SIZE;
                 $y       = $offset + $rank * self::SQUARE_SIZE;
                 $out    .= sprintf(
@@ -179,20 +203,45 @@ final class SvgBoardRenderer implements DiagramRenderer
         );
     }
 
-    private function loadPieceSvgs(): void
+    /**
+     * Resolve the piece SVG map for the requested set, falling back to the
+     * default set when the name is unknown or its assets are missing.
+     *
+     * @return array<string,string>
+     */
+    private function pieceSetFor(?string $setName): array
     {
+        $key = ($setName !== null && isset($this->pieceSetDirs[$setName])) ? $setName : '';
+        return $this->loadPieceSet($key);
+    }
+
+    /** @return array<string,string> */
+    private function loadPieceSet(string $key): array
+    {
+        if (isset($this->loadedSets[$key])) {
+            return $this->loadedSets[$key];
+        }
+
+        $dir    = $this->pieceSetDirs[$key] ?? $this->pieceDir;
+        $loaded = [];
+        $missing = false;
         foreach (self::PIECE_MAP as $pieceKey) {
-            $file = $this->pieceDir . '/' . $pieceKey . '.svg';
+            $file = $dir . '/' . $pieceKey . '.svg';
             if (!file_exists($file)) {
-                $this->pieceSvg[$pieceKey] = '';
+                $loaded[$pieceKey] = '';
+                $missing = true;
                 continue;
             }
-            $raw = file_get_contents($file);
-            // Extract inner content (strip outer <svg …> wrapper, keep inner elements)
-            // Also scope gradient/filter IDs to avoid conflicts
-            $inner = $this->extractSvgInner($raw, $pieceKey);
-            $this->pieceSvg[$pieceKey] = $inner;
+            $raw               = file_get_contents($file);
+            $loaded[$pieceKey] = $this->extractSvgInner($raw, $pieceKey);
         }
+
+        // If the named set is incomplete, fall back to the default set.
+        if ($missing && $key !== '') {
+            return $this->loadedSets[$key] = $this->loadPieceSet('');
+        }
+
+        return $this->loadedSets[$key] = $loaded;
     }
 
     /**

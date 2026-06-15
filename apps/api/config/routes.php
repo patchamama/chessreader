@@ -9,6 +9,7 @@ use App\Presentation\Eval\EvalController;
 use App\Presentation\Health\HealthController;
 use App\Presentation\Ingestion\IngestionController;
 use App\Presentation\Library\LibraryController;
+use App\Presentation\Notes\NotesController;
 use App\Presentation\Recognition\RecognitionController;
 use App\Presentation\Webparser\WebparserController;
 use App\Presentation\Middleware\AuthMiddleware;
@@ -39,6 +40,12 @@ return function (App $app): void {
         $group->post('/users/{id:[0-9]+}/password', [AdminController::class, 'setPassword']);
         $group->post('/users/{id:[0-9]+}/send-reset', [AdminController::class, 'sendResetLink']);
     })->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
+
+    // Notes routes (per-user scratch notes; require JWT + Approved)
+    $app->group('/api/notes', function (RouteCollectorProxy $group) {
+        $group->get('', [NotesController::class, 'get']);
+        $group->put('', [NotesController::class, 'save']);
+    })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
 
     // Recognition route (require JWT + Approved)
     $app->group('/api/recognition', function (RouteCollectorProxy $group) {

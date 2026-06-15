@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit\Infrastructure\Diagram;
 
+use App\Application\Diagram\DiagramRenderOptions;
 use App\Domain\Chess\Fen;
 use App\Infrastructure\Diagram\SvgBoardRenderer;
 use PHPUnit\Framework\TestCase;
@@ -18,6 +19,16 @@ final class SvgBoardRendererTest extends TestCase
         // __DIR__ = apps/api/tests/Unit/Infrastructure/Diagram → go up 6 to repo root
         $pieceDir       = dirname(__DIR__, 6) . '/css/images/pieces/merida';
         $this->renderer = new SvgBoardRenderer($pieceDir);
+    }
+
+    private function rendererWithSets(): SvgBoardRenderer
+    {
+        $root  = dirname(__DIR__, 6);
+        $sets  = [
+            'merida'  => $root . '/css/images/pieces/merida',
+            'fantasy' => $root . '/apps/web/src/shared/chess/pieces/assets/fantasy',
+        ];
+        return new SvgBoardRenderer($root . '/css/images/pieces/merida', $sets);
     }
 
     public function test_renders_svg_root_element(): void
@@ -83,5 +94,47 @@ final class SvgBoardRendererTest extends TestCase
         // File letters a-h
         $this->assertStringContainsString('>a<', $svg);
         $this->assertStringContainsString('>h<', $svg);
+    }
+
+    public function test_options_apply_board_theme_colors(): void
+    {
+        $options = new DiagramRenderOptions(lightColor: '#dee3e6', darkColor: '#5a80a7');
+        $svg     = $this->renderer->renderSvg(Fen::fromString(self::STARTPOS), null, false, $options);
+
+        $this->assertStringContainsString('fill="#dee3e6"', $svg);
+        $this->assertStringContainsString('fill="#5a80a7"', $svg);
+        // default colors should NOT appear
+        $this->assertStringNotContainsString('fill="#f0d9b5"', $svg);
+    }
+
+    public function test_options_coordinates_flag(): void
+    {
+        $options = new DiagramRenderOptions(coordinates: true);
+        $svg     = $this->renderer->renderSvg(Fen::fromString(self::STARTPOS), null, false, $options);
+
+        $this->assertStringContainsString('>a<', $svg);
+        $this->assertStringContainsString('>1<', $svg);
+    }
+
+    public function test_options_select_piece_set(): void
+    {
+        $renderer = $this->rendererWithSets();
+
+        $meridaSvg  = $renderer->renderSvg(Fen::fromString(self::STARTPOS), null, false, new DiagramRenderOptions(pieceSet: 'merida'));
+        $fantasySvg = $renderer->renderSvg(Fen::fromString(self::STARTPOS), null, false, new DiagramRenderOptions(pieceSet: 'fantasy'));
+
+        // Both still render pieces…
+        $this->assertStringContainsString('piece-wK', $meridaSvg);
+        $this->assertStringContainsString('piece-wK', $fantasySvg);
+        // …but the embedded symbol inner markup differs between sets.
+        $this->assertNotSame($meridaSvg, $fantasySvg);
+    }
+
+    public function test_unknown_piece_set_falls_back_to_default(): void
+    {
+        $renderer = $this->rendererWithSets();
+        $svg      = $renderer->renderSvg(Fen::fromString(self::STARTPOS), null, false, new DiagramRenderOptions(pieceSet: 'does-not-exist'));
+
+        $this->assertStringContainsString('piece-wK', $svg);
     }
 }
