@@ -16,8 +16,11 @@ ChessReader parses chess content — EPUBs, public URLs, plain text — recognis
 | **Web Parser** | Paste any public URL — ChessReader extracts and renders the chess content |
 | **Interactive Viewer** | Click any move in the text to jump to that position on the board |
 | **Variation Trees** | Full PGN variation support with collapsible branches |
-| **Stockfish Eval** | Live engine evaluation bar per move (WASM in-browser + native server-side) |
-| **Diagram Regeneration** | Replace external diagram images with locally rendered SVG boards |
+| **Study Board** | Drag-resizable analysis panel; the board always fills its width |
+| **Stockfish Eval** | Live engine evaluation bar per move (WASM in-browser + native server-side) + progressive engine/premove arrows |
+| **Regenerable Diagrams** | Toggle any book diagram between the original image and a freshly rendered board, with a small Stockfish footer (`SF18: (1.30) 1. Nf3 …`, score from White's POV). Right-click to pick board theme, piece set and coordinate symbols, or edit the FEN |
+| **Notes** | Per-user scratch notes with explicit Save and maximize — stored server-side, cached offline |
+| **Theming** | App light/dark theme, 6 board color themes, 7 piece sprite sets, board size, move sounds, autoplay |
 | **Browser Extension** | MV3 Chrome/Edge extension — makes chess blogs interactive without the app |
 | **Auth & Roles** | JWT-based login with user/admin roles and approval flow |
 | **Dev Bypass** | On `localhost`, login is optional — direct access to all features |
@@ -80,7 +83,7 @@ The frontend and extension share the `chess-shared` package. The API is a standa
 ### Shared — `packages/chess-shared`
 - TypeScript: `sanTokenizer`, `recognizeGames`, `pgnToTree`, `GameTree`
 - Spanish ↔ English notation normalisation
-- 60+ unit tests
+- 86 unit tests
 
 ---
 
@@ -158,6 +161,9 @@ API_PORT=9000 WEB_PORT=4000 ADMIN_EMAIL=me@example.com ADMIN_PASSWORD=secret bas
 ### Library
 Upload an EPUB or a book URL → chapters appear in the library. Open a chapter and click any chess move to advance the board.
 
+### Regenerable diagrams
+Each diagram in a chapter shows a small toggle in its corner: switch between the **original book image** and a **freshly rendered board** for the same position (inferred from the preceding mainline moves). The generated board carries a one-line Stockfish footer — e.g. `SF18: (1.30) 1. Nf3 …` — with the score always given from White's point of view. **Right-click** the generated board to choose the board color theme, piece set and coordinate symbols, or to **edit the FEN** directly.
+
 ### Web Parser
 Go to **Webparser**, paste a URL (e.g. a chess blog post) and ChessReader fetches the page, detects all games, and renders them inline with interactive boards. Switch between **Normal** (HTML as-is) and **Substitution** (diagram images replaced by live boards) modes.
 
@@ -172,13 +178,13 @@ Visit `/admin` to approve or reject pending user accounts.
 ## Tests
 
 ```bash
-# PHP backend (183 tests)
+# PHP backend (273 tests)
 cd apps/api && ./vendor/bin/phpunit
 
-# Frontend (99 tests)
+# Frontend (284 tests)
 cd apps/web && pnpm test
 
-# Shared chess library (61 tests)
+# Shared chess library (86 tests)
 cd packages/chess-shared && pnpm test
 ```
 
@@ -186,7 +192,9 @@ cd packages/chess-shared && pnpm test
 
 ## Roadmap
 
-- [ ] Dark mode
+- [x] Dark mode
+- [x] Settings panel (themes, piece sets, board size, sound, autoplay)
+- [x] Regenerable diagrams with Stockfish footer
 - [ ] PGN export from viewer
 - [ ] Multi-language UI (ES / EN)
 - [ ] PWA / offline support
