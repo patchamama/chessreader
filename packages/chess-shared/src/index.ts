@@ -7,3 +7,7 @@ export * from './model/gameTree.js';
 export * from './pgn/pgnToTree.js';
 export * from './pgn/treeToPgn.js';
 export * from './recognition/recognizeGames.js';
+export * from './pgn/moveRepair.js';
+export * from './teaching/concepts.js';
+export * from './teaching/commentCues.js';
+export * from './teaching/narration.js';

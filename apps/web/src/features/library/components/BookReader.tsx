@@ -22,6 +22,7 @@ import { isDevMode } from '../../../shared/env/devMode'
 import { createRoot, type Root } from 'react-dom/client'
 import { DiagramImage } from './DiagramImage'
 import { inferDiagramFen } from '../utils/inferDiagramFen'
+import { NarrationPanel } from '../narration/NarrationPanel'
 import { extractProseText, htmlToProseText, planMoveTargets, piecesByTextNode } from '../utils/proseText'
 
 // The reading pane's innerHTML is set ONCE per chapter and then mutated
@@ -681,6 +682,7 @@ export default function BookReader() {
           }`}
         >
           {showStudy && <StudyBoard />}
+          {showStudy && games.length > 0 && <NarrationPanel games={games} text={plainText} />}
           {showStudy && showDebugTools && <RecognitionDebugPanel chapterText={plainText} games={games} />}
         </aside>
       </div>

@@ -1,6 +1,8 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { Chess } from 'chess.js'
 import ChessBoard from '../../../shared/chess/ChessBoard'
+import { useNarrationStore } from '../narration/narrationStore'
+import { cuesToBoard, isCueArrow } from '../narration/cueStyles'
 import EvalBar from '../../viewer/components/EvalBar'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { useStudyBoardStore } from '../store/studyBoardStore'
@@ -181,13 +183,20 @@ export function StudyBoard() {
       ? { scoreCp: engineBest.scoreCp, mate: engineBest.mate, loading: engine.loading }
       : null
 
-  const boardArrows = buildBoardArrows({
+  // Narration cues: what the commentary being read says, lit on the board.
+  const narrationCues = useNarrationStore((s) => s.cues)
+  const cueBoard = cuesToBoard(narrationCues)
+
+  // While cues are lit the engine/next-move arrows are hidden: every arrow on
+  // the board then belongs to what is being said.
+  const cuesLit = narrationCues.length > 0
+  const boardArrows = [...cueBoard.arrows, ...buildBoardArrows({
     userArrows: annotations.arrows,
-    showEval,
+    showEval: showEval && !cuesLit,
     showEngineArrow,
     bestMoveUci: engine.bestMove,
-    nextMove,
-  })
+    nextMove: cuesLit ? null : nextMove,
+  })]
 
   // Keyboard navigation: ← / → step through the position shown on the board.
   // Only active while a game is loaded; ignores typing in inputs.
@@ -235,6 +244,9 @@ export function StudyBoard() {
   const highlightStyles: Record<string, CSSProperties> = Object.fromEntries(
     Object.entries(annotations.highlights).map(([sq, color]) => [sq, { backgroundColor: color }]),
   )
+  for (const [square, style] of Object.entries(cueBoard.squareStyles)) {
+    highlightStyles[square] = { ...highlightStyles[square], ...style }
+  }
   if (isolatedHighlight) {
     highlightStyles[isolatedHighlight.square] = {
       ...highlightStyles[isolatedHighlight.square],
@@ -247,7 +259,7 @@ export function StudyBoard() {
   // when the user draws. Strip the auto arrows so only real annotations persist.
   const onUserArrowsChange = (arrows: Arrow[]) => {
     setArrows(
-      arrows.filter((a) => a.color !== ENGINE_ARROW_COLOR && a.color !== PREMOVE_ARROW_COLOR),
+      arrows.filter((a) => a.color !== ENGINE_ARROW_COLOR && a.color !== PREMOVE_ARROW_COLOR && !isCueArrow(a)),
     )
   }
 
