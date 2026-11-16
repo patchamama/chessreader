@@ -2,7 +2,7 @@
 /**
  * How much of what human annotators point out does the automatic commentary find?
  *
- *   node scripts/evaluate-commentary.mjs <annotated.pgn> [--misses <tag>] [--json]
+ *   node scripts/evaluate-commentary.mjs <annotated.pgn> [--misses <tag,tag…>] [--json]
  *
  * For every annotated game the comments are read for the ideas they name (a
  * fork, a pin, a sacrifice, a hanging piece…). The comments are then thrown
@@ -45,21 +45,21 @@ const GOLD = {
 
 /** Which detector outputs count as finding each idea. */
 const FOUND = {
-  fork: (m, i) => m.has('fork'),
+  fork: (m, i) => m.has('fork') || m.has('threat:fork'),
   pin: (m, i) => m.has('pin') || i.pinned > 0,
   skewer: (m) => m.has('skewer'),
-  sacrifice: (m) => m.has('sacrifice') || m.has('exchange-sacrifice'),
-  discovered: (m) => m.has('discovered-check') || m.has('discovered-attack') || m.has('double-check'),
+  sacrifice: (m) => m.has('sacrifice') || m.has('exchange-sacrifice') || m.has('pawn-sacrifice'),
+  discovered: (m) => m.has('discovered-check') || m.has('discovered-attack') || m.has('double-check') || m.has('threat:discovered'),
   hanging: (m, i) => m.has('attack-undefended') || m.has('leaves-hanging') || m.has('wins-material') || i.hanging > 0,
-  'wins-material': (m) => m.has('wins-material'),
+  'wins-material': (m) => m.has('wins-material') || m.has('threat:capture'),
   outpost: (m, i) => m.has('outpost') || i.outposts > 0,
   'passed-pawn': (m, i) => m.has('passed-pawn') || i.passed > 0,
   'open-file': (m) => m.has('open-file'),
   battery: (m) => m.has('battery'),
   'x-ray': (m) => m.has('x-ray'),
-  threat: (m) => m.has('attack-undefended') || m.has('fork') || m.has('mate-threat') || m.has('discovered-attack') || m.has('joint-attack') || m.has('check') || m.has('pin') || m.has('skewer'),
+  threat: (m) => m.has('threat') || m.has('attack-undefended') || m.has('fork') || m.has('mate-threat') || m.has('discovered-attack') || m.has('joint-attack') || m.has('check') || m.has('pin') || m.has('skewer'),
   development: (m) => m.has('development'),
-  castling: (m) => m.has('castle'),
+  castling: (m) => m.has('castle') || m.has('prepares-castling'),
 };
 
 const pgn = readFileSync(file, 'utf8').replace(/\r/g, '');
@@ -81,7 +81,9 @@ for (const raw of games) {
   // Detector output per ply, from the bare moves.
   const detected = main.map((node, k) => {
     const fenBefore = k === 0 ? tree.startFen : main[k - 1].fen;
-    const motifs = new Set(moveMotifs(fenBefore, node.san).map((m) => m.kind));
+    const found = moveMotifs(fenBefore, node.san);
+    const motifs = new Set(found.map((m) => m.kind));
+    for (const m of found) if (m.kind === 'threat') motifs.add(`threat:${m.data.type}`);
     if (k < 24 && /^[NB]/.test(node.san) && /[18]$/.test(node.from)) motifs.add('development');
     const ideas = positionIdeas(node.fen);
     const mover = node.color;
@@ -134,7 +136,11 @@ const totalFound = rows.reduce((a, r) => a + r.found, 0);
 if (flags.includes('--json')) {
   console.log(JSON.stringify({ games: used, plies, comments, recall: totalGold ? totalFound / totalGold : 0, rows }, null, 2));
 } else if (missesOf) {
-  for (const line of stats[missesOf]?.misses.slice(0, 40) ?? []) console.log(line);
+  // Several ideas at once: --misses pin,fork,outpost
+  for (const tag of missesOf.split(',')) {
+    console.log(`== ${tag}`);
+    for (const line of stats[tag]?.misses.slice(0, 12) ?? []) console.log(line);
+  }
 } else {
   console.log(`${used} annotated games · ${plies} moves · ${comments} remarks`);
   console.log('idea            mentions  found  recall  fires  lift');

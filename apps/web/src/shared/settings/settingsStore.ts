@@ -136,6 +136,11 @@ export interface AppSettings {
   /** Keys of paid providers. Kept in this browser only; sent with each render request. */
   openaiKey: string
   elevenlabsKey: string
+  /** Language model that writes commentary from the engine review ('none' = rule-based only). */
+  aiProvider: 'none' | 'openai'
+  /** Its API key (kept in this browser, sent only to that provider) and model id. */
+  aiKey: string
+  aiModel: string
   boardTheme: BoardTheme
   evalBarDirection: EvalBarDirection
   stockfishVersion: StockfishVersion
@@ -203,6 +208,9 @@ const DEFAULT: AppSettings = {
   voiceModel: '',
   openaiKey: '',
   elevenlabsKey: '',
+  aiProvider: 'none',
+  aiKey: '',
+  aiModel: '',
   boardTheme: 'blue',
   evalBarDirection: 'vertical',
   stockfishVersion: 'sf10-jsdelivr',

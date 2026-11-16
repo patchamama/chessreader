@@ -31,3 +31,26 @@ describe('ProblemPanel', () => {
     await waitFor(() => expect(screen.getByText('Done: 0 of 1')).toBeInTheDocument())
   })
 })
+
+describe('the book text during a problem', () => {
+  it('is veiled while the move is being looked for and shown again afterwards', async () => {
+    const { default: BookReader } = await import('../components/BookReader')
+    const { MemoryRouter, Route, Routes } = await import('react-router-dom')
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+    const { useExternalBookStore, EXTERNAL_BOOK_ID } = await import('../../../shared/externalBook/externalBookStore')
+    useExternalBookStore.getState().open('Opera', [{ title: 'Opera', html: `<p>${TEXT}</p>`, toc: [{ order: 1, title: 'Opera' }] }])
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={[`/read/${EXTERNAL_BOOK_ID}`]}>
+          <Routes><Route path="/read/:bookId" element={<BookReader />} /></Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    const veil = await screen.findByTestId('prose-veil')
+    expect(veil.className).not.toContain('blur')
+    fireEvent.click(await screen.findByRole('button', { name: /Start problems/ }))
+    await waitFor(() => expect(screen.getByTestId('prose-veil').className).toContain('blur'))
+    fireEvent.click(screen.getByRole('button', { name: 'Show the move' }))
+    await waitFor(() => expect(screen.getByTestId('prose-veil').className).not.toContain('blur'))
+  })
+})

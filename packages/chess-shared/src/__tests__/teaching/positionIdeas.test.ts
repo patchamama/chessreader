@@ -65,3 +65,63 @@ describe('moveMotifs, ideas a move creates', () => {
     expect(kinds('4k3/8/3p4/4N3/5P2/8/8/4K3 w - - 0 1', 'f5')).toContain('leaves-hanging')
   })
 })
+
+describe('patterns learnt from annotated games', () => {
+  const find = (fen: string, san: string, kind: string) => moveMotifs(fen, san).filter((m) => m.kind === kind)
+
+  it('"threatens mate": the mover would mate if it could move again', () => {
+    // After Qh5 White threatens Qxf7#.
+    const [t] = find('r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 0 1', 'Qh5', 'threat')
+    expect(t.data).toMatchObject({ type: 'mate' })
+    expect(t.squares).toEqual(['f7'])
+  })
+  it('"threatens to win a piece": a capture that was not there before', () => {
+    const t = find('r3k3/8/8/8/8/8/8/3QK3 w - - 0 1', 'Qd5', 'threat').find((x) => x.data?.type === 'capture')!
+    expect(t.data).toMatchObject({ type: 'capture', piece: 'r' })
+    expect(t.squares).toEqual(['a8'])
+  })
+  it('"threatens a fork": the next move would attack two pieces at once', () => {
+    // Nd5 threatens Nc7+ forking king and rook.
+    const t = find('r3k3/8/8/8/8/2N5/8/4K3 w - - 0 1', 'Nd5', 'threat')
+    expect(t.some((x) => x.data?.type === 'fork' && x.squares[0] === 'c7')).toBe(true)
+  })
+  it('no threat is reported when the opponent is in check or nothing is new', () => {
+    expect(find('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', 'e4', 'threat')).toEqual([])
+  })
+  it('"winning a pawn": a pawn taken for nothing counts as material won', () => {
+    expect(find('4k3/8/8/5p2/8/8/8/3QK3 w - - 0 1', 'Qd5', 'wins-material')).toEqual([])
+    expect(find('4k3/8/8/3Q1p2/8/8/8/4K3 w - - 0 1', 'Qxf5', 'wins-material')[0].data).toMatchObject({ piece: 'p' })
+    // A pawn exchange is not a win: the pawn is taken back.
+    expect(find('4k3/8/2p5/3p4/4P3/8/8/4K3 w - - 0 1', 'exd5', 'wins-material')).toEqual([])
+  })
+  it('"a pawn fork": a protected pawn attacking two pieces', () => {
+    const [f] = find('4k3/8/3n1b2/8/3PP3/8/8/4K3 w - - 0 1', 'e5', 'fork')
+    expect(f.squares).toEqual(['d6', 'f6'])
+  })
+  it('"sacrifices a pawn": a pawn pushed where it can simply be taken', () => {
+    expect(find('4k3/7p/8/8/6P1/8/8/4K3 w - - 0 1', 'g5', 'pawn-sacrifice')).toEqual([])
+    expect(find('4k3/8/7p/8/6P1/8/8/4K3 w - - 0 1', 'g5', 'pawn-sacrifice')).toHaveLength(1)
+  })
+  it('"prepares to castle": the last piece between king and rook leaves', () => {
+    expect(find('rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 1', 'Bc4', 'prepares-castling')).toHaveLength(1)
+    expect(find('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1', 'Nf3', 'prepares-castling')).toEqual([])
+  })
+  it('"opens the file": a capture that leaves the mover a file without own pawns', () => {
+    const [o] = find('4k3/6p1/8/8/8/6p1/7P/4K2R w K - 0 1', 'hxg3', 'open-file')
+    expect(o.data).toMatchObject({ file: 'h' })
+  })
+})
+
+describe('motifText for the new ideas', () => {
+  it('says each idea in the three languages without writing a move', async () => {
+    const { motifText } = await import('../../teaching/gameReview.js')
+    const fen = 'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 0 1'
+    const [t] = moveMotifs(fen, 'Qh5').filter((m) => m.kind === 'threat')
+    const after = 'r1bqkbnr/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 1 1'
+    expect(motifText(t, after, 'es')).toBe('Amenaza mate en f7.')
+    expect(motifText(t, after, 'en')).toBe('Threatens mate on f7.')
+    expect(motifText(t, after, 'de')).toBe('Droht Matt auf f7.')
+    const hang = { kind: 'attack-undefended' as const, square: 'h5', squares: ['e5'] }
+    expect(motifText(hang, after, 'es')).toBe('La dama ataca el peón de e5, que nadie defiende.')
+  })
+})

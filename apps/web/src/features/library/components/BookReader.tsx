@@ -24,7 +24,9 @@ import { DiagramImage } from './DiagramImage'
 import { inferDiagramFen } from '../utils/inferDiagramFen'
 import { NarrationPanel } from '../narration/NarrationPanel'
 import { GameReviewPanel } from '../review/GameReviewPanel'
+import { PositionIdeasPanel } from '../review/PositionIdeasPanel'
 import { ProblemPanel } from '../problem/ProblemPanel'
+import { useProblemStore } from '../problem/problemStore'
 import { TrackPlayer } from '../track/TrackPlayer'
 import { demoTrackFor } from '../../../demo/demoTracks'
 import { CorrectionWorkbench } from '../correction/CorrectionWorkbench'
@@ -162,6 +164,7 @@ export default function BookReader() {
   // Stable refs for callbacks used inside the wrapping effect (stable deps = no re-wrap on click).
   const loadStudyNodeRef = useRef(loadStudyNode)
   const setChooserRef = useRef(setChooser)
+  const solvingProblem = useProblemStore((s) => s.phase === 'solving')
   const mentionPreview = useSettingsStore((s) => s.mentionPreview)
   const mentionPreviewRef = useRef(mentionPreview)
   useEffect(() => { mentionPreviewRef.current = mentionPreview }, [mentionPreview])
@@ -707,7 +710,14 @@ export default function BookReader() {
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
             </div>
           ) : (
-            <ProseContent ref={contentRef} html={html} />
+            // While a problem is being solved the text would give the move away: it is veiled.
+            <div
+              data-testid="prose-veil"
+              className={solvingProblem ? 'pointer-events-none select-none blur-sm transition' : 'transition'}
+              aria-hidden={solvingProblem || undefined}
+            >
+              <ProseContent ref={contentRef} html={html} />
+            </div>
           )}
         </main>
 
@@ -727,6 +737,7 @@ export default function BookReader() {
           {showStudy && games.length > 0 && (
             <TrackPlayer games={games} text={plainText} sample={demoTrackFor(id, currentChapter)} />
           )}
+          {showStudy && <PositionIdeasPanel />}
           {showStudy && games.length > 0 && <ProblemPanel games={games} text={plainText} />}
           {showStudy && games.length > 0 && <CorrectionWorkbench games={games} text={plainText} />}
           {showStudy && games.length > 0 && (

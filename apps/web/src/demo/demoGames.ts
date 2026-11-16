@@ -302,6 +302,252 @@ const OPERA_WITH_ERRORS: DemoChapter = {
 <p>10. ♘xb5 cxb5 11. ♗xb5+ ♘bd7 12. O-O-O ♖d8 13. ♖xd7 ♖xd7 14. ♖d1 ♕e6 15. ♗xd7+ ♘xd7 16. ♕b8+ ♘xb8 17. ♖d8#</p>`,
 }
 
+const IMMORTAL_EN: DemoChapter = {
+  title: 'The Immortal Game',
+  plies: 45,
+  html: `
+<h2>The Immortal Game</h2>
+<p><em>Adolf Anderssen — Lionel Kieseritzky, London 1851</em></p>
+<p>White gives up a bishop, both rooks and the queen to mate with the three minor pieces.</p>
+<p>1. e4 e5 2. f4 exf4</p>
+<p>The King's Gambit accepted. White gives up the pawn on f4 to control the centre and open the f-file.</p>
+<p>3. ♗c4 ♕h4+ 4. ♔f1 b5</p>
+<p>The check takes away White's right to castle. With 4... b5 Black returns the pawn to deflect the bishop from the diagonal a2-g8.</p>
+<p>5. ♗xb5 ♘f6 6. ♘f3 ♕h6 7. d3 ♘h5</p>
+<p>The knight defends the pawn on f4 and threatens a check on g3.</p>
+<p>8. ♘h4 ♕g5 9. ♘f5 c6</p>
+<p>The queen attacks the knight on f5 and the bishop on b5 at once. Better was 9... g6.</p>
+<p>10. g4 ♘f6 11. ♖g1</p>
+<p>Anderssen leaves the bishop on b5 undefended: he prefers to gain time against the black queen.</p>
+<p>11... cxb5 12. h4 ♕g6 13. h5 ♕g5 14. ♕f3</p>
+<p>The threat is to take on f4 with the bishop: the black queen would have no squares. The knight has to go back to its starting square.</p>
+<p>14... ♘g8 15. ♗xf4 ♕f6 16. ♘c3 ♗c5 17. ♘d5</p>
+<p>The knight takes the central square d5 and attacks the queen. White now offers both rooks.</p>
+<p>17... ♕xb2 18. ♗d6</p>
+<p>A blocking move: the bishop cuts the diagonal of the bishop on c5 towards the square e7.</p>
+<p>18... ♗xg1</p>
+<p>If 18... ♕xa1+ 19. ♔e2 ♕xg1 20. ♘xg7+ ♔d8 21. ♗c7#.</p>
+<p>19. e5</p>
+<p>The pawn closes the diagonal a1-h8: the black queen no longer defends the square g7.</p>
+<p>19... ♕xa1+ 20. ♔e2 ♘a6</p>
+<p>It defends the square c7, but the mate comes from the other side.</p>
+<p>21. ♘xg7+ ♔d8 22. ♕f6+</p>
+<p>A queen sacrifice! The knight on g8 has to capture and leaves the square e7 free.</p>
+<p>22... ♘xf6 23. ♗e7#</p>
+<p>Mate with three minor pieces: the bishop gives check on e7 and the knights on d5 and g7 cover the escape squares.</p>`,
+}
+
+const IMMORTAL_DE: DemoChapter = {
+  title: 'Die Unsterbliche Partie',
+  plies: 45,
+  html: `
+<h2>Die Unsterbliche Partie</h2>
+<p><em>Adolf Anderssen — Lionel Kieseritzky, London 1851</em></p>
+<p>Weiß gibt einen Läufer, beide Türme und die Dame her, um mit den drei Leichtfiguren matt zu setzen.</p>
+<p>1. e4 e5 2. f4 exf4</p>
+<p>Das angenommene Königsgambit. Weiß gibt den Bauern auf f4, um das Zentrum zu beherrschen und die f-Linie zu öffnen.</p>
+<p>3. ♗c4 ♕h4+ 4. ♔f1 b5</p>
+<p>Das Schach nimmt Weiß die Rochade. Mit 4... b5 gibt Schwarz den Bauern zurück, um den Läufer von der Diagonale a2-g8 abzulenken.</p>
+<p>5. ♗xb5 ♘f6 6. ♘f3 ♕h6 7. d3 ♘h5</p>
+<p>Der Springer deckt den Bauern auf f4 und droht ein Schach auf g3.</p>
+<p>8. ♘h4 ♕g5 9. ♘f5 c6</p>
+<p>Die Dame greift zugleich den Springer auf f5 und den Läufer auf b5 an. Besser war 9... g6.</p>
+<p>10. g4 ♘f6 11. ♖g1</p>
+<p>Anderssen lässt den Läufer auf b5 ungedeckt: er gewinnt lieber Zeit gegen die schwarze Dame.</p>
+<p>11... cxb5 12. h4 ♕g6 13. h5 ♕g5 14. ♕f3</p>
+<p>Es droht das Schlagen auf f4 mit dem Läufer: die schwarze Dame hätte kein Feld mehr. Der Springer muss auf sein Ausgangsfeld zurück.</p>
+<p>14... ♘g8 15. ♗xf4 ♕f6 16. ♘c3 ♗c5 17. ♘d5</p>
+<p>Der Springer besetzt das Zentralfeld d5 und greift die Dame an. Weiß bietet nun beide Türme an.</p>
+<p>17... ♕xb2 18. ♗d6</p>
+<p>Ein Sperrzug: der Läufer unterbricht die Diagonale des Läufers auf c5 zum Feld e7.</p>
+<p>18... ♗xg1</p>
+<p>Auf 18... ♕xa1+ 19. ♔e2 ♕xg1 20. ♘xg7+ ♔d8 folgt 21. ♗c7#.</p>
+<p>19. e5</p>
+<p>Der Bauer schließt die Diagonale a1-h8: die schwarze Dame deckt das Feld g7 nicht mehr.</p>
+<p>19... ♕xa1+ 20. ♔e2 ♘a6</p>
+<p>Das deckt das Feld c7, aber das Matt kommt von der anderen Seite.</p>
+<p>21. ♘xg7+ ♔d8 22. ♕f6+</p>
+<p>Ein Damenopfer! Der Springer auf g8 muss schlagen und gibt das Feld e7 frei.</p>
+<p>22... ♘xf6 23. ♗e7#</p>
+<p>Matt mit drei Leichtfiguren: der Läufer gibt auf e7 Schach, die Springer auf d5 und g7 decken die Fluchtfelder.</p>`,
+}
+
+const EVERGREEN_EN: DemoChapter = {
+  title: 'The Evergreen Game',
+  plies: 47,
+  html: `
+<h2>The Evergreen Game</h2>
+<p><em>Adolf Anderssen — Jean Dufresne, Berlin 1852</em></p>
+<p>1. e4 e5 2. ♘f3 ♘c6 3. ♗c4 ♗c5 4. b4</p>
+<p>The Evans Gambit. White gives up the pawn on b4 to gain time and build a strong centre.</p>
+<p>4... ♗xb4 5. c3 ♗a5 6. d4 exd4 7. O-O d3</p>
+<p>Black returns the pawn so that the white knight cannot reach c3. More solid is 7... ♘ge7.</p>
+<p>8. ♕b3 ♕f6</p>
+<p>The queen and the bishop on c4 attack f7 along the diagonal a2-g8; the black queen defends it.</p>
+<p>9. e5 ♕g6 10. ♖e1 ♘ge7 11. ♗a3</p>
+<p>The bishop aims along the diagonal a3-f8 at the knight on e7. The black king is still in the centre.</p>
+<p>11... b5 12. ♕xb5 ♖b8 13. ♕a4 ♗b6 14. ♘bd2 ♗b7 15. ♘e4 ♕f5 16. ♗xd3 ♕h5</p>
+<p>Black prepares a counterattack on the g-file against the white king.</p>
+<p>17. ♘f6+</p>
+<p>A sacrifice to open the e-file, where the black king stands.</p>
+<p>17... gxf6 18. exf6 ♖g8 19. ♖ad1</p>
+<p>A quiet and deep move. Black threatens mate on g2, but Anderssen has seen further.</p>
+<p>19... ♕xf3</p>
+<p>It takes the knight and threatens mate on g2. Better was 19... ♕h3.</p>
+<p>20. ♖xe7+ ♘xe7</p>
+<p>If 20... ♔d8 21. ♖xd7+ ♔c8 22. ♖d8+ White also wins.</p>
+<p>21. ♕xd7+</p>
+<p>A queen sacrifice! The king has to capture and is exposed on the d-file.</p>
+<p>21... ♔xd7 22. ♗f5+</p>
+<p>A double check from the rook on d1 and the bishop: the king has to move.</p>
+<p>22... ♔e8 23. ♗d7+ ♔f8 24. ♗xe7#</p>
+<p>Mate. The bishop on e7 is defended by the pawn on f6 and the bishop on d7 covers the square e8.</p>`,
+}
+
+const EVERGREEN_DE: DemoChapter = {
+  title: 'Die Immergrüne Partie',
+  plies: 47,
+  html: `
+<h2>Die Immergrüne Partie</h2>
+<p><em>Adolf Anderssen — Jean Dufresne, Berlin 1852</em></p>
+<p>1. e4 e5 2. ♘f3 ♘c6 3. ♗c4 ♗c5 4. b4</p>
+<p>Das Evans-Gambit. Weiß gibt den Bauern auf b4, um Zeit zu gewinnen und ein starkes Zentrum aufzubauen.</p>
+<p>4... ♗xb4 5. c3 ♗a5 6. d4 exd4 7. O-O d3</p>
+<p>Schwarz gibt den Bauern zurück, damit der weiße Springer nicht nach c3 kommt. Solider ist 7... ♘ge7.</p>
+<p>8. ♕b3 ♕f6</p>
+<p>Die Dame und der Läufer auf c4 greifen f7 über die Diagonale a2-g8 an; die schwarze Dame deckt es.</p>
+<p>9. e5 ♕g6 10. ♖e1 ♘ge7 11. ♗a3</p>
+<p>Der Läufer zielt über die Diagonale a3-f8 auf den Springer auf e7. Der schwarze König steht noch in der Mitte.</p>
+<p>11... b5 12. ♕xb5 ♖b8 13. ♕a4 ♗b6 14. ♘bd2 ♗b7 15. ♘e4 ♕f5 16. ♗xd3 ♕h5</p>
+<p>Schwarz bereitet einen Gegenangriff auf der g-Linie gegen den weißen König vor.</p>
+<p>17. ♘f6+</p>
+<p>Ein Opfer, um die e-Linie zu öffnen, auf der der schwarze König steht.</p>
+<p>17... gxf6 18. exf6 ♖g8 19. ♖ad1</p>
+<p>Ein stiller und tiefer Zug. Schwarz droht Matt auf g2, aber Anderssen hat weiter gesehen.</p>
+<p>19... ♕xf3</p>
+<p>Das schlägt den Springer und droht Matt auf g2. Besser war 19... ♕h3.</p>
+<p>20. ♖xe7+ ♘xe7</p>
+<p>Auf 20... ♔d8 21. ♖xd7+ ♔c8 22. ♖d8+ gewinnt Weiß ebenfalls.</p>
+<p>21. ♕xd7+</p>
+<p>Ein Damenopfer! Der König muss schlagen und steht auf der d-Linie offen.</p>
+<p>21... ♔xd7 22. ♗f5+</p>
+<p>Doppelschach durch den Turm auf d1 und den Läufer: der König muss ziehen.</p>
+<p>22... ♔e8 23. ♗d7+ ♔f8 24. ♗xe7#</p>
+<p>Matt. Der Läufer auf e7 wird vom Bauern auf f6 gedeckt, der Läufer auf d7 deckt das Feld e8.</p>`,
+}
+
+const CENTURY_EN: DemoChapter = {
+  title: 'The Game of the Century',
+  plies: 82,
+  html: `
+<h2>The Game of the Century</h2>
+<p><em>Donald Byrne — Robert Fischer, New York 1956</em></p>
+<p>Bobby Fischer was thirteen years old when he played this game.</p>
+<p>1. ♘f3 ♘f6 2. c4 g6 3. ♘c3 ♗g7 4. d4 O-O 5. ♗f4 d5</p>
+<p>An automatic reply would have been 5... d6. But Bobby wants the Grünfeld Defence.</p>
+<p>6. ♕b3</p>
+<p>White mixes two systems. More solid is 6. ♖c1.</p>
+<p>6... dxc4 7. ♕xc4 c6 8. e4 ♘bd7 9. ♖d1</p>
+<p>It supports the pawn on d4. If 9. e5 ♘d5 10. ♘xd5 cxd5 11. ♕xd5 ♘xe5 Black wins the pawn back with a good game.</p>
+<p>9... ♘b6 10. ♕c5</p>
+<p>The queen is exposed on c5. Safer is 10. ♕b3.</p>
+<p>10... ♗g4 11. ♗g5</p>
+<p>A mistake: White moves an already developed piece again and the king is still in the centre. Necessary was 11. ♗e2.</p>
+<p>11... ♘a4</p>
+<p>A brilliant move! The knight offers itself on a4. If 12. ♘xa4 ♘xe4 13. ♕c1 ♕a5+ 14. ♘c3 ♗xf3 15. gxf3 ♘xg5 Black wins a pawn and wrecks the white pawns.</p>
+<p>12. ♕a3 ♘xc3 13. bxc3 ♘xe4</p>
+<p>The knight takes the central pawn and attacks the bishop on g5 and the pawn on c3.</p>
+<p>14. ♗xe7 ♕b6 15. ♗c4</p>
+<p>If 15. ♗xf8 ♗xf8 16. ♕b3 ♘xc3 Black has a very strong attack.</p>
+<p>15... ♘xc3 16. ♗c5 ♖fe8+ 17. ♔f1</p>
+<p>The white king has lost the right to castle and the black queen is attacked. Now comes the most famous move of the game.</p>
+<p>17... ♗e6</p>
+<p>A queen sacrifice! If 18. ♗xe6 ♕b5+ 19. ♔g1 ♘e2+ 20. ♔f1 ♘g3+ 21. ♔g1 ♕f1+ 22. ♖xf1 ♘e2# it is a smothered mate.</p>
+<p>18. ♗xb6 ♗xc4+ 19. ♔g1 ♘e2+ 20. ♔f1 ♘xd4+</p>
+<p>The windmill: the knight gives discovered checks with the bishop on c4 and keeps taking material.</p>
+<p>21. ♔g1 ♘e2+ 22. ♔f1 ♘c3+ 23. ♔g1 axb6 24. ♕b4 ♖a4 25. ♕xb6 ♘xd1</p>
+<p>Black has a rook and two bishops for the queen, and all the pieces work together.</p>
+<p>26. h3 ♖xa2 27. ♔h2 ♘xf2 28. ♖e1 ♖xe1 29. ♕d8+ ♗f8 30. ♘xe1 ♗d5</p>
+<p>The bishop controls the long diagonal and protects the square f7.</p>
+<p>31. ♘f3 ♘e4 32. ♕b8 b5 33. h4 h5 34. ♘e5 ♔g7 35. ♔g1 ♗c5+</p>
+<p>The king hunt begins: every black piece attacks.</p>
+<p>36. ♔f1 ♘g3+ 37. ♔e1 ♗b4+ 38. ♔d1 ♗b3+ 39. ♔c1 ♘e2+ 40. ♔b1 ♘c3+ 41. ♔c1 ♖c2#</p>
+<p>Mate. The rook is defended by the bishop on b3 and the knight on c3 covers the squares b1 and d1.</p>`,
+}
+
+const CENTURY_DE: DemoChapter = {
+  title: 'Die Partie des Jahrhunderts',
+  plies: 82,
+  html: `
+<h2>Die Partie des Jahrhunderts</h2>
+<p><em>Donald Byrne — Robert Fischer, New York 1956</em></p>
+<p>Bobby Fischer war dreizehn Jahre alt, als er diese Partie spielte.</p>
+<p>1. ♘f3 ♘f6 2. c4 g6 3. ♘c3 ♗g7 4. d4 O-O 5. ♗f4 d5</p>
+<p>Eine automatische Antwort wäre 5... d6 gewesen. Aber Bobby will die Grünfeld-Verteidigung.</p>
+<p>6. ♕b3</p>
+<p>Weiß mischt zwei Systeme. Solider ist 6. ♖c1.</p>
+<p>6... dxc4 7. ♕xc4 c6 8. e4 ♘bd7 9. ♖d1</p>
+<p>Das stützt den Bauern auf d4. Auf 9. e5 ♘d5 10. ♘xd5 cxd5 11. ♕xd5 ♘xe5 gewinnt Schwarz den Bauern mit gutem Spiel zurück.</p>
+<p>9... ♘b6 10. ♕c5</p>
+<p>Die Dame steht auf c5 ungeschützt. Sicherer ist 10. ♕b3.</p>
+<p>10... ♗g4 11. ♗g5</p>
+<p>Ein Fehler: Weiß zieht eine schon entwickelte Figur noch einmal, und der König steht noch in der Mitte. Nötig war 11. ♗e2.</p>
+<p>11... ♘a4</p>
+<p>Ein glänzender Zug! Der Springer bietet sich auf a4 an. Auf 12. ♘xa4 ♘xe4 13. ♕c1 ♕a5+ 14. ♘c3 ♗xf3 15. gxf3 ♘xg5 gewinnt Schwarz einen Bauern und zerstört die weißen Bauern.</p>
+<p>12. ♕a3 ♘xc3 13. bxc3 ♘xe4</p>
+<p>Der Springer schlägt den Zentralbauern und greift den Läufer auf g5 und den Bauern auf c3 an.</p>
+<p>14. ♗xe7 ♕b6 15. ♗c4</p>
+<p>Auf 15. ♗xf8 ♗xf8 16. ♕b3 ♘xc3 hat Schwarz einen sehr starken Angriff.</p>
+<p>15... ♘xc3 16. ♗c5 ♖fe8+ 17. ♔f1</p>
+<p>Der weiße König hat die Rochade verloren und die schwarze Dame ist angegriffen. Jetzt kommt der berühmteste Zug der Partie.</p>
+<p>17... ♗e6</p>
+<p>Ein Damenopfer! Auf 18. ♗xe6 ♕b5+ 19. ♔g1 ♘e2+ 20. ♔f1 ♘g3+ 21. ♔g1 ♕f1+ 22. ♖xf1 ♘e2# ist es ein ersticktes Matt.</p>
+<p>18. ♗xb6 ♗xc4+ 19. ♔g1 ♘e2+ 20. ♔f1 ♘xd4+</p>
+<p>Die Zwickmühle: der Springer gibt mit dem Läufer auf c4 Abzugsschachs und schlägt dabei Material.</p>
+<p>21. ♔g1 ♘e2+ 22. ♔f1 ♘c3+ 23. ♔g1 axb6 24. ♕b4 ♖a4 25. ♕xb6 ♘xd1</p>
+<p>Schwarz hat Turm und zwei Läufer für die Dame, und alle Figuren arbeiten zusammen.</p>
+<p>26. h3 ♖xa2 27. ♔h2 ♘xf2 28. ♖e1 ♖xe1 29. ♕d8+ ♗f8 30. ♘xe1 ♗d5</p>
+<p>Der Läufer beherrscht die lange Diagonale und schützt das Feld f7.</p>
+<p>31. ♘f3 ♘e4 32. ♕b8 b5 33. h4 h5 34. ♘e5 ♔g7 35. ♔g1 ♗c5+</p>
+<p>Die Königsjagd beginnt: alle schwarzen Figuren greifen an.</p>
+<p>36. ♔f1 ♘g3+ 37. ♔e1 ♗b4+ 38. ♔d1 ♗b3+ 39. ♔c1 ♘e2+ 40. ♔b1 ♘c3+ 41. ♔c1 ♖c2#</p>
+<p>Matt. Der Turm wird vom Läufer auf b3 gedeckt, der Springer auf c3 deckt die Felder b1 und d1.</p>`,
+}
+
+const OPERA_ERRORS_EN: DemoChapter = {
+  title: 'The Opera Game (with misprints)',
+  plies: 33,
+  misprints: [['Bf5', 'Bg4'], ['Bc5', 'Bc4'], ['Bg4', 'Bg5']],
+  html: `
+<h2>The Opera Game (with misprints)</h2>
+<p><em>Paul Morphy — Duke of Brunswick and Count Isouard, Paris 1858</em></p>
+<p>This text has three misprinted moves. The reader detects them because they are no longer legal — or make a later move illegal — and proposes the correction with which the rest of the game fits again. They are underlined in red; the errors button lists them.</p>
+<p>1. e4 e5 2. ♘f3 d6 3. d4 ♗f5</p>
+<p>First misprint: the text says ♗f5, which is legal. The mistake only shows one move later, when the bishop "captures on f3".</p>
+<p>4. dxe5 ♗xf3 5. ♕xf3 dxe5 6. ♗c5</p>
+<p>Second misprint: the bishop on f1 cannot reach c5.</p>
+<p>6... ♘f6 7. ♕b3 ♕e7 8. ♘c3 c6 9. ♗g4 b5</p>
+<p>Third misprint: the bishop on c1 does not reach g4.</p>
+<p>10. ♘xb5 cxb5 11. ♗xb5+ ♘bd7 12. O-O-O ♖d8 13. ♖xd7 ♖xd7 14. ♖d1 ♕e6 15. ♗xd7+ ♘xd7 16. ♕b8+ ♘xb8 17. ♖d8#</p>`,
+}
+
+const OPERA_ERRORS_DE: DemoChapter = {
+  title: 'Die Opernpartie (mit Druckfehlern)',
+  plies: 33,
+  misprints: [['Bf5', 'Bg4'], ['Bc5', 'Bc4'], ['Bg4', 'Bg5']],
+  html: `
+<h2>Die Opernpartie (mit Druckfehlern)</h2>
+<p><em>Paul Morphy — Herzog von Braunschweig und Graf Isouard, Paris 1858</em></p>
+<p>Dieser Text enthält drei falsch gedruckte Züge. Der Leser erkennt sie, weil sie nicht mehr legal sind — oder einen späteren Zug illegal machen — und schlägt die Korrektur vor, mit der der Rest der Partie wieder passt. Sie sind rot unterstrichen; der Fehler-Knopf listet sie auf.</p>
+<p>1. e4 e5 2. ♘f3 d6 3. d4 ♗f5</p>
+<p>Erster Druckfehler: im Text steht ♗f5, was legal ist. Der Fehler zeigt sich erst einen Zug später, wenn der Läufer "auf f3 schlägt".</p>
+<p>4. dxe5 ♗xf3 5. ♕xf3 dxe5 6. ♗c5</p>
+<p>Zweiter Druckfehler: der Läufer von f1 kann c5 nicht erreichen.</p>
+<p>6... ♘f6 7. ♕b3 ♕e7 8. ♘c3 c6 9. ♗g4 b5</p>
+<p>Dritter Druckfehler: der Läufer von c1 kommt nicht nach g4.</p>
+<p>10. ♘xb5 cxb5 11. ♗xb5+ ♘bd7 12. O-O-O ♖d8 13. ♖xd7 ♖xd7 14. ♖d1 ♕e6 15. ♗xd7+ ♘xd7 16. ♕b8+ ♘xb8 17. ♖d8#</p>`,
+}
+
 export const DEMO_BOOKS: DemoBook[] = [
   {
     book: {
@@ -321,7 +567,7 @@ export const DEMO_BOOKS: DemoBook[] = [
       createdAt: '2026-11-16T10:00:00Z',
       description: 'Complete annotated games in English, book style and PGN style.',
     },
-    chapters: [OPERA_EN_BOOK, LEGAL_EN, OPERA_EN],
+    chapters: [OPERA_EN_BOOK, LEGAL_EN, IMMORTAL_EN, EVERGREEN_EN, CENTURY_EN, OPERA_EN, OPERA_ERRORS_EN],
   },
   {
     book: {
@@ -341,6 +587,6 @@ export const DEMO_BOOKS: DemoBook[] = [
       createdAt: '2026-11-16T10:00:00Z',
       description: 'Vollständige kommentierte Partien auf Deutsch.',
     },
-    chapters: [OPERA_DE, LEGAL_DE],
+    chapters: [OPERA_DE, LEGAL_DE, IMMORTAL_DE, EVERGREEN_DE, CENTURY_DE, OPERA_ERRORS_DE],
   },
 ]

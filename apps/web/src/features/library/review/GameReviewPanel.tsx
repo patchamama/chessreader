@@ -8,6 +8,8 @@ import { useSettingsStore, STOCKFISH_VERSIONS } from '../../../shared/settings/s
 import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
 import { textToChapters } from '../utils/textToChapters'
 import { analyseGame } from './reviewEngine'
+import { commentWithModel, configuredModel } from './aiCommentary'
+import { lichessOpening } from '../../gamesearch/sources'
 import { reviewEngine, summarise, useReviewStore } from './reviewStore'
 
 interface GameReviewPanelProps {
@@ -25,6 +27,7 @@ const T: Record<Lang, Record<string, string>> = {
     better: 'Better was', follow: 'There followed', level: 'Commentary level', l1: '1 · marks only', l2: '2 · remarks and better lines',
     l3: '3 · tactics, opening and summary', open: 'Open annotated game', chapter: 'This chapter', book: 'Whole book',
     games: 'games', depth: 'Depth', brilliant: 'brilliant', good: 'very good', dubious: 'inaccuracies', mistake: 'mistakes', blunder: 'blunders',
+    ai: 'Comment with a language model', aiBusy: 'Writing commentary…', aiSetup: 'To comment with a language model, set its provider, key and model in Settings.',
     players: 'Players are read from PGN tags, from lines "White: … / Black: …" or from a heading "White – Black".',
   },
   es: {
@@ -34,6 +37,7 @@ const T: Record<Lang, Record<string, string>> = {
     better: 'Era mejor', follow: 'Siguió', level: 'Nivel de comentario', l1: '1 · solo signos', l2: '2 · comentarios y líneas mejores',
     l3: '3 · táctica, apertura y resumen', open: 'Abrir la partida comentada', chapter: 'Este capítulo', book: 'Todo el libro',
     games: 'partidas', depth: 'Profundidad', brilliant: 'brillantes', good: 'muy buenas', dubious: 'imprecisiones', mistake: 'errores', blunder: 'errores graves',
+    ai: 'Comentar con un modelo de lenguaje', aiBusy: 'Escribiendo comentarios…', aiSetup: 'Para comentar con un modelo de lenguaje, configura proveedor, clave y modelo en Ajustes.',
     players: 'Los jugadores se leen de las etiquetas PGN, de líneas "Blancas: … / Negras: …" o de un encabezado "Blancas – Negras".',
   },
   de: {
@@ -43,6 +47,7 @@ const T: Record<Lang, Record<string, string>> = {
     better: 'Besser war', follow: 'Es folgte', level: 'Kommentarstufe', l1: '1 · nur Zeichen', l2: '2 · Anmerkungen und bessere Varianten',
     l3: '3 · Taktik, Eröffnung und Zusammenfassung', open: 'Kommentierte Partie öffnen', chapter: 'Dieses Kapitel', book: 'Ganzes Buch',
     games: 'Partien', depth: 'Tiefe', brilliant: 'glänzend', good: 'sehr gut', dubious: 'Ungenauigkeiten', mistake: 'Fehler', blunder: 'grobe Fehler',
+    ai: 'Mit einem Sprachmodell kommentieren', aiBusy: 'Kommentar wird geschrieben…', aiSetup: 'Zum Kommentieren mit einem Sprachmodell Anbieter, Schlüssel und Modell in den Einstellungen festlegen.',
     players: 'Die Spieler werden aus PGN-Tags, aus Zeilen "Weiß: … / Schwarz: …" oder aus einer Überschrift "Weiß – Schwarz" gelesen.',
   },
 }
@@ -72,6 +77,10 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
   const navigate = useNavigate()
   const [progress, setProgress] = useState<{ done: number; total: number; game: number } | null>(null)
   const [level, setLevel] = useState<1 | 2 | 3>(2)
+  const [database, setDatabase] = useState<{ tree: unknown; eco: string; name: string } | null>(null)
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+  const aiReady = useSettingsStore((s) => s.aiProvider !== 'none' && !!s.aiKey.trim() && !!s.aiModel.trim())
   const abort = useRef<AbortController | null>(null)
   useEffect(() => () => abort.current?.abort(), [])
 
@@ -94,6 +103,8 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
           depth, signal: ctrl.signal, onProgress: (done, total) => setProgress({ done, total, game: i }),
         })
         const review = reviewGame(plies)
+        // The opening by name, from the masters database when it is reachable (the built-in table otherwise).
+        void lichessOpening(plies.map((p) => `${p.from}${p.to}`)).then((o) => { if (o) setDatabase({ tree, ...o }) })
         const who = playersOf(i)
         setReview(tree, { plies, review }, {
           bookId, chapter, gameIndex: i, white: who.white, black: who.black,
@@ -135,10 +146,29 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
     navigate(`/read/${EXTERNAL_BOOK_ID}`)
   }
 
+  async function openAiAnnotated() {
+    const model = configuredModel()
+    if (!reviewed || !model) return
+    setAiBusy(true)
+    setAiError(null)
+    try {
+      const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
+      const annotated = await commentWithModel(model, { plies: reviewed.plies, review: reviewed.review, lang, white: players.white, black: players.black })
+      const { title, chapters } = textToChapters(annotated, `${names} (${t.ai.toLowerCase()})`)
+      openBook(title, chapters)
+      navigate(`/read/${EXTERNAL_BOOK_ID}`)
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
   const button = 'rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40'
   const chapterRecords = records.filter((r) => r.bookId === bookId && r.chapter === chapter)
   const bookRecords = records.filter((r) => r.bookId === bookId)
   const opening = reviewed ? openingName(reviewed.plies.map((p) => p.san), lang) : null
+  const fromDatabase = database && database.tree === game.tree ? database : null
 
   const side = (color: 'white' | 'black') => {
     const r = reviewed!.review[color]
@@ -226,7 +256,11 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
       {reviewed && (
         <>
           <div className="mt-2 flex gap-2">{side('white')}{side('black')}</div>
-          {opening && <p className="mt-1 text-xs text-slate-600">{t.opening}: <strong>{opening}</strong></p>}
+          {(opening || fromDatabase) && (
+            <p className="mt-1 text-xs text-slate-600" data-testid="opening">
+              {t.opening}: <strong>{fromDatabase ? `${fromDatabase.name} (${fromDatabase.eco})` : opening}</strong>
+            </p>
+          )}
 
           <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-indigo-800">{t.moments}</p>
           {reviewed.review.keyMoments.length === 0 && <p className="text-xs text-slate-500">{t.none}</p>}
@@ -275,7 +309,12 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
               </select>
             </label>
             <button className={button} onClick={openAnnotated}>{t.open}</button>
+            <button className={button} onClick={() => void openAiAnnotated()} disabled={!aiReady || aiBusy} title={aiReady ? undefined : t.aiSetup}>
+              {aiBusy ? t.aiBusy : `✨ ${t.ai}`}
+            </button>
           </div>
+          {!aiReady && <p className="mt-1 text-[11px] text-slate-500">{t.aiSetup}</p>}
+          {aiError && <p role="alert" className="mt-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-800">{aiError}</p>}
         </>
       )}
 

@@ -55,7 +55,8 @@ export type MotifKind =
   | 'fork' | 'pin' | 'skewer' | 'sacrifice' | 'exchange-sacrifice'
   | 'discovered-check' | 'double-check' | 'joint-attack' | 'mate-threat' | 'late-value'
   | 'attack-undefended' | 'wins-material' | 'discovered-attack' | 'outpost' | 'open-file'
-  | 'passed-pawn' | 'battery' | 'x-ray' | 'leaves-hanging';
+  | 'passed-pawn' | 'battery' | 'x-ray' | 'leaves-hanging'
+  | 'threat' | 'pawn-sacrifice' | 'prepares-castling';
 
 export interface Motif {
   kind: MotifKind;
@@ -110,17 +111,10 @@ export function moveMotifs(fenBefore: string, san: string): Motif[] {
     }
   }
 
-  // Fork: the moved piece attacks two or more pieces worth taking.
+  // Fork: the moved piece attacks two or more pieces worth taking, and is not simply lost.
   if (moved) {
-    const targets = reach.filter((s) => {
-      const p = at(s);
-      if (!p || p.color !== foe) return false;
-      if (p.type === 'k') return true;
-      return VALUE[p.type] > VALUE[moved.type] || chess.attackers(s as Square, foe).length === 0;
-    });
-    // …and is not simply taken itself (unless it gives check).
-    const safe = chess.attackers(m.to as Square, foe).length === 0 || chess.isCheck();
-    if (targets.length >= 2 && safe) add('fork', targets.sort(), { piece: moved.type });
+    const targets = forkTargets(chess, m.to);
+    if (targets.length >= 2) add('fork', targets, { piece: moved.type });
   }
 
   // Pin / skewer along the lines of a bishop, rook or queen.
@@ -134,11 +128,12 @@ export function moveMotifs(fenBefore: string, san: string): Motif[] {
         const s = `${'abcdefgh'[f]}${r + 1}`;
         if (at(s)) seen.push(s);
       }
+      // Battery: the next piece on the line is an own queen/rook/bishop that moves along it.
+      const along = (t: PieceSymbol) => t === 'q' || (df === 0 || dr === 0 ? t === 'r' : t === 'b');
+      const first = seen[0] ? at(seen[0])! : null;
+      if (first && first.color === me && along(first.type) && !out.some((x) => x.kind === 'battery')) add('battery', [seen[0]], { piece: first.type });
       if (seen.length < 2) continue;
       const [front, behind] = seen.map((s) => at(s)!);
-      // Battery: an own queen/rook/bishop that moves along this line stands right behind or in front.
-      const along = (t: PieceSymbol) => t === 'q' || (df === 0 || dr === 0 ? t === 'r' : t === 'b');
-      if (front.color === me && along(front.type) && !out.some((x) => x.kind === 'battery')) add('battery', [seen[0]], { piece: front.type });
       if (front.color !== foe || behind.color !== foe) continue;
       // X-ray: the piece in front moves along this very line, so the slider acts through it.
       if (along(front.type) && front.type !== 'k') add('x-ray', seen, { piece: front.type, behind: behind.type });
@@ -160,8 +155,8 @@ export function moveMotifs(fenBefore: string, san: string): Motif[] {
         && !attacksFrom(before, m.from).includes(s);
     });
     if (targets.length > 0 && safe) add('attack-undefended', targets.sort());
-    // Material won on the spot: an undefended piece taken, or a more valuable one.
-    if (m.captured && m.captured !== 'p' && (chess.attackers(m.to as Square, foe).length === 0 || VALUE[m.captured] > VALUE[moved.type])) {
+    // Material won on the spot: something taken that cannot be taken back, or worth more than the taker.
+    if (m.captured && (chess.attackers(m.to as Square, foe).length === 0 || VALUE[m.captured] > VALUE[moved.type])) {
       add('wins-material', [], { piece: m.captured });
     }
     // Discovered attack: a slider behind the moved piece now hits something worth taking.
@@ -186,6 +181,36 @@ export function moveMotifs(fenBefore: string, san: string): Motif[] {
       const wasPassed = ideasBefore.passedPawns.some((p) => p.square === m.from);
       const far = me === 'w' ? Number(m.to[1]) >= 6 : Number(m.to[1]) <= 3;
       if (isPassed && (!wasPassed || far)) add('passed-pawn');
+    }
+    // A pawn pushed where it can simply be taken: a pawn sacrifice (or a slip).
+    if (moved.type === 'p' && !m.captured && !m.promotion) {
+      const takers = chess.attackers(m.to as Square, foe);
+      if (takers.length > 0 && takers.length > chess.attackers(m.to as Square, me).length) add('pawn-sacrifice', takers.sort());
+    }
+    // The last piece between king and rook leaves: castling is now possible.
+    const rights = fenBefore.split(' ')[2];
+    const home = me === 'w' ? '1' : '8';
+    for (const [flag, files] of [[me === 'w' ? 'K' : 'k', 'fg'], [me === 'w' ? 'Q' : 'q', 'bcd']] as const) {
+      if (!rights.includes(flag) || m.piece === 'k' || !files.includes(m.from[0]) || m.from[1] !== home) continue;
+      if ([...files].every((f) => !at(`${f}${home}`))) add('prepares-castling', [], { side: flag.toLowerCase() === 'k' ? 'short' : 'long' });
+    }
+    // A capture that leaves the mover a file without own pawns: a line for the rooks.
+    if (m.captured && (moved.type === 'p' || m.captured === 'p')) {
+      const mineNow = (h: { file: string; for: string }) => h.for === (me === 'w' ? 'white' : 'black');
+      const opened = [...ideasAfter.openFiles, ...ideasAfter.halfOpenFiles.filter(mineNow).map((h) => h.file)]
+        .filter((f) => !ideasBefore.openFiles.includes(f) && !ideasBefore.halfOpenFiles.some((h) => h.file === f && mineNow(h)));
+      for (const file of opened) if (!out.some((x) => x.kind === 'open-file')) add('open-file', [], { file });
+    }
+    // Threats: what the mover would do if it could move again — and could not do before.
+    if (!chess.isCheck()) {
+      const fresh = threatsOf(chess.fen(), me);
+      if (fresh.length > 0) {
+        const old = new Set(threatsOf(fenBefore, me, true).map((t) => `${t.type}:${t.target}`));
+        for (const t of fresh) {
+          if (old.has(`${t.type}:${t.target}`)) continue;
+          add('threat', [t.target], { type: t.type, ...(t.piece ? { piece: t.piece } : {}), from: t.from });
+        }
+      }
     }
     // The move leaves another own piece hanging that was safe before.
     const mine = me === 'w' ? 'white' : 'black';
@@ -217,6 +242,72 @@ export function moveMotifs(fenBefore: string, san: string): Motif[] {
     if (bestSquare) add('joint-attack', [bestSquare, ...bestAttackers.sort()], { piece: at(bestSquare)!.type, count: bestAttackers.length });
   }
   return out;
+}
+
+/** Pieces the piece on `square` forks: two or more worth taking, with the forker not simply lost. */
+function forkTargets(chess: Chess, square: string): string[] {
+  const piece = chess.get(square as Square);
+  if (!piece) return [];
+  const foe: ChessColor = piece.color === 'w' ? 'b' : 'w';
+  const targets = attacksFrom(chess, square).filter((s) => {
+    const p = chess.get(s as Square);
+    if (!p || p.color !== foe) return false;
+    if (p.type === 'k') return true;
+    return VALUE[p.type] > VALUE[piece.type] || chess.attackers(s as Square, foe).length === 0;
+  });
+  if (targets.length < 2) return [];
+  const takers = chess.attackers(square as Square, foe);
+  const cheapest = Math.min(...takers.map((s) => VALUE[chess.get(s)!.type]));
+  const defended = chess.attackers(square as Square, piece.color).length > 0;
+  const giveCheck = targets.some((s) => chess.get(s as Square)!.type === 'k');
+  const safe = takers.length === 0 || (defended && cheapest >= VALUE[piece.type]) || (giveCheck && takers.every((s) => chess.get(s)!.type === 'k') && defended);
+  return safe || (giveCheck && takers.length === 0) ? targets.sort() : [];
+}
+
+interface Threat { type: 'mate' | 'capture' | 'fork' | 'discovered'; target: string; from: string; piece?: PieceSymbol }
+
+/**
+ * What `side` would do with a free move in the position: mate, take something
+ * for nothing, or fork. `toMove` = the side is really to move (no null move).
+ */
+function threatsOf(fen: string, side: ChessColor, toMove = false): Threat[] {
+  let chess: Chess;
+  try {
+    if (toMove) chess = new Chess(fen);
+    else {
+      const parts = fen.split(' ');
+      parts[1] = side;
+      parts[3] = '-';
+      chess = new Chess(parts.join(' '));
+    }
+  } catch { return []; }
+  if (chess.turn() !== side) return [];
+  const foe: ChessColor = side === 'w' ? 'b' : 'w';
+  const out = new Map<string, Threat>();
+  for (const mv of chess.moves({ verbose: true })) {
+    chess.move(mv);
+    const key = (type: string, target: string) => `${type}:${target}`;
+    if (chess.isCheckmate()) {
+      out.set(key('mate', mv.to), { type: 'mate', target: mv.to, from: mv.from });
+    } else {
+      // A discovered check: the king is checked by a piece other than the one that moved.
+      if (chess.isCheck()) {
+        const king = findKing(chess, foe);
+        const checkers = chess.attackers(king as Square, side);
+        if (checkers.some((c) => c !== mv.to)) out.set(key('discovered', mv.from), { type: 'discovered', target: mv.from, from: mv.from, piece: mv.piece });
+      }
+      if (mv.captured && mv.captured !== 'p'
+        && (chess.attackers(mv.to as Square, foe).length === 0 || VALUE[mv.captured] > VALUE[mv.piece])) {
+        if (!out.has(key('mate', mv.to))) out.set(key('capture', mv.to), { type: 'capture', target: mv.to, from: mv.from, piece: mv.captured });
+      }
+      if (!mv.captured && (mv.piece === 'n' || mv.piece === 'p' || mv.piece === 'q' || mv.piece === 'b') && forkTargets(chess, mv.to).length >= 2) {
+        out.set(key('fork', mv.to), { type: 'fork', target: mv.to, from: mv.from, piece: mv.piece });
+      }
+    }
+    chess.undo();
+  }
+  // A mate threat says it all: drop the lesser threats on the same square.
+  return [...out.values()].filter((t) => t.type === 'mate' || !out.has(`mate:${t.target}`));
 }
 
 const DIAG: [number, number][] = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -433,6 +524,59 @@ export function motifText(m: Motif, fenAfter: string, lang: Lang): string {
       return lang === 'es' ? `Parece una jugada modesta, pero ${piece(lang, m.data?.piece)} colocado aquí será decisivo en la jugada ${m.data?.move}.`
         : lang === 'en' ? `It looks modest, but ${piece(lang, m.data?.piece)} placed here will be decisive on move ${m.data?.move}.`
         : `Sieht bescheiden aus, aber ${piece(lang, m.data?.piece)} auf diesem Feld entscheidet im ${m.data?.move}. Zug.`;
+    case 'threat': {
+      const sq = m.squares[0];
+      if (m.data?.type === 'mate') return lang === 'es' ? `Amenaza mate en ${sq}.` : lang === 'en' ? `Threatens mate on ${sq}.` : `Droht Matt auf ${sq}.`;
+      if (m.data?.type === 'discovered') {
+        return lang === 'es' ? `Amenaza un jaque a la descubierta moviendo ${who(sq)}.`
+          : lang === 'en' ? `Threatens a discovered check by moving ${who(sq)}.`
+          : `Droht ein Abzugsschach durch den Zug von ${who(sq)}.`;
+      }
+      if (m.data?.type === 'fork') {
+        return lang === 'es' ? `Amenaza un ataque doble desde ${sq}.` : lang === 'en' ? `Threatens a fork from ${sq}.` : `Droht eine Gabel von ${sq} aus.`;
+      }
+      return lang === 'es' ? `Amenaza capturar ${who(sq)}.` : lang === 'en' ? `Threatens to take ${who(sq)}.` : `Droht, ${who(sq)} zu schlagen.`;
+    }
+    case 'attack-undefended':
+      return lang === 'es' ? `${me} ataca ${list(m.squares.map(who), lang)}, que nadie defiende.`
+        : lang === 'en' ? `${me} attacks ${list(m.squares.map(who), lang)}, which nothing defends.`
+        : `${me} greift ${list(m.squares.map(who), lang)} an, ungedeckt.`;
+    case 'wins-material':
+      return lang === 'es' ? `Gana ${PIECE.es[String(m.data?.piece)] === 'peón' ? 'un peón' : 'material'}.`
+        : lang === 'en' ? `Wins ${m.data?.piece === 'p' ? 'a pawn' : 'material'}.`
+        : `Gewinnt ${m.data?.piece === 'p' ? 'einen Bauern' : 'Material'}.`;
+    case 'discovered-attack':
+      return lang === 'es' ? `Ataque a la descubierta: al apartarse la pieza, ${who(m.squares[0])} ataca ${who(m.squares[1])}.`
+        : lang === 'en' ? `Discovered attack: the piece steps away and ${who(m.squares[0])} attacks ${who(m.squares[1])}.`
+        : `Abzugsangriff: die Figur zieht weg und ${who(m.squares[0])} greift ${who(m.squares[1])} an.`;
+    case 'outpost':
+      return lang === 'es' ? `${me} ocupa una casilla fuerte en ${m.square}: ningún peón rival puede expulsarlo.`
+        : lang === 'en' ? `${me} takes an outpost on ${m.square}: no enemy pawn can drive it away.`
+        : `${me} besetzt einen Vorposten auf ${m.square}: kein gegnerischer Bauer kann ihn vertreiben.`;
+    case 'open-file':
+      return lang === 'es' ? `La columna ${m.data?.file} queda abierta para las torres.`
+        : lang === 'en' ? `The ${m.data?.file}-file is open for the rooks.`
+        : `Die ${m.data?.file}-Linie ist für die Türme offen.`;
+    case 'passed-pawn':
+      return lang === 'es' ? `El peón de ${m.square} es un peón pasado.` : lang === 'en' ? `The pawn on ${m.square} is a passed pawn.` : `Der Bauer auf ${m.square} ist ein Freibauer.`;
+    case 'battery':
+      return lang === 'es' ? `Batería: ${me.toLowerCase()} se alinea con ${who(m.squares[0])}.`
+        : lang === 'en' ? `Battery: ${me.toLowerCase()} lines up with ${who(m.squares[0])}.`
+        : `Batterie: ${me} stellt sich hinter ${who(m.squares[0])} auf.`;
+    case 'x-ray':
+      return lang === 'es' ? `Rayos X: ${me.toLowerCase()} actúa a través de ${who(m.squares[0])} sobre ${who(m.squares[1])}.`
+        : lang === 'en' ? `X-ray: ${me.toLowerCase()} acts through ${who(m.squares[0])} on ${who(m.squares[1])}.`
+        : `Röntgenangriff: ${me} wirkt durch ${who(m.squares[0])} hindurch auf ${who(m.squares[1])}.`;
+    case 'leaves-hanging':
+      return lang === 'es' ? `Deja sin defensa ${list(m.squares.map(who), lang)}.`
+        : lang === 'en' ? `Leaves ${list(m.squares.map(who), lang)} undefended.`
+        : `Lässt ${list(m.squares.map(who), lang)} ungedeckt.`;
+    case 'pawn-sacrifice':
+      return lang === 'es' ? `Sacrificio de peón en ${m.square}.` : lang === 'en' ? `A pawn sacrifice on ${m.square}.` : `Bauernopfer auf ${m.square}.`;
+    case 'prepares-castling':
+      return lang === 'es' ? `Deja listo el enroque ${m.data?.side === 'short' ? 'corto' : 'largo'}.`
+        : lang === 'en' ? `Clears the way to castle ${m.data?.side === 'short' ? 'kingside' : 'queenside'}.`
+        : `Macht die ${m.data?.side === 'short' ? 'kurze' : 'lange'} Rochade möglich.`;
     case 'en-passant':
       return lang === 'es' ? 'Captura al paso.' : lang === 'en' ? 'En passant capture.' : 'Schlagen en passant.';
     case 'mate':
@@ -463,6 +607,10 @@ export interface AnnotateOptions {
   title?: string;
   white?: string | null;
   black?: string | null;
+  /** Remarks written elsewhere (a language model), per ply (1-based): they replace the automatic wording of that move. */
+  remarks?: Record<number, string>;
+  /** An opening paragraph written elsewhere, added after the summary line. */
+  intro?: string;
 }
 
 /**
@@ -498,6 +646,7 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
     if (notable.length) head.push(`${t.summary}: ${list(notable.slice(0, 6), lang)}.`);
   }
   lines.push(head.join(' '));
+  if (options.intro) lines.push(options.intro);
 
   // Moves are written in the letters of the language (Spanish: R D T A C).
   const LETTERS: Record<string, string> = { K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' };
@@ -514,7 +663,9 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
     needNumber = false;
 
     const remarks: string[] = [];
-    if (level >= 2 && m.quality) {
+    const given = options.remarks?.[i + 1];
+    if (given) remarks.push(given);
+    if (!given && level >= 2 && m.quality) {
       const label = t[m.quality === 'interesting' ? 'good' : m.quality];
       if (m.quality === 'blunder' || m.quality === 'mistake' || m.quality === 'dubious') {
         const effect = m.winAfter < 25 ? t.losing : m.winBefore > 60 && m.winAfter <= 60 ? t.equal : t.lost;
@@ -523,7 +674,7 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
         remarks.push(`${label}.`);
       }
     }
-    if (level >= 3) {
+    if (!given && level >= 3) {
       for (const motif of m.motifs) {
         const said = motifText(motif, p.fenAfter, lang);
         if (said) remarks.push(said);

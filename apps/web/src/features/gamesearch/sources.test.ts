@@ -54,3 +54,25 @@ describe('game sources', () => {
     ])
   })
 })
+
+describe('opening database', () => {
+  it('asks the explorer for the deepest position it has a name for', async () => {
+    const urls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      urls.push(String(url))
+      const plies = String(url).split('play=')[1].split('&')[0].split(',').length
+      return new Response(JSON.stringify({ opening: plies <= 4 ? { eco: 'C44', name: "King's Knight Opening" } : null }), { status: 200 })
+    }))
+    const { lichessOpening } = await import('./sources')
+    const uci = ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'a2a3', 'a7a6', 'h2h3', 'h7h6', 'b2b3', 'b7b6']
+    expect(await lichessOpening(uci)).toEqual({ eco: 'C44', name: "King's Knight Opening" })
+    expect(urls.map((u) => u.split('play=')[1].split('&')[0].split(',').length)).toEqual([10, 8, 6, 4])
+    vi.unstubAllGlobals()
+  })
+  it('gives null when the service fails or knows nothing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('x', { status: 500 })))
+    const { lichessOpening } = await import('./sources')
+    expect(await lichessOpening(['a2a3'])).toBeNull()
+    vi.unstubAllGlobals()
+  })
+})

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { recognizeGames } from '@chess-ebook/chess-shared'
@@ -28,6 +28,8 @@ function renderPanel() {
 }
 
 beforeEach(() => {
+  // No network in tests: the opening database answers nothing.
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })))
   useStudyBoardStore.getState().reset()
   useReviewStore.setState({ byTree: new Map(), records: [] })
   useSettingsStore.setState({ language: 'en' })

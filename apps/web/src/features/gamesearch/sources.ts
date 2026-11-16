@@ -153,3 +153,20 @@ export async function chessComGames(archiveUrl: string): Promise<ChessComGame[]>
     .filter((g) => g.rules === 'chess' && g.pgn)
     .map((g) => ({ url: g.url ?? '', pgn: g.pgn!, white: g.white.username, black: g.black.username }))
 }
+
+/**
+ * The opening a game belongs to, from the Lichess masters database: the name
+ * of the deepest position (within the first 20 plies) the database knows.
+ */
+export async function lichessOpening(uciMoves: string[]): Promise<{ eco: string; name: string } | null> {
+  for (let plies = Math.min(20, uciMoves.length - (uciMoves.length % 2)); plies >= 2; plies -= 2) {
+    try {
+      const url = `https://explorer.lichess.ovh/masters?play=${uciMoves.slice(0, plies).join(',')}&moves=0&topGames=0`
+      const data = (await (await get(url)).json()) as { opening?: { eco: string; name: string } | null }
+      if (data.opening) return { eco: data.opening.eco, name: data.opening.name }
+    } catch {
+      return null
+    }
+  }
+  return null
+}
