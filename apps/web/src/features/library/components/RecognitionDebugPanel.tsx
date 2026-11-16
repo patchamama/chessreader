@@ -5,6 +5,7 @@ import {
   type GameTree,
   type GameNode,
   type RecognitionError,
+  type RecognizedGame,
 } from '@chess-ebook/chess-shared'
 import ChessBoard from '../../../shared/chess/ChessBoard'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
@@ -12,6 +13,11 @@ import { useSettingsStore } from '../../../shared/settings/settingsStore'
 interface RecognitionDebugPanelProps {
   /** The current chapter's plain text (already HTML-stripped, newline-preserving). */
   chapterText: string
+  /**
+   * The exact games the reader recognised (and paints). When given, the panel
+   * shows THESE nodes instead of re-recognising, so it always mirrors the viewer.
+   */
+  games?: RecognizedGame[]
 }
 
 const ALGO_HINTS: Record<1 | 2 | 3, string> = {
@@ -56,7 +62,9 @@ function tokenizeTree(tree: GameTree, multiline: boolean): PgnToken[] {
       const node = tree.nodes.get(id)
       if (!node) return
       const dots = node.color === 'black' && (needNumber || i === 0)
-      out.push({ kind: 'move', text: prefix(node, dots) + (node.rawSan ?? node.san), node })
+      // The node's own content (canonical SAN + its move number), never the
+      // source text — this is exactly what the linked tree holds.
+      out.push({ kind: 'move', text: prefix(node, dots) + node.san, node })
       needNumber = false
 
       const altKey = node.parentId ?? 'root'
@@ -123,8 +131,42 @@ function Thumb({ hover }: { hover: HoverState }) {
   )
 }
 
+/** Every node of the tree in insertion order, tagged with its line (main/var). */
+function NodeTable({ tree }: { tree: GameTree }) {
+  const main = new Set(tree.mainline)
+  return (
+    <table className="mt-2 w-full border-t border-slate-100 font-mono text-[10px] text-slate-600">
+      <thead>
+        <tr className="text-left text-slate-400">
+          <th className="pr-2">id</th>
+          <th className="pr-2">parent</th>
+          <th className="pr-2">#</th>
+          <th className="pr-2">san</th>
+          <th className="pr-2">source</th>
+          <th className="pr-2">chars</th>
+          <th>line</th>
+        </tr>
+      </thead>
+      <tbody>
+        {[...tree.nodes.values()].map((n) => (
+          <tr key={n.id} data-testid="debug-node-row" className={n.invalid ? 'text-rose-600' : ''}>
+            <td className="pr-2">{n.id}</td>
+            <td className="pr-2">{n.parentId ?? 'root'}</td>
+            <td className="pr-2">{n.moveNumber}{n.color === 'black' ? '...' : '.'}</td>
+            <td className="pr-2">{n.san}</td>
+            <td className="pr-2">{n.rawSan ?? ''}</td>
+            <td className="pr-2">{n.charStart !== undefined ? `${n.charStart}–${n.charEnd}` : ''}</td>
+            <td>{n.invalid ? 'invalid' : main.has(n.id) ? 'main' : 'var'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
 function GameView({ tree, index }: { tree: GameTree; index: number }) {
   const [multiline, setMultiline] = useState(false)
+  const [showNodes, setShowNodes] = useState(false)
   const [hover, setHover] = useState<HoverState | null>(null)
   const tokens = useMemo(() => tokenizeTree(tree, multiline), [tree, multiline])
   const varCount = useMemo(() => countVariations(tree), [tree])
@@ -143,9 +185,17 @@ function GameView({ tree, index }: { tree: GameTree; index: number }) {
         >
           {multiline ? 'Inline' : 'Split lines'}
         </button>
+        <button
+          onClick={() => setShowNodes((v) => !v)}
+          className={`rounded border border-slate-200 px-1.5 py-0.5 font-mono text-[10px] hover:bg-slate-50 ${
+            showNodes ? 'bg-violet-100 text-violet-700' : 'text-slate-600'
+          }`}
+        >
+          Nodes
+        </button>
       </div>
 
-      <code className="block whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-slate-700">
+      <code data-testid={`debug-line-${index}`} className="block whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-slate-700">
         {tokens.map((t, i) => {
           const prev = tokens[i - 1]
           // Space before this token unless it follows an "(" / line break, or is
@@ -160,6 +210,7 @@ function GameView({ tree, index }: { tree: GameTree; index: number }) {
               {t.kind === 'move' ? (
                 <span
                   className="cursor-help rounded hover:bg-amber-200"
+                  title={`${t.node.id} · parent ${t.node.parentId ?? 'root'} · source "${t.node.rawSan ?? t.node.san}"`}
                   onMouseEnter={(e) =>
                     setHover({
                       fen: t.node.fen,
@@ -182,6 +233,8 @@ function GameView({ tree, index }: { tree: GameTree; index: number }) {
           )
         })}
       </code>
+
+      {showNodes && <NodeTable tree={tree} />}
 
       {hover && <Thumb hover={hover} />}
 
@@ -212,19 +265,20 @@ function GameView({ tree, index }: { tree: GameTree; index: number }) {
  * the reader too), split variations onto their own lines, hover a move for a
  * board thumbnail, see per-game variation/error counts, and parse a test text.
  */
-export function RecognitionDebugPanel({ chapterText }: RecognitionDebugPanelProps) {
+export function RecognitionDebugPanel({ chapterText, games }: RecognitionDebugPanelProps) {
   const algorithm = useSettingsStore((s) => s.recognitionAlgorithm)
   const setAlgorithm = (a: 1 | 2 | 3) => useSettingsStore.getState().set({ recognitionAlgorithm: a })
   const [testText, setTestText] = useState('')
 
   const chapterGames = useMemo(() => {
+    if (games) return games
     if (!chapterText) return []
     try {
       return recognizeGames(chapterText, { algorithm })
     } catch {
       return []
     }
-  }, [chapterText, algorithm])
+  }, [chapterText, algorithm, games])
 
   const testGames = useMemo(() => {
     const t = testText.trim()

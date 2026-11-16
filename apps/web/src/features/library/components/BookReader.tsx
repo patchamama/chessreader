@@ -1,7 +1,7 @@
 import { useMemo, useEffect, useState, useCallback, useRef, memo, forwardRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useChapter, useTouchBook } from '../api/libraryApi'
-import { recognizeGames, figurineToAscii } from '@chess-ebook/chess-shared'
+import { recognizeGames } from '@chess-ebook/chess-shared'
 import type { GameTree, GameNode, IsolatedMove } from '@chess-ebook/chess-shared'
 import ChessBoardThemed from '../../../shared/chess/ChessBoard'
 import { StudyBoard } from './StudyBoard'
@@ -22,6 +22,7 @@ import { isDevMode } from '../../../shared/env/devMode'
 import { createRoot, type Root } from 'react-dom/client'
 import { DiagramImage } from './DiagramImage'
 import { inferDiagramFen } from '../utils/inferDiagramFen'
+import { extractProseText, htmlToProseText, planMoveTargets, piecesByTextNode } from '../utils/proseText'
 
 // The reading pane's innerHTML is set ONCE per chapter and then mutated
 // imperatively (SAN spans, highlight classes) by effects. If React re-rendered
@@ -62,102 +63,6 @@ interface ResolvedNode {
   node: GameNode
   gameIndex: number
 }
-
-/** Strip trailing move annotations (!, ?, !!, ?!, …) so a DOM token matches the
- *  canonical `node.san` (chess.js strips annotations). */
-function cleanSan(san: string): string {
-  return figurineToAscii(san).trim().replace(/[!?]+$/, '')
-}
-
-/** A resolved SAN occurrence: either a reproducible game move or an isolated one. */
-type ResolvedSan =
-  | { kind: 'node'; value: ResolvedNode }
-  | { kind: 'iso'; value: IsolatedMove }
-
-/**
- * Unified, source-ordered SAN resolver.
- *
- * The DOM and the recognised game stream visit the SAME SAN tokens in the SAME
- * order. So the i-th DOM occurrence of a SAN must map to the i-th recognised
- * occurrence of that SAN — REGARDLESS of whether it is a real move or an isolated
- * prose move. The previous design kept two independent cursors (real vs isolated)
- * which desynced: an isolated `d4` in one paragraph would consume a REAL `d4`
- * node belonging to a different game later in the chapter, painting prose as a
- * playable move. Here every occurrence (node or isolated), across all games, is
- * merged into ONE list per SAN, ordered by charStart, and handed out in order.
- */
-export function createSanResolver(games: ReturnType<typeof recognizeGames>) {
-  type Entry = {
-    charStart: number
-    resolved: ResolvedSan
-    /** For node entries: the authoritative move number/color from the tree. */
-    moveNumber?: number
-    color?: 'white' | 'black'
-  }
-  const bySan = new Map<string, Entry[]>()
-
-  const push = (san: string, charStart: number, resolved: ResolvedSan, moveNumber?: number, color?: 'white' | 'black') => {
-    const list = bySan.get(san) ?? []
-    list.push({ charStart, resolved, moveNumber, color })
-    bySan.set(san, list)
-  }
-
-  games.forEach((game, gameIndex) => {
-    for (const node of game.tree.nodes.values()) {
-      if (!node.fen || node.invalid) continue
-      push(
-        node.san,
-        node.charStart ?? 0,
-        { kind: 'node', value: { tree: game.tree, node, gameIndex } },
-        node.moveNumber,
-        node.color,
-      )
-    }
-    for (const iso of game.tree.isolatedMoves) {
-      push(cleanSan(iso.san), iso.charStart ?? 0, { kind: 'iso', value: iso })
-    }
-  })
-
-  // Order each SAN's occurrences by their position in the source text so the
-  // sequence matches the DOM walk order.
-  for (const list of bySan.values()) list.sort((a, b) => a.charStart - b.charStart)
-
-  // Track which entries are already consumed (so each node maps to ONE DOM span).
-  const used = new Set<Entry>()
-  return {
-    /**
-     * Resolve a DOM occurrence of `asciiSan` to a recognised entry. THE NUMBER IS
-     * AUTHORITATIVE: when the DOM token carries a move number (e.g. "9..."), only
-     * a node with that exact (moveNumber,color) may match — this prevents a
-     * "11... Nb6" in prose from being painted as the mainline "9... Nb6". When no
-     * number is present, fall back to next-in-source-order.
-     */
-    nextKeyed(asciiSan: string, moveNumber: number | null, color: 'white' | 'black' | null): ResolvedSan | null {
-      const list = bySan.get(asciiSan)
-      if (!list || list.length === 0) return null
-      if (moveNumber !== null && color !== null) {
-        // Exact (number,color) match, first unused, in source order.
-        const hit = list.find(
-          (e) => !used.has(e) && e.moveNumber === moveNumber && e.color === color,
-        )
-        if (hit) { used.add(hit); return hit.resolved }
-        return null // numbered token with no matching node → leave as plain text
-      }
-      // No number on the DOM token: next unused in order (isolated/bare moves).
-      const next = list.find((e) => !used.has(e))
-      if (next) { used.add(next); return next.resolved }
-      return null
-    },
-  }
-}
-
-// SAN move regex — same as sanTokenizer but the piece class also accepts
-// Unicode chess figurines (♔♚♕♛♖♜♗♝♘♞) so glyph notation in prose is matched.
-const P = 'KQRBN♔♚♕♛♖♜♗♝♘♞'
-const SAN_RE = new RegExp(
-  `(?<![a-zA-Z])(O-O-O|O-O|[${P}][a-h1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?[!?]*|[${P}][a-h1-8]?[a-h][1-8](?:=[QRBN])?[+#]?[!?]*|[a-h]x?[a-h][1-8](?:=[QRBN])?[+#]?[!?]*|[a-h][1-8](?:=[QRBN])?[+#]?[!?]*)(?=[^a-zA-Z]|$)`,
-  'g',
-)
 
 export default function BookReader() {
   const { bookId } = useParams<{ bookId: string }>()
@@ -267,23 +172,10 @@ export default function BookReader() {
         (_m, attr, _d, imgPath) => `${attr}="/api/library/books/${id}/images/${imgPath}"`)
   }, [rawHtml, id])
 
-  // Flatten HTML to text for move recognition. Block-level boundaries become
-  // NEWLINES so the recognizer can use "a move that starts a paragraph resumes
-  // the mainline" (its strongest mainline signal). Inline tags become spaces.
-  const plainText = useMemo(
-    () =>
-      rawHtml
-        // Close/open of block elements → a paragraph break.
-        .replace(/<\/(p|div|h[1-6]|li|blockquote|tr|section|article)\s*>/gi, '\n')
-        .replace(/<(br|hr)\s*\/?>/gi, '\n')
-        // Any remaining tag → a single space.
-        .replace(/<[^>]+>/g, ' ')
-        // Collapse spaces/tabs but PRESERVE newlines; collapse runs of newlines.
-        .replace(/[^\S\n]+/g, ' ')
-        .replace(/ *\n+ */g, '\n')
-        .trim(),
-    [rawHtml]
-  )
+  // Flatten the chapter to recognition text with the SAME DOM extraction the
+  // wrapper uses on the rendered pane, so every node's charStart/charEnd points
+  // at the exact DOM characters of its source token (see utils/proseText).
+  const plainText = useMemo(() => htmlToProseText(html), [html])
   const recognitionAlgorithm = useSettingsStore((s) => s.recognitionAlgorithm)
   const games = useMemo(
     () => recognizeGames(plainText, { algorithm: recognitionAlgorithm }),
@@ -365,106 +257,67 @@ export default function BookReader() {
     }
 
     if (games.length > 0) {
-      const resolver = createSanResolver(games)
-      const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
-      const textNodes: Text[] = []
-      let n: Node | null
-      while ((n = walker.nextNode())) {
-        const parent = (n as Text).parentElement
-        if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE')) continue
-        textNodes.push(n as Text)
+      // Positional wrapping: each recognised node/isolated move paints exactly
+      // the DOM characters it was parsed from — no SAN/regex re-matching.
+      const prose = extractProseText(container)
+      if (prose.text !== plainText) {
+        console.warn('[BookReader] prose text mismatch; move positions may be off')
       }
+      const targets = planMoveTargets(prose.text, games)
+      const pieces = piecesByTextNode(prose.map, targets)
 
       let isoSeq = 0
-      for (const textNode of textNodes) {
-        const text = textNode.nodeValue ?? ''
-        SAN_RE.lastIndex = 0
-        const matches: { start: number; end: number; san: string; wrapText: string }[] = []
-        let m: RegExpExecArray | null
-        let prevEnd = 0
-        while ((m = SAN_RE.exec(text)) !== null) {
-          // Glue an immediately-preceding move number ("19." / "20...") onto the
-          // move when only whitespace separates them, within the same text node.
-          let wrapStart = m.index
-          const before = text.slice(prevEnd, m.index)
-          const numMatch = /(\d+\.(?:\.\.)?)\s*$/.exec(before)
-          if (numMatch) wrapStart = prevEnd + numMatch.index
-          matches.push({
-            start: wrapStart,
-            end: m.index + m[0].length,
-            san: m[1],
-            wrapText: text.slice(wrapStart, m.index + m[0].length),
-          })
-          prevEnd = m.index + m[0].length
-        }
-        if (matches.length === 0) continue
+      const isoKeys = new Map<object, string>()
+      const baseClass =
+        'cursor-pointer font-medium text-blue-700 underline-offset-2 hover:bg-yellow-100 rounded px-0.5'
 
+      for (const [textNode, list] of pieces) {
+        const text = textNode.nodeValue ?? ''
         const frag = document.createDocumentFragment()
         let cursor = 0
-        for (const match of matches) {
-          if (match.start > cursor) {
-            frag.appendChild(document.createTextNode(text.slice(cursor, match.start)))
-          }
-          const ascii = cleanSan(match.san)
-          // Extract the move number/color from the wrapped token ("9... ♘b6" →
-          // 9, black). The NUMBER is authoritative for the match.
-          const numM = /^(\d+)(\.\.\.|\.)/.exec(match.wrapText.trim())
-          const moveNumber = numM ? parseInt(numM[1], 10) : null
-          const color: 'white' | 'black' | null = numM ? (numM[2] === '...' ? 'black' : 'white') : null
-          const resolved = resolver.nextKeyed(ascii, moveNumber, color)
-
-          if (!resolved) {
-            // Neither a game move nor isolated — leave as plain text.
-            frag.appendChild(document.createTextNode(text.slice(match.start, match.end)))
-            cursor = match.end
-            continue
-          }
-
-          if (resolved.kind === 'iso') {
+        for (const piece of list) {
+          if (piece.start < cursor) continue
+          if (piece.start > cursor) frag.appendChild(document.createTextNode(text.slice(cursor, piece.start)))
+          const t = piece.target
+          const span = document.createElement('span')
+          span.textContent = text.slice(piece.start, piece.end)
+          if (t.kind === 'iso') {
             // Isolated prose move (—d5—, "casilla e4", "Cb5") → board-square highlight.
-            const iso = resolved.value
-            const isoKey = `iso-${isoSeq++}`
-            isoRegistry.current.set(isoKey, iso)
-            const span = document.createElement('span')
-            span.setAttribute('data-iso-square', iso.square)
+            let isoKey = isoKeys.get(t)
+            if (!isoKey) {
+              isoKey = `iso-${isoSeq++}`
+              isoKeys.set(t, isoKey)
+              isoRegistry.current.set(isoKey, t.iso)
+            }
+            span.setAttribute('data-iso-square', t.iso.square)
             span.setAttribute('data-iso-key', isoKey)
-            span.textContent = match.wrapText
             span.className =
               'cursor-pointer rounded px-0.5 font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 ring-1 ring-amber-300'
-            span.title = `Casilla ${iso.square} (jugada aislada)`
-            frag.appendChild(span)
-            cursor = match.end
-            continue
+            span.title = `Casilla ${t.iso.square} (jugada aislada)`
+          } else {
+            const spanKey = `${t.gameIndex}:${t.node.id}`
+            moveRegistry.current.set(spanKey, { tree: t.tree, node: t.node, gameIndex: t.gameIndex })
+            const hasAlt = hasAlternativesAhead(t.tree, t.node)
+            span.setAttribute('data-san', t.node.san)
+            span.setAttribute('data-node-id', spanKey)
+            span.setAttribute('data-game-index', String(t.gameIndex))
+            span.setAttribute('data-move-number', String(t.node.moveNumber))
+            span.setAttribute('data-color', t.node.color)
+            span.setAttribute('data-has-alt', hasAlt ? '1' : '0')
+            span.setAttribute('data-fen', t.node.fen)
+            if (t.node.from) span.setAttribute('data-from', t.node.from)
+            if (t.node.to) span.setAttribute('data-to', t.node.to)
+            // Inactive base styling; the active highlight is applied separately.
+            span.className = hasAlt ? `${baseClass} underline decoration-dotted decoration-2` : baseClass
           }
-
-          const rn = resolved.value
-          const spanKey = `${rn.gameIndex}:${rn.node.id}`
-          moveRegistry.current.set(spanKey, rn)
-          const hasAlt = hasAlternativesAhead(rn.tree, rn.node)
-          const span = document.createElement('span')
-          span.setAttribute('data-san', ascii)
-          span.setAttribute('data-node-id', spanKey)
-          span.setAttribute('data-game-index', String(rn.gameIndex))
-          span.setAttribute('data-has-alt', hasAlt ? '1' : '0')
-          span.setAttribute('data-fen', rn.node.fen)
-          if (rn.node.from) span.setAttribute('data-from', rn.node.from)
-          if (rn.node.to) span.setAttribute('data-to', rn.node.to)
-          span.textContent = match.wrapText
-          // Inactive base styling; the active highlight is applied separately.
-          const baseClass =
-            'cursor-pointer font-medium text-blue-700 underline-offset-2 hover:bg-yellow-100 rounded px-0.5'
-          span.className = hasAlt ? `${baseClass} underline decoration-dotted decoration-2` : baseClass
-
           frag.appendChild(span)
-          cursor = match.end
+          cursor = piece.end
         }
-        if (cursor < text.length) {
-          frag.appendChild(document.createTextNode(text.slice(cursor)))
-        }
+        if (cursor < text.length) frag.appendChild(document.createTextNode(text.slice(cursor)))
         textNode.parentNode?.replaceChild(frag, textNode)
       }
     }
-  }, [html, games, bookConfig.moveLineIndent.zeroIndent])
+  }, [html, games, plainText, bookConfig.moveLineIndent.zeroIndent])
 
   // Wrap each book diagram <img> with an interactive DiagramImage overlay
   // (original ↔ autogenerated board toggle + eval footer + config menu). The
@@ -822,7 +675,7 @@ export default function BookReader() {
           }`}
         >
           {showStudy && <StudyBoard />}
-          {showStudy && showDebugTools && <RecognitionDebugPanel chapterText={plainText} />}
+          {showStudy && showDebugTools && <RecognitionDebugPanel chapterText={plainText} games={games} />}
         </aside>
       </div>
 

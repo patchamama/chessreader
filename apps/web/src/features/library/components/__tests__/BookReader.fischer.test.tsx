@@ -22,6 +22,9 @@ const TWO_GAMES_HTML = `
 <p>9... ♘b6 10. ♕c5</p>
 <p>Blancas: R. Fischer — Negras: S. Gligoric</p>
 <p>1. e4 c5 2. ♘f3 ♘c6 3. d4 ♘xd4 4. ♘xd4 ♘f6 5. ♘c3 d6 6. ♗c4</p>
+<p>Blancas: X — Negras: Y</p>
+<p>1. e4 c5 2. ♘f3 d6 3. d4 cxd4 4. ♘xd4 ♘f6 5. ♘c3 a6 6. ♗g5 e6 7. f4 ♗e7 8. ♕f3 ♕c7</p>
+<p>9. e5 dxe5 10. fxe5 ♘fd7</p>
 `
 
 vi.mock('../../api/libraryApi', () => ({
@@ -76,6 +79,38 @@ for (const algorithm of [1, 2] as const) {
       expect(s.getAttribute('data-game-index')).toBe('0')
     })
 
+    it('every span inside a paragraph belongs to the game that paragraph is part of', async () => {
+      const { container } = render(<BookReader />, { wrapper })
+      await waitFor(() => {
+        expect(spansWithText(container, 'fxe5').length).toBeGreaterThan(0)
+      })
+      const paragraphs = [...container.querySelectorAll('p')]
+      const prose9e5 = paragraphs.find((p) => (p.textContent ?? '').startsWith('Si 9. e5'))!
+      const game3Line = paragraphs.find((p) => (p.textContent ?? '').startsWith('9. e5 dxe5'))!
+      // The prose "Si 9. e5 …" line is game 1 analysis: never a game-3 node.
+      prose9e5.querySelectorAll('span[data-node-id]').forEach((s) => {
+        expect(s.getAttribute('data-game-index')).toBe('0')
+      })
+      // Game 3's own "9. e5" must be painted as its own move.
+      const e5 = [...game3Line.querySelectorAll('span[data-node-id]')].find((s) =>
+        (s.textContent ?? '').includes('e5'),
+      )
+      expect(e5).toBeDefined()
+      expect(e5!.getAttribute('data-game-index')).toBe('2')
+    })
+
+    it('"11... ♘b6" in prose is never painted as the mainline "9... ♘b6"', async () => {
+      const { container } = render(<BookReader />, { wrapper })
+      await waitFor(() => {
+        expect(spansWithText(container, '♖d1').length).toBeGreaterThan(0)
+      })
+      const main9 = spansWithText(container, '9... ♘b6')
+      expect(main9).toHaveLength(1)
+      const key = main9[0].getAttribute('data-node-id')
+      // No other span may carry the same node as the mainline 9...Nb6.
+      expect(container.querySelectorAll(`span[data-node-id="${key}"]`)).toHaveLength(1)
+    })
+
     it('game 2 "1. e4" is a distinct game (game index 1), no cross-game leak', async () => {
       const { container } = render(<BookReader />, { wrapper })
       let e4Spans: HTMLElement[] = []
@@ -102,7 +137,10 @@ describe('BookReader algorithm 1: prose-only variation move is NOT painted', () 
     })
     // e5 appears only as the prose variation "9. e5"; with algorithm 1 it has no
     // node, so it must NOT be a clickable move span.
-    const e5MoveSpans = spansWithText(container, 'e5').filter((s) => (s.textContent ?? '').includes('9.'))
+    const prose = [...container.querySelectorAll('p')].find((p) => (p.textContent ?? '').startsWith('Si 9. e5'))!
+    const e5MoveSpans = [...prose.querySelectorAll('span[data-node-id]')].filter((s) =>
+      (s.textContent ?? '').includes('e5'),
+    )
     expect(e5MoveSpans.length).toBe(0)
   })
 })
