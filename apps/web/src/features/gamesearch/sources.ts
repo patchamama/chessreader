@@ -65,20 +65,40 @@ export interface MasterGame {
   black: string
   year: number
   result: string
+  /** Elo of the players at the time (0 when unknown). */
+  whiteRating: number
+  blackRating: number
 }
+
+/** Strongest games first: by the average rating of the two players. */
+export function rankMasters<T extends { whiteRating: number; blackRating: number }>(games: T[]): T[] {
+  return [...games].sort((a, b) => b.whiteRating + b.blackRating - (a.whiteRating + a.blackRating))
+}
+
+/** The id of a Lichess study, from its link or the id itself (null if it is neither). */
+export function studyIdFrom(input: string): string | null {
+  const text = input.trim()
+  return /lichess\.org\/study\/([A-Za-z0-9]{8})/.exec(text)?.[1] ?? (/^[A-Za-z0-9]{8}$/.test(text) ? text : null)
+}
+
+export const lichessStudyUrl = (id: string) => `https://lichess.org/study/${id}`
+/** A master game on lichess.org (the page the opening explorer links to). */
+export const lichessMasterUrl = (id: string) => `https://lichess.org/import/master/${id}/white`
 
 export async function lichessMastersByOpening(opening: Opening): Promise<MasterGame[]> {
   const url = `https://explorer.lichess.ovh/masters?play=${opening.moves.join(',')}&topGames=15&moves=0`
   const data = (await (await get(url)).json()) as {
-    topGames?: { id: string; winner: string | null; year: number; white: { name: string }; black: { name: string } }[]
+    topGames?: { id: string; winner: string | null; year: number; white: { name: string; rating?: number }; black: { name: string; rating?: number } }[]
   }
-  return (data.topGames ?? []).map((g) => ({
+  return rankMasters((data.topGames ?? []).map((g) => ({
     id: g.id,
+    whiteRating: g.white.rating ?? 0,
+    blackRating: g.black.rating ?? 0,
     white: g.white.name,
     black: g.black.name,
     year: g.year,
     result: g.winner === 'white' ? '1-0' : g.winner === 'black' ? '0-1' : '½-½',
-  }))
+  })))
 }
 
 export async function lichessMasterPgn(id: string): Promise<string> {

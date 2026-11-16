@@ -32,7 +32,7 @@ describe('game sources', () => {
     const italian = OPENINGS.find((o) => o.id === 'italian')!
     const res = await lichessMastersByOpening(italian)
     expect(String(f.mock.calls[0][0])).toContain('explorer.lichess.ovh/masters?play=e2e4,e7e5,g1f3,b8c6,f1c4')
-    expect(res).toEqual([{ id: 'g1', white: 'Kasparov, G', black: 'Anand, V', year: 1997, result: '1-0' }])
+    expect(res).toEqual([{ id: 'g1', white: 'Kasparov, G', black: 'Anand, V', year: 1997, result: '1-0', whiteRating: 2800, blackRating: 2780 }])
   })
 
   it('lists broadcasts matching a query', async () => {

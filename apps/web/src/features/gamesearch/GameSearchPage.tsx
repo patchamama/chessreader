@@ -9,18 +9,23 @@ import {
   lichessMastersByOpening,
   lichessStudiesBy,
   lichessStudyPgn,
+  lichessStudyUrl,
+  lichessMasterUrl,
+  studyIdFrom,
   type BroadcastSummary,
   type ChessComGame,
   type MasterGame,
   type StudySummary,
 } from './sources'
+import { RECOMMENDED_GAMES, STUDY_TOPICS, lichessStudySearchUrl, openingsFor } from './recommended'
 import { pgnToChapters } from './pgnChapters'
 import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../shared/externalBook/externalBookStore'
 import { saveProgress } from '../library/store/readingStore'
 
-type Tab = 'studies' | 'masters' | 'broadcasts' | 'chesscom'
+type Tab = 'recommended' | 'studies' | 'masters' | 'broadcasts' | 'chesscom'
 
 const TABS: { id: Tab; label: string }[] = [
+  { id: 'recommended', label: 'Recommended' },
   { id: 'studies', label: 'Annotated studies' },
   { id: 'masters', label: 'Master games by opening' },
   { id: 'broadcasts', label: 'Tournaments' },
@@ -52,7 +57,7 @@ const openBtn = 'shrink-0 rounded border border-slate-300 px-2 py-0.5 text-xs fo
 export default function GameSearchPage() {
   const navigate = useNavigate()
   const openBook = useExternalBookStore((s) => s.open)
-  const [tab, setTab] = useState<Tab>('studies')
+  const [tab, setTab] = useState<Tab>('recommended')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -61,6 +66,8 @@ export default function GameSearchPage() {
   const [topic, setTopic] = useState<number | null>(null)
   const [filter, setFilter] = useState('')
 
+  const [category, setCategory] = useState<'mates' | 'traps' | 'classics' | 'openings' | 'players'>('mates')
+  const [studyLink, setStudyLink] = useState('')
   const [opening, setOpening] = useState<string | null>(null)
   const [masters, setMasters] = useState<MasterGame[] | null>(null)
 
@@ -131,6 +138,97 @@ export default function GameSearchPage() {
       )}
 
       <div role="tabpanel" className="mt-4 flex flex-col gap-3">
+        {tab === 'recommended' && (
+          <>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Category">
+              {([
+                ['mates', 'Basic checkmates'], ['traps', 'Opening traps'], ['classics', 'Classic games'],
+                ['openings', 'Openings by level'], ['players', 'Players and books'],
+              ] as const).map(([id, label]) => (
+                <button key={id} type="button" aria-pressed={category === id} className={chip(category === id)} onClick={() => setCategory(id)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {(category === 'mates' || category === 'traps' || category === 'classics') && (
+              <ul className="flex flex-col gap-1.5">
+                {RECOMMENDED_GAMES.filter((g) => g.category === category).map((g) => (
+                  <li key={g.id} className={row}>
+                    <span>
+                      <span className="font-medium text-slate-800">{g.title}</span>{' '}
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-600">{g.level}</span>
+                      <span className="block text-xs text-slate-500">{g.lesson}</span>
+                    </span>
+                    <button className={openBtn} aria-label={`Open ${g.title}`} onClick={() => read(g.title, g.pgn)}>Open</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {category === 'openings' && (
+              <div className="flex flex-col gap-3">
+                {(['beginner', 'intermediate', 'advanced'] as const).map((level) => (
+                  <div key={level}>
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{level}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {openingsFor(level).map((o) => (
+                        <button
+                          key={o.id} type="button" className={chip(false)} disabled={busy}
+                          onClick={() => {
+                            setTab('masters')
+                            setOpening(o.id)
+                            void run(() => lichessMastersByOpening(o)).then((r) => r && setMasters(r))
+                          }}
+                        >
+                          {o.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <p className="text-xs text-slate-500">Choosing an opening lists its top master games.</p>
+              </div>
+            )}
+
+            {category === 'players' && (
+              <div className="flex flex-col gap-3">
+                <p className="text-xs text-slate-500">
+                  Lichess has no API to search studies by player or book, so these links open the study search on
+                  lichess.org. Paste the link of the study you want below to read it here with its comments.
+                </p>
+                {(['Players', 'Books'] as const).map((group) => (
+                  <div key={group}>
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{group}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {STUDY_TOPICS.filter((x) => x.group === group).map((x) => (
+                        <a key={x.label} className={chip(false)} href={lichessStudySearchUrl(x.query)} target="_blank" rel="noreferrer">
+                          {x.label} ↗
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <form
+                  className="flex flex-wrap items-end gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    const id = studyIdFrom(studyLink)
+                    if (!id) { setError('That is not a Lichess study link (https://lichess.org/study/XXXXXXXX).'); return }
+                    void run(() => lichessStudyPgn(id)).then((pgn) => pgn !== undefined && read(`Lichess study ${id}`, pgn))
+                  }}
+                >
+                  <label className="flex flex-1 flex-col text-xs text-slate-600">
+                    Lichess study link
+                    <input className={input} value={studyLink} onChange={(e) => setStudyLink(e.target.value)} placeholder="https://lichess.org/study/…" />
+                  </label>
+                  <button className={primary} disabled={busy || !studyLink.trim()}>Open study</button>
+                </form>
+              </div>
+            )}
+          </>
+        )}
+
         {tab === 'studies' && (
           <>
             <p className="text-xs text-slate-500">
@@ -172,6 +270,7 @@ export default function GameSearchPage() {
                   {shownStudies.map((st) => (
                     <li key={st.id} className={row}>
                       <span>{st.name}</span>
+                      <a className={`${openBtn} ml-auto`} href={lichessStudyUrl(st.id)} target="_blank" rel="noreferrer" aria-label={`${st.name} on Lichess`}>Lichess ↗</a>
                       <button
                         className={openBtn}
                         disabled={busy}
@@ -191,8 +290,9 @@ export default function GameSearchPage() {
         {tab === 'masters' && (
           <>
             <p className="text-xs text-slate-500">
-              The most relevant master games of an opening, from the Lichess masters database. These games come
-              without comments.
+              The top master games of an opening from the Lichess masters database, ranked by the rating of the
+              players. These games come without comments. Lichess offers no ranking of studies (most liked or most
+              viewed) through its API.
             </p>
             <div className="flex flex-wrap gap-1.5">
               {OPENINGS.map((o) => (
@@ -218,7 +318,10 @@ export default function GameSearchPage() {
                   const title = `${g.white} — ${g.black}`
                   return (
                     <li key={g.id} className={row}>
-                      <span>{title} <span className="text-slate-500">({g.year}, {g.result})</span></span>
+                      <span>
+                        {title} <span className="text-slate-500">({g.year}, {g.result}{g.whiteRating > 0 ? `, Elo ${g.whiteRating}–${g.blackRating}` : ''})</span>
+                      </span>
+                      <a className={`${openBtn} ml-auto`} href={lichessMasterUrl(g.id)} target="_blank" rel="noreferrer" aria-label={`${title} on Lichess`}>Lichess ↗</a>
                       <button
                         className={openBtn}
                         disabled={busy}
