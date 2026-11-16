@@ -48,6 +48,10 @@ interface BuildContext {
     proseLine: string[] | null;
     /** the line array for THIS paren variation (created lazily on first move) */
     line: string[] | null;
+    /** fork point of the enclosing line, restored on ')' so a SIBLING "(…) (…)"
+     *  forks from the same move instead of from the closed variation's last move */
+    fenBeforeLastMove: string;
+    parentBeforeLastMove: string | null;
   }>;
   /** whether this branch is dead (last move was invalid) */
   dead: boolean;
@@ -204,6 +208,8 @@ export function buildGameTree(
         lineKeyDepth: ctx.variationStack.length + 1,
         proseLine: ctx.proseLine,
         line: null,
+        fenBeforeLastMove: ctx.fenBeforeLastMove,
+        parentBeforeLastMove: ctx.parentBeforeLastMove,
       });
       // Load the state BEFORE the last move was played — the variation is an alternative to that move
       ctx.chess.load(ctx.fenBeforeLastMove);
@@ -219,6 +225,8 @@ export function buildGameTree(
         const saved = ctx.variationStack.pop()!;
         ctx.chess.load(saved.fen);
         ctx.currentNodeId = saved.returnToNodeId;
+        ctx.fenBeforeLastMove = saved.fenBeforeLastMove;
+        ctx.parentBeforeLastMove = saved.parentBeforeLastMove;
         ctx.dead = false;
         // Resume the enclosing prose analysis line (if any) after the paren.
         ctx.proseLine = saved.proseLine;

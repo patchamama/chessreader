@@ -92,16 +92,36 @@ export function tokenize(text: string): SanToken[] {
 
   // Collect variation markers. Parentheses, square brackets and braces all open
   // and close an isolated variation line: ( … ), [ … ], { … }.
+  //
+  // Brackets are matched BY TYPE: a closer only closes the innermost open
+  // bracket of its own kind. A stray closer — an emoticon ":)" inside a
+  // "{ comment }", an unmatched "]" — is plain text; emitting it would close the
+  // wrong line and detach every move after it from its variation.
   const OPENERS = '([{';
   const CLOSERS = ')]}';
+  const openStack: { ch: string; match: RawMatch }[] = [];
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
+    const top = openStack.length > 0 ? openStack[openStack.length - 1].ch : null;
+    // Emoticons ":(" and — unless they close an open "(" — ":)" ";)" ":-)" are
+    // never bracket markers.
+    const emoticon = /[:;]-?$/.test(text.slice(Math.max(0, i - 2), i));
+    if (emoticon && (ch === '(' || (ch === ')' && top !== '('))) continue;
     if (OPENERS.includes(ch)) {
-      matches.push({
+      const match: RawMatch = {
         start: i, end: i + 1,
         token: { type: 'variation-open', raw: ch, charStart: i, charEnd: i + 1 }
-      });
+      };
+      openStack.push({ ch, match });
+      matches.push(match);
     } else if (CLOSERS.includes(ch)) {
+      const opener = OPENERS[CLOSERS.indexOf(ch)];
+      let at = openStack.length - 1;
+      while (at >= 0 && openStack[at].ch !== opener) at--;
+      if (at < 0) continue; // stray closer: plain text
+      // Openers left unclosed inside this bracket were plain text too.
+      for (const stray of openStack.splice(at + 1)) matches.splice(matches.indexOf(stray.match), 1);
+      openStack.pop();
       matches.push({
         start: i, end: i + 1,
         token: { type: 'variation-close', raw: ch, charStart: i, charEnd: i + 1 }
@@ -205,8 +225,14 @@ export function tokenize(text: string): SanToken[] {
   // Set when a paragraph-leading move-number was seen, to also flag its move.
   let carryParagraphStart = false;
 
-  const chained = (start: number): boolean =>
-    chainEnd !== null && start - chainEnd <= MAX_CHAIN_GAP;
+  // PGN NAGs ("$14", "$132") annotate the previous move; they are not prose, so
+  // they do not count towards the gap: "10. Nd2! $14 O-O-O" is one chain.
+  const chained = (start: number): boolean => {
+    if (chainEnd === null) return false;
+    if (start - chainEnd <= MAX_CHAIN_GAP) return true;
+    const between = text.slice(chainEnd, start).replace(/\s*\$\d+/g, '');
+    return between.length <= MAX_CHAIN_GAP;
+  };
 
   // A token leads its paragraph only if everything between the break and the
   // token is non-letter (spaces, digits-as-part-of-number handled separately,

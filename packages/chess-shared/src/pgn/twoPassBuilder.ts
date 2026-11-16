@@ -129,6 +129,10 @@ export function buildGameTreeTwoPass(
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
     if (t.type === 'paragraph-break') {
+      // A line break INSIDE an open bracket (a multi-line comment or variation)
+      // is not a paragraph of the game text: the mainline resumes right after
+      // the bracket closes, on the same footing as before it opened.
+      if (parenDepth > 0) continue;
       // New paragraph: re-decide on its first move.
       paragraphDecided = false;
       inMainlineParagraph = false;
@@ -250,6 +254,28 @@ function insertVariations(
     return null;
   };
 
+  // Anchor a run that opens INSIDE another variation ("… 20. Bg5+ Ke6 (20... Rf6
+  // 21. Re1) 21. Bc4#"): the nested line branches from the enclosing line, so
+  // look for its anchor ply walking up from the enclosing line's last node
+  // (through that line and then the moves it grew from). The number is still
+  // authoritative: only the node at the predecessor ply — or the parent of the
+  // node at the same ply — can be the anchor.
+  const anchorInLine = (token: SanToken, lastId: string | null): { parentId: string | null; fen: string } | null => {
+    if (token.moveNumber === undefined || !token.color) return null;
+    const ply = plyIndex(token.moveNumber, token.color);
+    for (let id = lastId; id; id = tree.nodes.get(id)?.parentId ?? null) {
+      const node = tree.nodes.get(id);
+      if (!node) return null;
+      const nodePly = plyIndex(node.moveNumber, node.color);
+      if (nodePly === ply - 1) {
+        return isLegalFrom(node.fen, token.san!) ? { parentId: node.id, fen: node.fen } : null;
+      }
+      if (nodePly < ply - 1) return null;
+    }
+    // Reached the root: only a first-ply alternative anchors there.
+    return ply === 1 && isLegalFrom(startFen, token.san!) ? { parentId: null, fen: startFen } : null;
+  };
+
   const openLine = (parentId: string | null): string[] => {
     const key = parentId ?? 'root';
     if (!tree.variations.has(key)) tree.variations.set(key, []);
@@ -297,7 +323,10 @@ function insertVariations(
 
     if (cur === null) {
       // Start a new variation run: anchor it by NUMBER on the mainline.
-      const anchor = anchorFor(t);
+      // Inside a bracket opened within another variation, branch from that
+      // enclosing line first; otherwise (or if it does not fit) from the mainline.
+      const enclosing = stack.length > 0 ? stack[stack.length - 1] : null;
+      const anchor = (enclosing ? anchorInLine(t, enclosing.parentId) : null) ?? anchorFor(t);
       if (!anchor) {
         // No legal anchor for this numbered move → unreferenced (report first).
         if (!firstUnreferencedReported) {

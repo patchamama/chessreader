@@ -72,8 +72,17 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
   const gameSequences: SanToken[][] = [];
   let current: SanToken[] = [];
   let sawMove1 = false;
+  // Nesting depth of ( … ) / [ … ] / { … }. Whatever is written inside is a
+  // variation or a comment of the CURRENT game: a "1." in there (e.g. the
+  // alternative first move "(1. c4 e5 2. g3)") never starts a new game.
+  let depth = 0;
 
   for (const token of tokens) {
+    if (token.type === 'variation-open') depth++;
+    else if (token.type === 'variation-close') depth = Math.max(0, depth - 1);
+    // A result ends the game text; forgive any unbalanced bracket before it.
+    else if (token.type === 'result') depth = 0;
+
     // A fresh "1." (white) when the current sequence already has a move 1 and
     // some moves → the start of a NEW game (back-to-back PGN dump). Post-result
     // analysis uses higher move numbers (19., 20., …) and stays in this game.
@@ -82,11 +91,11 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
       token.moveNumber === 1 &&
       !token.isEllipsis
     ) {
-      if (sawMove1 && current.some(t => t.type === 'move')) {
+      if (depth === 0 && sawMove1 && current.some(t => t.type === 'move')) {
         gameSequences.push(current);
         current = [];
       }
-      sawMove1 = true;
+      if (depth === 0) sawMove1 = true;
       current.push(token);
       continue;
     }
