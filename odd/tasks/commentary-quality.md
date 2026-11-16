@@ -1,0 +1,47 @@
+# Commentary quality, book layout, Lichess access and offline games
+Objective: make the automatic commentary say what annotators say (and stop saying wrong things), lay it out like a chess book (paragraphs, diagrams), fix Lichess access, and close the open limits of study-tools. Branch: main (user works on main; the demo deploys from main).
+Delivery: one commit per task, pushed to main after its checks. Runner: Vitest (apps/web, packages/chess-shared), PHPUnit (apps/api), tsc, ESLint; measurement with packages/chess-shared/scripts/evaluate-commentary.mjs; browser smoke on the demo.
+
+## Specs
+- S1 "arregla todo lo que sigue abierto" (the open limits of odd/tasks/study-tools.md L10–L12 and the last report: verifier advisories on the audio backend, German piece letters in moves, algorithm 3, accuracy as a plain mean, unclosed `{` silencing errors, Spanish text quoting English moves).
+- S2 "aumentes la parte de comentarios chequeando con un número mayor de partidas (el doble quizás) y que analices y revises que tipo de comentarios son los que no se hacen y su naturaleza y patrón"
+- S3 "si por ejemplo: se menciona de el jugador se prepara para enrocar y aguarecer o proteger al rey, eso se puede descubrir si más adelante se enroca y se detecta que el jugador está moviendo todas las piezas entre el rey y la torre para dejar el camino libre y así preparar para el enroque."
+- S4 "Si por ejemplo, se detecta que más adelante todo el ataque va a una casilla determinada, que se sobreataca, se puede comentar que por ejemplo el caballo se mueve buscando atacar el peon f7 que protege al rey y después los alfiles apuntan a este, y así, buscar patrones analizando muchas veces lo que pasa varias jugadas después que permiten comentar previamente algo cuando se empiezan a mover las piezas para enfilar todo el ataque a un franco"
+- S5 "Los sacrificios son muy fácil de detectar pues simplemente se cambia una pieza de más valor por una de menor valor, como una torre por un alfil o caballo, o una dama por cualquier pieza, aunque muchas veces no es un sacrificio sino que una pieza puede quedar atrapada y no puede escapar, porque no tiene casillas que no sean atacadas por el contrario o porque está clavada o en modo jugada obligatoria o zugzang (creo que se dice así) o jugada forzada."
+- S6 "También en los análisis del motor se pueden ver en determinadas jugadas perdidas de piezas (sacrificios) o combinaciones que determinan la perdida de una pieza importante, un mate o una jugada ganadora porque cambia drásticamente la evaluación del juego, y todo esto son indicadores de jugadas que pueden ser comentadas."
+- S7 "busca más profundamente patrones que no se están detectando y que si están en los comentarios de las jugadas y busca como llegar a esas mismas conclusiones o comentarios teniendo en cuenta las herramientas existentes como la evaluación con varias niveles del motor stockfish, análisis de vulnerabilidades de casillas"
+- S8 "si una pieza se alinea con otra, por ejemplo, dos torres o un alfil con una dama, sería bueno mostrar toda la columna o diagonal en el tablero que queda bajo efecto de esa alineación en el comentario."
+- S9 "si un alfil está atacando a un peón que está protegido por una dama, y se mueve un caballo también para atacar a ese peón, hay que comentar que el caballo se suma a reforzar el ataque al peón o que ataca también al peón."
+- S10 "hay casillas importantes en el tablero que muestran en determinadas aperturas control del centro y cosas así, y eso se puede anotar en el aprendizaje al analizar varias partidas, y claro, debe de coincidir la apertura"
+- S11 "una torre negra que come a otra torre blanca en e4 y que no está protegida o respaldada por otra pieza en esa casilla, es una torre que se la puede comer una dama que se encuentra en la casilla siguiente, así que esa torre no puede atacar a la dama, ... ni puede clavar a un alfil blanco que se encuentra en entre esta y el rey, bueno puede clavarlo pero eso no tiene sentido en un comentario pues esa torre no está respaldada o protegida por otra pieza, y en la próxima jugada caerá."
+- S12 "un alfil ataca a un peón que no se defiende y la dama se mueve a proteger a ese peón, también analizar si esa dama está sobrecargada, es decir, que está protegiendo a varias piezas que están siendo defendidas solo por ellas"
+- S13 "A veces se comenta gana material y en realidad no se gana material pues se hizo un cambio de piezas y eso sería erróneo."
+- S14 "Tanmbién se usa mucho la palabra batería y no creo que sea correcto tanto su uso."
+- S15 "dice, el comentario insertado: la columna queda ahora abierta para las torres y sin embargo, no hay ninguna torre en el tablero existente."
+- S16 "Corrije que al querer listar "Master game by opening" aparece el error: https://explorer.lichess.ovh/masters?play=d2d4,g8f6,c2c4,e7e6,b1c3,f8b4&topGames=15&moves=0 ... 401 Unauthorized ... si se detecta un error así, debe de pedir la key de usuario de lichess, para poder acceder a sus funcionalidades." and "POn en el tablero también si falla el acceso a lichess, el link donde se puede ir a solicitar la key."
+- S17 "al insertar comentarios en una partida, me gustaría que además de la forma de inserción, poniendo comentarios entre corchetes, que se ponga también en forma de párrafo después de las líneas de jugadas, o separando una línea de varias jugadas en varias líneas con comentarios en líneas intermedias, como normalmente aparece en los libros."
+- S18 "insertando en momentos importantes de la partida, como jugadas señaladas como muy buenas o errores catastróficos, diagramas que aparezcan insertados en el texto ... poner opción que me permita insertar diagramas en el juego existente, y opcionalmente que se pueda poner bajo el diagrama la evaluación para esa instantánea del motor de evaluación."
+- S19 "se usan diferentes frases para saber que se está en una variante, tal como: analicemos la siguiente variante,... o, hay una variante interesante que se podría analizar, y cosas así, y al final del a variante se dice, volvamos a la partida a la última jugada de las negras o blancas (la que fue) que fue la jugada x, se esperan 2 segundos y se hace."
+- S20 "poner opción de autoscroll que permite cuando se avanza la casilla que automáticamente se vaya autoscrolleando y viéndose lo que se está narrando."
+- S21 "Cuando se da un mate y el rey tiene varios movimientos posibles, mencionar las casillas a las que puede mover y que no están siendo atacadas por piezas enemigas, o las piezas enemigas que atacan a algunas de esas posibles casillas que impiden que el rey se mueva a estas."
+- S22 "Has al final un test de todo, también generando audios en el backend y testeando todo el funcionamiento."
+- S23 "muestra las partidas comentadas en el frontend si no funcionara el acceso a lichess, donde de ser posible que estén como cacheadas en la app sin necesidad de lichess para su funcionamiento."
+- S24 "En la carpeta examples, he dejado varios libros en formato epub que se pueden usar como prueba, para generar audios de los mismos, analizar las partidas y comentarios de las mismas para encontrar patrones y en especial el libro que empieza con el nombre "El ajedrez de torneo..." es muy útil para eso. Con todo este material, mejora todo lo que puedas la app."
+
+Assumptions (not user statements): the epubs in examples/ are third-party text — used locally for measurement, never committed or bundled; the offline games bundled in the app are public-domain classics with original commentary written for this app.
+
+## Tasks
+- T1 [S16,S23] inline — Lichess token (setting, 401 prompt, link to create one) + offline annotated games when Lichess fails. Status: done (v0.51.0).
+- T2 [S11,S13,S14,S15] inline — remove wrong remarks: threats/pins from a piece that falls next move, "wins material" on an even trade, batteries only when they act, open file only with rooks/queen.
+- T3 [S3,S4,S5,S6,S9,S12,S21] inline — new ideas: castling preparation (look-ahead), attack converging on a square, reinforcing an attack, overloaded defender, trapped piece vs sacrifice, eval swings, mate escape squares.
+- T4 [S8] inline — line cue for alignments (whole file/diagonal lit).
+- T5 [S2,S7,S10,S24] inline — doubled corpus (+ examples epubs), miss analysis, opening key squares, re-measure.
+- T6 [S17,S18] inline — annotation layouts (brackets / paragraphs / split lines) + diagrams with optional eval.
+- T7 [S19,S20] inline — variation intro/outro phrases with 2 s return; autoscroll.
+- T8 [S1] inline — open limits.
+- T9 [S22] inline — end-to-end test incl. backend audio.
+
+## Log
+- L1 (2026-11-17) user request verbatim: quoted in S1–S24 (full message in the session transcript).
+- L2 (2026-11-17) user, mid-turn: "has todo de forma automática, todo lo que puedas y no preguntes hasta dejar todas las preguntas para el final." → questions collected for the final report.
+- L3 T1: checked live — `explorer.lichess.ovh/masters` answers 401 without a token and its CORS preflight allows `Authorization`, so a personal token (no scope) sent as Bearer is the fix. 401 → LichessAuthError → form with "Create a Lichess token" link (lichess.org/account/oauth/token/create) + "Save token and retry"; token also in Settings. Every PGN read from Lichess is kept in localStorage (40 newest) and served when the network fails; a TypeError from fetch shows the kept games plus a link to the bundled Recommended games.

@@ -141,6 +141,8 @@ export interface AppSettings {
   /** Its API key (kept in this browser, sent only to that provider) and model id. */
   aiKey: string
   aiModel: string
+  /** Personal Lichess token (the masters explorer needs one). Kept in this browser, sent only to Lichess. */
+  lichessToken: string
   boardTheme: BoardTheme
   evalBarDirection: EvalBarDirection
   stockfishVersion: StockfishVersion
@@ -211,6 +213,7 @@ const DEFAULT: AppSettings = {
   aiProvider: 'none',
   aiKey: '',
   aiModel: '',
+  lichessToken: '',
   boardTheme: 'blue',
   evalBarDirection: 'vertical',
   stockfishVersion: 'sf10-jsdelivr',

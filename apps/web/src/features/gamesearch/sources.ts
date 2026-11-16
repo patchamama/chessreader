@@ -1,6 +1,8 @@
 /**
  * Public game sources, queried straight from the browser (all send CORS
- * headers, none needs a key).
+ * headers). Since 2025 the Lichess opening explorer (masters database) answers
+ * 401 without a personal token: the user creates one on lichess.org (no scope
+ * needed) and it is sent as `Authorization: Bearer`.
  *
  * What each site really offers (checked against the live APIs):
  *  - Lichess has no API to search studies by topic. It does list the studies of
@@ -11,10 +13,65 @@
  *    player's games by month (plain PGN, no comments).
  */
 
-async function get(url: string, accept?: string): Promise<Response> {
-  const res = await fetch(url, accept ? { headers: { Accept: accept } } : undefined)
+/** Where a Lichess user creates a personal token (no scope is needed to read). */
+export const LICHESS_TOKEN_URL = 'https://lichess.org/account/oauth/token/create?description=Chess%20reader'
+
+/** Lichess refused the request: it needs a personal token, or the one given is wrong. */
+export class LichessAuthError extends Error {
+  constructor(hadToken: boolean) {
+    super(hadToken
+      ? 'Lichess rejected the personal token (401). Create a new one and paste it here.'
+      : 'Lichess now asks for a personal token to use its masters database (401). Create one (free, no permission needed) and paste it here.')
+    this.name = 'LichessAuthError'
+  }
+}
+
+async function get(url: string, accept?: string, token?: string): Promise<Response> {
+  const headers: Record<string, string> = {}
+  if (accept) headers.Accept = accept
+  if (token) headers.Authorization = `Bearer ${token}`
+  const res = await fetch(url, Object.keys(headers).length ? { headers } : undefined)
+  if (res.status === 401) throw new LichessAuthError(!!token)
   if (!res.ok) throw new Error(`${new URL(url).hostname} answered ${res.status}`)
   return res
+}
+
+// Offline copy: every PGN read from Lichess is kept in this browser, so a game
+// already opened still opens when Lichess cannot be reached.
+const CACHE_KEY = 'chessreader.lichess-cache.v1'
+const CACHE_MAX = 40
+export interface CachedEntry { key: string; title: string; pgn: string; savedAt: number }
+
+export function cachedLichessEntries(): CachedEntry[] {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY)
+    return raw ? (JSON.parse(raw) as CachedEntry[]) : []
+  } catch {
+    return []
+  }
+}
+
+function remember(key: string, pgn: string) {
+  try {
+    const title = /\[(?:StudyName|Event) "([^"]*)"\]/.exec(pgn)?.[1] ?? key
+    const rest = cachedLichessEntries().filter((e) => e.key !== key)
+    localStorage.setItem(CACHE_KEY, JSON.stringify([{ key, title, pgn, savedAt: Date.now() }, ...rest].slice(0, CACHE_MAX)))
+  } catch {
+    // storage full or blocked: the copy is a convenience
+  }
+}
+
+/** Read a PGN, keep a copy, and fall back to that copy when the network fails (not on a refusal). */
+async function cachedPgn(key: string, load: () => Promise<Response>): Promise<string> {
+  try {
+    const pgn = await (await load()).text()
+    remember(key, pgn)
+    return pgn
+  } catch (e) {
+    const copy = cachedLichessEntries().find((x) => x.key === key)
+    if (copy && !(e instanceof LichessAuthError)) return copy.pgn
+    throw e
+  }
 }
 
 export interface StudySummary {
@@ -34,7 +91,7 @@ export async function lichessStudiesBy(author: string): Promise<StudySummary[]> 
 }
 
 export async function lichessStudyPgn(id: string): Promise<string> {
-  return (await get(`https://lichess.org/api/study/${encodeURIComponent(id)}.pgn?clocks=false`)).text()
+  return cachedPgn(`study:${id}`, () => get(`https://lichess.org/api/study/${encodeURIComponent(id)}.pgn?clocks=false`))
 }
 
 export interface Opening {
@@ -85,9 +142,9 @@ export const lichessStudyUrl = (id: string) => `https://lichess.org/study/${id}`
 /** A master game on lichess.org (the page the opening explorer links to). */
 export const lichessMasterUrl = (id: string) => `https://lichess.org/import/master/${id}/white`
 
-export async function lichessMastersByOpening(opening: Opening): Promise<MasterGame[]> {
+export async function lichessMastersByOpening(opening: Opening, token?: string): Promise<MasterGame[]> {
   const url = `https://explorer.lichess.ovh/masters?play=${opening.moves.join(',')}&topGames=15&moves=0`
-  const data = (await (await get(url)).json()) as {
+  const data = (await (await get(url, undefined, token)).json()) as {
     topGames?: { id: string; winner: string | null; year: number; white: { name: string; rating?: number }; black: { name: string; rating?: number } }[]
   }
   return rankMasters((data.topGames ?? []).map((g) => ({
@@ -101,8 +158,8 @@ export async function lichessMastersByOpening(opening: Opening): Promise<MasterG
   })))
 }
 
-export async function lichessMasterPgn(id: string): Promise<string> {
-  return (await get(`https://explorer.lichess.ovh/master/pgn/${encodeURIComponent(id)}`)).text()
+export async function lichessMasterPgn(id: string, token?: string): Promise<string> {
+  return cachedPgn(`master:${id}`, () => get(`https://explorer.lichess.ovh/master/pgn/${encodeURIComponent(id)}`, undefined, token))
 }
 
 export interface BroadcastSummary {
@@ -158,11 +215,11 @@ export async function chessComGames(archiveUrl: string): Promise<ChessComGame[]>
  * The opening a game belongs to, from the Lichess masters database: the name
  * of the deepest position (within the first 20 plies) the database knows.
  */
-export async function lichessOpening(uciMoves: string[]): Promise<{ eco: string; name: string } | null> {
+export async function lichessOpening(uciMoves: string[], token?: string): Promise<{ eco: string; name: string } | null> {
   for (let plies = Math.min(20, uciMoves.length - (uciMoves.length % 2)); plies >= 2; plies -= 2) {
     try {
       const url = `https://explorer.lichess.ovh/masters?play=${uciMoves.slice(0, plies).join(',')}&moves=0&topGames=0`
-      const data = (await (await get(url)).json()) as { opening?: { eco: string; name: string } | null }
+      const data = (await (await get(url, undefined, token)).json()) as { opening?: { eco: string; name: string } | null }
       if (data.opening) return { eco: data.opening.eco, name: data.opening.name }
     } catch {
       return null

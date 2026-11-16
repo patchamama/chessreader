@@ -134,6 +134,13 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           </>
         )}
 
+        {/* Lichess */}
+        <label className={labelClass} htmlFor="lichess-token">Lichess token (masters database; kept in this browser, sent only to Lichess)</label>
+        <input id="lichess-token" type="password" autoComplete="off" className={inputClass} value={s.lichessToken} onChange={(e) => s.set({ lichessToken: e.target.value })} />
+        <a className="mt-1 block text-[11px] text-blue-600 underline" href="https://lichess.org/account/oauth/token/create?description=Chess%20reader" target="_blank" rel="noreferrer">
+          Create a Lichess token ↗
+        </a>
+
         {/* Narration */}
         <label className={labelClass}>Narration: repeat an unanswered move after (seconds, 0 = never)</label>
         <Stepper

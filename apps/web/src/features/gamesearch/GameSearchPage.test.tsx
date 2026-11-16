@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import GameSearchPage from './GameSearchPage'
 import * as sources from './sources'
 import { useExternalBookStore } from '../../shared/externalBook/externalBookStore'
+import { useSettingsStore } from '../../shared/settings/settingsStore'
 
 vi.mock('./sources', async (orig) => ({
   ...(await orig<typeof import('./sources')>()),
@@ -14,6 +15,7 @@ vi.mock('./sources', async (orig) => ({
   lichessBroadcasts: vi.fn(),
   chessComArchives: vi.fn(),
   chessComGames: vi.fn(),
+  cachedLichessEntries: vi.fn(() => []),
 }))
 const s = vi.mocked(sources)
 
@@ -70,7 +72,7 @@ describe('GameSearchPage', () => {
     await waitFor(() => expect(screen.getByText(/Kasparov, G — Anand, V/)).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: /Open Kasparov, G — Anand, V/ }))
     await waitFor(() => expect(screen.getByText('reader open')).toBeInTheDocument())
-    expect(s.lichessMasterPgn).toHaveBeenCalledWith('g1')
+    expect(s.lichessMasterPgn).toHaveBeenCalledWith('g1', undefined)
   })
 
   it('says plainly that chess.com has no annotated-game search and lists a player\'s games', async () => {
@@ -148,5 +150,32 @@ describe('GameSearchPage, recommended', () => {
     renderStudies()
     fireEvent.click(screen.getByRole('button', { name: 'Search studies' }))
     await waitFor(() => expect(screen.getByRole('link', { name: 'Annotated Games on Lichess' })).toHaveAttribute('href', 'https://lichess.org/study/a1b2c3d4'))
+  })
+})
+
+describe('Lichess token and offline copies', () => {
+  it('asks for a personal token when the masters explorer answers 401, then retries with it', async () => {
+    useSettingsStore.setState({ lichessToken: '' })
+    s.lichessMastersByOpening.mockRejectedValueOnce(new sources.LichessAuthError(false)).mockResolvedValueOnce([])
+    renderPage()
+    fireEvent.click(screen.getByRole('tab', { name: 'Master games by opening' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Italian Game' }))
+    const link = await screen.findByRole('link', { name: /create a lichess token/i })
+    expect(link.getAttribute('href')).toBe(sources.LICHESS_TOKEN_URL)
+    fireEvent.change(screen.getByLabelText('Lichess token'), { target: { value: 'lip_abc' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save token and retry' }))
+    await waitFor(() => expect(s.lichessMastersByOpening).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'italian' }), 'lip_abc'))
+    expect(useSettingsStore.getState().lichessToken).toBe('lip_abc')
+    expect(await screen.findByText('No games found.')).toBeTruthy()
+  })
+
+  it('offers the games kept offline when Lichess cannot be reached', async () => {
+    s.cachedLichessEntries.mockReturnValue([{ key: 'study:abcdefgh', title: 'Kept study', pgn: '[Event "Kept"]\n\n1. e4 e5 2. Nf3 *', savedAt: 1 }])
+    s.lichessStudiesBy.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    renderStudies()
+    fireEvent.click(screen.getByRole('button', { name: 'Search studies' }))
+    expect(await screen.findByText(/cannot be reached/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open Kept study' }))
+    expect(await screen.findByText('reader open')).toBeTruthy()
   })
 })

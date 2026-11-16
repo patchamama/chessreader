@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { lichessStudiesBy, lichessMastersByOpening, chessComGames, chessComArchives, lichessBroadcasts, OPENINGS } from './sources'
+import { lichessStudiesBy, lichessMastersByOpening, chessComGames, chessComArchives, lichessBroadcasts, OPENINGS, LichessAuthError, lichessStudyPgn, cachedLichessEntries } from './sources'
 
 function mockFetch(body: string, ok = true) {
   const fn = vi.fn(async (...args: [string, unknown?]) => ({ url: args[0], ok, status: ok ? 200 : 404, text: async () => body, json: async () => JSON.parse(body) }))
@@ -74,5 +74,30 @@ describe('opening database', () => {
     const { lichessOpening } = await import('./sources')
     expect(await lichessOpening(['a2a3'])).toBeNull()
     vi.unstubAllGlobals()
+  })
+})
+
+describe('Lichess access', () => {
+  it('sends the personal token to the masters explorer', async () => {
+    const f = mockFetch(JSON.stringify({ topGames: [] }))
+    await lichessMastersByOpening(OPENINGS[0], 'lip_secret')
+    expect(f.mock.calls[0][1]).toEqual({ headers: { Authorization: 'Bearer lip_secret' } })
+  })
+
+  it('reports a 401 as a missing or wrong token', async () => {
+    const fn = vi.fn(async () => ({ ok: false, status: 401, text: async () => '', json: async () => ({}) }))
+    vi.stubGlobal('fetch', fn)
+    const err = await lichessMastersByOpening(OPENINGS[0]).catch((e) => e)
+    expect(err).toBeInstanceOf(LichessAuthError)
+    expect(err.message).toMatch(/token/i)
+  })
+
+  it('serves a study from the offline copy when Lichess cannot be reached', async () => {
+    localStorage.clear()
+    mockFetch('[Event "Cached"]\n\n1. e4 e5 *')
+    expect(await lichessStudyPgn('abcdefgh')).toContain('Cached')
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))
+    expect(await lichessStudyPgn('abcdefgh')).toContain('Cached')
+    expect(cachedLichessEntries().map((e) => e.key)).toContain('study:abcdefgh')
   })
 })

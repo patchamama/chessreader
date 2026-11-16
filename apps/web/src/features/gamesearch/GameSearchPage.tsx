@@ -12,6 +12,9 @@ import {
   lichessStudyUrl,
   lichessMasterUrl,
   studyIdFrom,
+  cachedLichessEntries,
+  LichessAuthError,
+  LICHESS_TOKEN_URL,
   type BroadcastSummary,
   type ChessComGame,
   type MasterGame,
@@ -21,6 +24,7 @@ import { RECOMMENDED_GAMES, STUDY_TOPICS, lichessStudySearchUrl, openingsFor } f
 import { pgnToChapters } from './pgnChapters'
 import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../shared/externalBook/externalBookStore'
 import { saveProgress } from '../library/store/readingStore'
+import { useSettingsStore } from '../../shared/settings/settingsStore'
 
 type Tab = 'recommended' | 'studies' | 'masters' | 'broadcasts' | 'chesscom'
 
@@ -60,6 +64,9 @@ export default function GameSearchPage() {
   const [tab, setTab] = useState<Tab>('recommended')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Why the last request failed, when the page can do something about it. */
+  const [failure, setFailure] = useState<{ kind: 'auth' | 'offline'; retry: () => void } | null>(null)
+  const [tokenDraft, setTokenDraft] = useState('')
 
   const [author, setAuthor] = useState('lichess')
   const [studies, setStudies] = useState<StudySummary[] | null>(null)
@@ -77,13 +84,17 @@ export default function GameSearchPage() {
   const [player, setPlayer] = useState('')
   const [games, setGames] = useState<{ month: string; games: ChessComGame[] } | null>(null)
 
-  async function run<T>(work: () => Promise<T>): Promise<T | undefined> {
+  async function run<T>(work: () => Promise<T>, retry?: () => void): Promise<T | undefined> {
     setBusy(true)
     setError(null)
+    setFailure(null)
     try {
       return await work()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+      if (e instanceof LichessAuthError) setFailure({ kind: 'auth', retry: retry ?? (() => {}) })
+      // fetch rejects with a TypeError when the site cannot be reached (offline, blocked, CORS)
+      else if (e instanceof TypeError) setFailure({ kind: 'offline', retry: retry ?? (() => {}) })
       return undefined
     } finally {
       setBusy(false)
@@ -121,7 +132,7 @@ export default function GameSearchPage() {
             key={t.id}
             role="tab"
             aria-selected={tab === t.id}
-            onClick={() => { setTab(t.id); setError(null) }}
+            onClick={() => { setTab(t.id); setError(null); setFailure(null) }}
             className={`-mb-px rounded-t border px-3 py-1.5 text-sm ${
               tab === t.id ? 'border-slate-200 border-b-white bg-white font-semibold text-slate-900' : 'border-transparent text-slate-600 hover:text-slate-900'
             }`}
@@ -135,6 +146,44 @@ export default function GameSearchPage() {
         <p role="alert" className="mt-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
           {error}
         </p>
+      )}
+      {failure?.kind === 'auth' && (
+        <form
+          className="mt-2 flex flex-wrap items-end gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm"
+          onSubmit={(e) => {
+            e.preventDefault()
+            useSettingsStore.getState().set({ lichessToken: tokenDraft.trim() })
+            failure.retry()
+          }}
+        >
+          <label className="flex flex-col text-xs text-slate-700">
+            Lichess token
+            <input className={input} type="password" autoComplete="off" value={tokenDraft} onChange={(e) => setTokenDraft(e.target.value)} />
+          </label>
+          <button className={primary} disabled={!tokenDraft.trim()}>Save token and retry</button>
+          <a className="text-xs text-blue-700 underline" href={LICHESS_TOKEN_URL} target="_blank" rel="noreferrer">
+            Create a Lichess token ↗
+          </a>
+          <span className="w-full text-xs text-slate-500">
+            Kept in this browser and sent only to Lichess. No permission box needs to be ticked.
+          </span>
+        </form>
+      )}
+      {failure?.kind === 'offline' && (
+        <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm">
+          <p>Lichess cannot be reached. The games under “Recommended” work offline, and so do the games you already opened:</p>
+          <ul className="mt-1 flex flex-col gap-1">
+            {cachedLichessEntries().map((c) => (
+              <li key={c.key} className={row}>
+                <span>{c.title}</span>
+                <button className={openBtn} aria-label={`Open ${c.title}`} onClick={() => read(c.title, c.pgn)}>Open</button>
+              </li>
+            ))}
+          </ul>
+          <button className="mt-1 text-xs text-blue-700 underline" onClick={() => { setTab('recommended'); setError(null); setFailure(null) }}>
+            Go to the recommended games
+          </button>
+        </div>
       )}
 
       <div role="tabpanel" className="mt-4 flex flex-col gap-3">
@@ -302,9 +351,10 @@ export default function GameSearchPage() {
                   aria-pressed={opening === o.id}
                   className={chip(opening === o.id)}
                   disabled={busy}
-                  onClick={() => {
+                  onClick={function load() {
                     setOpening(o.id)
-                    void run(() => lichessMastersByOpening(o)).then((r) => r && setMasters(r))
+                    const t = useSettingsStore.getState().lichessToken || undefined
+                    void run(() => lichessMastersByOpening(o, t), load).then((r) => r && setMasters(r))
                   }}
                 >
                   {o.name}
@@ -326,7 +376,10 @@ export default function GameSearchPage() {
                         className={openBtn}
                         disabled={busy}
                         aria-label={`Open ${title}`}
-                        onClick={() => void run(() => lichessMasterPgn(g.id)).then((pgn) => pgn !== undefined && read(title, pgn))}
+                        onClick={function load() {
+                          const t = useSettingsStore.getState().lichessToken || undefined
+                          void run(() => lichessMasterPgn(g.id, t), load).then((pgn) => pgn !== undefined && read(title, pgn))
+                        }}
                       >
                         Open
                       </button>

@@ -104,7 +104,7 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
         })
         const review = reviewGame(plies)
         // The opening by name, from the masters database when it is reachable (the built-in table otherwise).
-        void lichessOpening(plies.map((p) => `${p.from}${p.to}`)).then((o) => { if (o) setDatabase({ tree, ...o }) })
+        void lichessOpening(plies.map((p) => `${p.from}${p.to}`), useSettingsStore.getState().lichessToken || undefined).then((o) => { if (o) setDatabase({ tree, ...o }) })
         const who = playersOf(i)
         setReview(tree, { plies, review }, {
           bookId, chapter, gameIndex: i, white: who.white, black: who.black,
