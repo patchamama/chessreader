@@ -52,3 +52,16 @@ describe('unreferenced numbered moves: report only the first of each run', () =>
     expect(unref[0].moveNumber).toBe(9)
   })
 })
+
+describe('moves named inside a PGN comment', () => {
+  it.each([1, 2] as const)('are commentary, not recognition errors (alg %i)', (algorithm) => {
+    const text = '1. e4 { Gukesh usually plays 1.d4, and 3.Nd2 is a line of its own. } 1... e6 2. d4 d5 { threatening 24...Nd3 some day } 3. Nc3'
+    const [game] = recognizeGames(text, { algorithm })
+    expect(game.tree.mainline.map((id) => game.tree.nodes.get(id)!.san)).toEqual(['e4', 'e6', 'd4', 'd5', 'Nc3'])
+    expect(game.tree.errors ?? []).toEqual([])
+  })
+  it('a move that does not fit OUTSIDE a comment is still an error', () => {
+    const [game] = recognizeGames('1. e4 e5 2. Nf3 Nc6\nAquí 7. Qh5 no existe.\n3. Bb5', { algorithm: 2 })
+    expect((game.tree.errors ?? []).length).toBeGreaterThan(0)
+  })
+})

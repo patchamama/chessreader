@@ -65,11 +65,13 @@ export function spanishTokenToEnglish(token: string): string {
 const SAN_TAIL = '[a-h1-8]?x?[a-h][1-8]'
 
 function isEnglishNotation(text: string): boolean {
-  // English piece letters: K, Q, R, B, N followed by a full SAN move shape
-  const hasEnglish = new RegExp(`(?:^|[\\s(])[KQRBN]${SAN_TAIL}`).test(text)
-  // Spanish-only piece letters: C (Caballo), D (Dama), T (Torre)
-  const hasSpanish  = new RegExp(`(?:^|[\\s(])[CDT]${SAN_TAIL}`).test(text)
-  return hasEnglish && !hasSpanish
+  // English-only piece letters (K, Q, B, N) against Spanish-only ones (C, D, T,
+  // A); R is both a rook and a "rey". The MAJORITY decides: one foreign-looking
+  // token in a comment ("Anticipe un Ce4") must not turn every English rook
+  // into a king.
+  const count = (letters: string) => (text.match(new RegExp(`(?:^|[\\s(.])[${letters}]${SAN_TAIL}`, 'g')) ?? []).length
+  const english = count('KQBN')
+  return english > 0 && english > count('CDTA')
 }
 
 export function spanishToEnglish(text: string): string {

@@ -1,12 +1,19 @@
 import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useUploadBook } from '../api/libraryApi'
+import { textToChapters } from '../utils/textToChapters'
+import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
 
-type Tab = 'file' | 'url'
+type Tab = 'file' | 'url' | 'text'
 
 export default function UploadBookForm() {
   const [tab, setTab] = useState<Tab>('file')
   const [file, setFile] = useState<File | null>(null)
   const [url, setUrl] = useState('')
+  const [pasted, setPasted] = useState('')
+  const [pastedTitle, setPastedTitle] = useState('')
+  const navigate = useNavigate()
+  const openBook = useExternalBookStore((s) => s.open)
   const [isDragging, setIsDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -28,6 +35,12 @@ export default function UploadBookForm() {
     } else if (tab === 'url' && url.trim()) {
       await mutateAsync({ url: url.trim() })
       setUrl('')
+    } else if (tab === 'text') {
+      // Nothing is uploaded: the text is parsed here and opened in the reader.
+      const { title, chapters } = textToChapters(pasted, pastedTitle)
+      if (chapters.length === 0) return
+      openBook(title, chapters)
+      navigate(`/read/${EXTERNAL_BOOK_ID}`)
     }
   }
 
@@ -84,6 +97,19 @@ export default function UploadBookForm() {
           }`}
         >
           URL
+        </button>
+        <button
+          role="tab"
+          type="button"
+          aria-selected={tab === 'text'}
+          onClick={() => setTab('text')}
+          className={`px-4 py-2 text-sm font-medium ${
+            tab === 'text'
+              ? 'border-b-2 border-blue-600 text-blue-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Paste text
         </button>
       </div>
 
@@ -149,6 +175,33 @@ export default function UploadBookForm() {
         </div>
       )}
 
+      {/* Pasted text */}
+      {tab === 'text' && (
+        <div className="mb-4">
+          <label htmlFor="paste-title" className="mb-1 block text-sm font-medium text-gray-700">
+            Title (optional)
+          </label>
+          <input
+            id="paste-title"
+            value={pastedTitle}
+            onChange={(e) => setPastedTitle(e.target.value)}
+            className="mb-3 block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+          <label htmlFor="paste-text" className="mb-1 block text-sm font-medium text-gray-700">
+            Text or PGN
+          </label>
+          <textarea
+            id="paste-text"
+            value={pasted}
+            onChange={(e) => setPasted(e.target.value)}
+            rows={10}
+            placeholder={'1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 …\nAn annotated game, a book page or PGN with comments and variations.'}
+            className="block w-full rounded border border-gray-300 px-3 py-2 font-mono text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+          <p className="mt-1 text-xs text-gray-500">Opened directly in the reader; it is not saved to the library.</p>
+        </div>
+      )}
+
       {/* Error */}
       {isError && error && (
         <div role="alert" className="mb-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700 border border-red-200">
@@ -161,7 +214,7 @@ export default function UploadBookForm() {
         disabled={isPending}
         className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
       >
-        {isPending ? 'Uploading…' : 'Upload'}
+        {tab === 'text' ? 'Open in reader' : isPending ? 'Uploading…' : 'Upload'}
       </button>
     </form>
   )

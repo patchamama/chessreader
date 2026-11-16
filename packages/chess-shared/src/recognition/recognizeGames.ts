@@ -197,6 +197,14 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
     gameSequences.push(current);
   }
 
+  // Character ranges written inside { … } (PGN comments).
+  const braces: Array<[number, number]> = [];
+  for (let i = 0, open = -1; i < normalised.length; i++) {
+    if (normalised[i] === '{' && open < 0) open = i;
+    else if (normalised[i] === '}' && open >= 0) { braces.push([open, i]); open = -1; }
+  }
+  const inBrace = (at: number) => braces.some(([a, b]) => at > a && at < b);
+
   const results: RecognizedGame[] = [];
 
   for (const seq of gameSequences) {
@@ -212,6 +220,12 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
       : buildGameTree(seq, STANDARD_START_FEN);
 
     if (tree.nodes.size === 0) continue;
+
+    // A move NAMED inside a PGN comment ("{ threatening 24...Nd3 }") is prose:
+    // when it has no place in the game it is not a recognition error.
+    tree.errors = tree.errors.filter(
+      (e) => !((e.kind === 'unreferenced' || e.kind === 'wrong-number') && e.charStart !== undefined && inBrace(e.charStart)),
+    );
 
     results.push({
       charStart,

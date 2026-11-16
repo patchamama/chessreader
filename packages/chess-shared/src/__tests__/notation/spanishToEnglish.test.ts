@@ -117,3 +117,10 @@ describe('promotion in Spanish notation', () => {
     expect(spanishToEnglish('5. bxa8=D Dc7 6. e8=T h1=C 7. g8=A')).toBe('5. bxa8=Q Qc7 6. e8=R h1=N 7. g8=B')
   })
 })
+
+describe('language of the notation is decided by majority', () => {
+  it('one foreign-looking token in a comment does not turn English rooks into kings', () => {
+    const text = '13. O-O O-O 14. Nc3 Rb8 15. Nh5 f5 16. Qe2 Rf8 { Anticipe un Ce4. } 21. Rad1 Ne7'
+    expect(spanishToEnglish(text)).toBe(text)
+  })
+})
