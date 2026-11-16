@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { VoiceSettings } from './VoiceSettings'
 import { APP_LANGUAGES, type AppLanguage } from './settingsStore'
 import { useSettingsStore, BOARD_THEMES, FONT_FAMILIES, STOCKFISH_VERSIONS, APP_THEME_PRESETS, PIECE_THEMES, type BoardTheme, type FontFamily, type EvalBarDirection, type StockfishVersion, type ImageAlign, type HeadingStyle, type EngineVariations, type AppTheme, type PieceTheme } from './settingsStore'
 
@@ -109,6 +110,8 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
             <option key={l} value={l}>{APP_LANGUAGES[l]}</option>
           ))}
         </select>
+
+        <VoiceSettings />
 
         {/* Narration */}
         <label className={labelClass}>Narration: repeat an unanswered move after (seconds, 0 = never)</label>

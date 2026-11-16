@@ -188,6 +188,102 @@ const LEGAL_EN: DemoChapter = {
 <p>Mate with three minor pieces: the bishop on f7 gives check, the knights on d5 and e5 cover every escape square.</p>`,
 }
 
+const LEGAL_ES: DemoChapter = {
+  title: 'El mate de Légal',
+  plies: 13,
+  html: `
+<h2>El mate de Légal</h2>
+<p><em>Légal de Kermeur — Saint Brie, París 1750</em></p>
+<p>La celada más antigua de los libros: un caballo clavado que se mueve igual.</p>
+<p>1. e4 e5 2. ♘f3 d6 3. ♗c4 ♗g4</p>
+<p>Las negras clavan el caballo de f3 contra la dama de d1.</p>
+<p>4. ♘c3 g6</p>
+<p>Una jugada perdida. Había que desarrollar con 4... ♘f6.</p>
+<p>5. ♘xe5</p>
+<p>El caballo clavado se mueve y entrega la dama. Capturar el caballo (5... dxe5 6. ♕xg4) solo pierde un peón.</p>
+<p>5... ♗xd1 6. ♗xf7+ ♔e7 7. ♘d5#</p>
+<p>Mate con tres piezas menores: el alfil de f7 da jaque y los caballos de d5 y e5 cubren todas las casillas de escape.</p>`,
+}
+
+const OPERA_DE: DemoChapter = {
+  title: 'Die Opernpartie',
+  plies: 33,
+  html: `
+<h2>Die Opernpartie</h2>
+<p><em>Paul Morphy — Herzog von Braunschweig und Graf Isouard, Paris 1858</em></p>
+<p>Die berühmteste Lehrpartie über Entwicklung: Weiß bringt jede Figur ins Spiel, Schwarz verliert Zeit.</p>
+<p>1. e4 e5 2. ♘f3 d6</p>
+<p>Die Philidor-Verteidigung. Der Bauer auf d6 deckt den Bauern auf e5, sperrt aber den Läufer auf f8 ein.</p>
+<p>3. d4 ♗g4</p>
+<p>Eine verfrühte Fesselung des Springers auf f3. Üblich ist 3... exd4 4. ♘xd4 ♘f6.</p>
+<p>4. dxe5 ♗xf3 5. ♕xf3 dxe5 6. ♗c4</p>
+<p>Der Läufer auf c4 und die Dame auf f3 greifen gemeinsam das Feld f7 an: es droht Matt.</p>
+<p>6... ♘f6 7. ♕b3</p>
+<p>Ein Doppelangriff auf b7 und f7. Die Dame auf b3 und der Läufer auf c4 stehen auf derselben Diagonale a2-g8.</p>
+<p>7... ♕e7 8. ♘c3</p>
+<p>Weiß zieht die Entwicklung dem Bauerngewinn vor (8. ♕xb7 ♕b4+ 9. ♕xb4 ♗xb4+).</p>
+<p>8... c6 9. ♗g5 b5</p>
+<p>Der Springer auf f6 ist vom Läufer auf g5 gefesselt. Schwarz greift an, bevor er entwickelt ist.</p>
+<p>10. ♘xb5</p>
+<p>Das Opfer. Der Springer wird gegeben, um die Linien gegen den König in der Mitte zu öffnen.</p>
+<p>10... cxb5 11. ♗xb5+ ♘bd7 12. O-O-O</p>
+<p>Die lange Rochade bringt den Turm auf die d-Linie. Der Springer auf d7 ist vom Läufer auf b5 gefesselt.</p>
+<p>12... ♖d8 13. ♖xd7 ♖xd7 14. ♖d1</p>
+<p>Ein Qualitätsopfer, und der letzte Turm kommt ins Spiel. Alle weißen Figuren greifen an.</p>
+<p>14... ♕e6 15. ♗xd7+ ♘xd7 16. ♕b8+</p>
+<p>Das Damenopfer lenkt den Springer von d7 ab.</p>
+<p>16... ♘xb8 17. ♖d8#</p>
+<p>Matt. Der Turm auf d8 wird vom Läufer auf g5 gedeckt.</p>`,
+}
+
+const LEGAL_DE: DemoChapter = {
+  title: 'Das Légal-Matt',
+  plies: 13,
+  html: `
+<h2>Das Légal-Matt</h2>
+<p><em>Légal de Kermeur — Saint Brie, Paris 1750</em></p>
+<p>Die älteste Falle der Schachbücher: ein gefesselter Springer zieht trotzdem.</p>
+<p>1. e4 e5 2. ♘f3 d6 3. ♗c4 ♗g4</p>
+<p>Schwarz fesselt den Springer auf f3 an die Dame auf d1.</p>
+<p>4. ♘c3 g6</p>
+<p>Ein verlorener Zug. Schwarz musste sich mit 4... ♘f6 entwickeln.</p>
+<p>5. ♘xe5</p>
+<p>Der gefesselte Springer zieht und gibt die Dame her. Den Springer zu schlagen (5... dxe5 6. ♕xg4) kostet nur einen Bauern.</p>
+<p>5... ♗xd1 6. ♗xf7+ ♔e7 7. ♘d5#</p>
+<p>Matt mit drei Leichtfiguren: der Läufer auf f7 gibt Schach, die Springer auf d5 und e5 decken alle Fluchtfelder.</p>`,
+}
+
+const OPERA_EN_BOOK: DemoChapter = {
+  title: 'The Opera Game',
+  plies: 33,
+  html: `
+<h2>The Opera Game</h2>
+<p><em>Paul Morphy — Duke of Brunswick and Count Isouard, Paris 1858</em></p>
+<p>The most famous lesson on development: White brings every piece into play while Black loses time.</p>
+<p>1. e4 e5 2. ♘f3 d6</p>
+<p>The Philidor Defence. The pawn on d6 supports the pawn on e5 but shuts in the bishop on f8.</p>
+<p>3. d4 ♗g4</p>
+<p>A premature pin on the knight on f3. The usual line is 3... exd4 4. ♘xd4 ♘f6.</p>
+<p>4. dxe5 ♗xf3 5. ♕xf3 dxe5 6. ♗c4</p>
+<p>The bishop on c4 and the queen on f3 attack the square f7 together: mate is threatened.</p>
+<p>6... ♘f6 7. ♕b3</p>
+<p>A double attack on b7 and f7. The queen on b3 and the bishop on c4 stand on the diagonal a2-g8.</p>
+<p>7... ♕e7 8. ♘c3</p>
+<p>White prefers development to winning a pawn (8. ♕xb7 ♕b4+ 9. ♕xb4 ♗xb4+).</p>
+<p>8... c6 9. ♗g5 b5</p>
+<p>The knight on f6 is pinned by the bishop on g5. Black attacks before finishing development.</p>
+<p>10. ♘xb5</p>
+<p>The sacrifice. The knight is given up to open lines against the king in the centre.</p>
+<p>10... cxb5 11. ♗xb5+ ♘bd7 12. O-O-O</p>
+<p>Castling queenside puts the rook on the d-file. The knight on d7 is pinned by the bishop on b5.</p>
+<p>12... ♖d8 13. ♖xd7 ♖xd7 14. ♖d1</p>
+<p>An exchange sacrifice, and the last rook joins in. Every white piece is attacking.</p>
+<p>14... ♕e6 15. ♗xd7+ ♘xd7 16. ♕b8+</p>
+<p>The queen sacrifice deflects the knight from d7.</p>
+<p>16... ♘xb8 17. ♖d8#</p>
+<p>Mate. The rook on d8 is defended by the bishop on g5.</p>`,
+}
+
 /** The Opera Game with three misprints, to show wrong-move detection. */
 const OPERA_WITH_ERRORS: DemoChapter = {
   title: 'La partida de la Ópera (con erratas)',
@@ -213,9 +309,9 @@ export const DEMO_BOOKS: DemoBook[] = [
       title: 'Partidas inmortales comentadas',
       author: 'Demo ChessReader',
       createdAt: '2026-11-16T10:00:00Z',
-      description: 'Cuatro partidas clásicas completas, comentadas jugada a jugada.',
+      description: 'Cinco partidas clásicas completas, comentadas jugada a jugada.',
     },
-    chapters: [OPERA_ES, IMMORTAL_ES, EVERGREEN_ES, CENTURY_ES],
+    chapters: [OPERA_ES, LEGAL_ES, IMMORTAL_ES, EVERGREEN_ES, CENTURY_ES],
   },
   {
     book: {
@@ -225,7 +321,7 @@ export const DEMO_BOOKS: DemoBook[] = [
       createdAt: '2026-11-16T10:00:00Z',
       description: 'Complete annotated games in English, book style and PGN style.',
     },
-    chapters: [OPERA_EN, LEGAL_EN],
+    chapters: [OPERA_EN_BOOK, LEGAL_EN, OPERA_EN],
   },
   {
     book: {
@@ -236,5 +332,15 @@ export const DEMO_BOOKS: DemoBook[] = [
       description: 'Una partida con erratas: el lector las detecta y propone la corrección.',
     },
     chapters: [OPERA_WITH_ERRORS],
+  },
+  {
+    book: {
+      id: 4,
+      title: 'Kommentierte Klassiker',
+      author: 'ChessReader Demo',
+      createdAt: '2026-11-16T10:00:00Z',
+      description: 'Vollständige kommentierte Partien auf Deutsch.',
+    },
+    chapters: [OPERA_DE, LEGAL_DE],
   },
 ]

@@ -377,6 +377,43 @@ return [
         );
     },
 
+    // Narration audio
+    \App\Application\Narration\Port\SpeechSynthesizer::class => function () {
+        return new \App\Infrastructure\Narration\RoutingSpeechSynthesizer([
+            'piper_bin'        => (string) getenv('PIPER_BIN'),
+            'piper_models_dir' => (string) getenv('PIPER_MODELS_DIR'),
+            'openai_key'       => (string) getenv('OPENAI_API_KEY'),
+            'elevenlabs_key'   => (string) getenv('ELEVENLABS_API_KEY'),
+        ]);
+    },
+
+    \App\Application\Narration\Port\AudioAssembler::class => function () {
+        return new \App\Infrastructure\Narration\FfmpegAudioAssembler();
+    },
+
+    'narration_dir' => function (ContainerInterface $c) {
+        $settings = $c->get('settings');
+        // Tests (in-memory database) write to the system temp folder.
+        return ($settings['db']['path'] ?? '') === ':memory:'
+            ? sys_get_temp_dir() . '/chessreader-narration-test'
+            : ($settings['storage_dir'] ?? dirname(__DIR__) . '/storage') . '/narration';
+    },
+
+    \App\Application\Narration\RenderNarrationHandler::class => function (ContainerInterface $c) {
+        return new \App\Application\Narration\RenderNarrationHandler(
+            $c->get(\App\Application\Narration\Port\SpeechSynthesizer::class),
+            $c->get(\App\Application\Narration\Port\AudioAssembler::class),
+            $c->get('narration_dir'),
+        );
+    },
+
+    \App\Presentation\Narration\NarrationController::class => function (ContainerInterface $c) {
+        return new \App\Presentation\Narration\NarrationController(
+            $c->get(\App\Application\Narration\RenderNarrationHandler::class),
+            $c->get('narration_dir'),
+        );
+    },
+
     // Webparser
     ParseWebpageHandler::class => function (ContainerInterface $c) {
         return new ParseWebpageHandler(

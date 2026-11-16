@@ -1,4 +1,5 @@
 import type { Lang } from '@chess-ebook/chess-shared'
+import { useSettingsStore } from '../../../shared/settings/settingsStore'
 
 /** Something that can say a sentence aloud and resolves when it is done. */
 export interface Speaker {
@@ -34,7 +35,11 @@ export function browserSpeaker(): Speaker {
         const u = new SpeechSynthesisUtterance(text)
         u.lang = LOCALE[lang]
         u.rate = rate
-        const voice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith(lang))
+        // The voice chosen in Settings, else the first one of the language.
+        const { browserVoice, voiceRate } = useSettingsStore.getState()
+        u.rate = rate * voiceRate
+        const voices = synth.getVoices()
+        const voice = voices.find((v) => v.name === browserVoice) ?? voices.find((v) => v.lang.toLowerCase().startsWith(lang))
         if (voice) u.voice = voice
         u.onend = finish
         u.onerror = finish

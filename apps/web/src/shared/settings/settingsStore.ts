@@ -107,6 +107,8 @@ export function browserLanguage(): AppLanguage {
   return code === 'es' || code === 'de' ? code : 'en'
 }
 
+export type VoiceProvider = 'browser' | 'system' | 'piper' | 'openai' | 'elevenlabs'
+
 export interface AppSettings {
   /** Language of the commentary the app writes and of the narration voice. */
   language: AppLanguage
@@ -122,6 +124,18 @@ export interface AppSettings {
   mentionPreview: 'board' | 'thumbnail'
   /** Engine depth used to review a whole game. */
   reviewDepth: number
+  /** Who speaks: the browser (live only) or a server voice (can be saved as MP3). */
+  voiceProvider: VoiceProvider
+  /** Voice name or id for the server provider (empty = its default). */
+  voiceName: string
+  /** Voice of the browser, by name (empty = the first one for the language). */
+  browserVoice: string
+  voiceRate: number
+  /** Model of the provider, when it has several (empty = default). */
+  voiceModel: string
+  /** Keys of paid providers. Kept in this browser only; sent with each render request. */
+  openaiKey: string
+  elevenlabsKey: string
   boardTheme: BoardTheme
   evalBarDirection: EvalBarDirection
   stockfishVersion: StockfishVersion
@@ -182,6 +196,13 @@ const DEFAULT: AppSettings = {
   moveHints: true,
   mentionPreview: 'board',
   reviewDepth: 14,
+  voiceProvider: 'browser',
+  voiceName: '',
+  browserVoice: '',
+  voiceRate: 1,
+  voiceModel: '',
+  openaiKey: '',
+  elevenlabsKey: '',
   boardTheme: 'blue',
   evalBarDirection: 'vertical',
   stockfishVersion: 'sf10-jsdelivr',

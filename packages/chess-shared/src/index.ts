@@ -12,3 +12,4 @@ export * from './teaching/concepts.js';
 export * from './teaching/commentCues.js';
 export * from './teaching/narration.js';
 export * from './teaching/gameReview.js';
+export * from './teaching/narrationTrack.js';

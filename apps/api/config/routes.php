@@ -10,6 +10,7 @@ use App\Presentation\Health\HealthController;
 use App\Presentation\Ingestion\IngestionController;
 use App\Presentation\Library\BookConfigController;
 use App\Presentation\Library\LibraryController;
+use App\Presentation\Narration\NarrationController;
 use App\Presentation\Notes\NotesController;
 use App\Presentation\Trainer\TrainerController;
 use App\Presentation\Recognition\RecognitionController;
@@ -71,6 +72,13 @@ return function (App $app): void {
     // Diagram routes (require JWT + Approved)
     $app->group('/api/diagrams', function (RouteCollectorProxy $group) {
         $group->post('/regenerate', [DiagramController::class, 'regenerate']);
+    })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
+
+    // Narration audio (require JWT + Approved)
+    $app->group('/api/narration', function (RouteCollectorProxy $group) {
+        $group->post('/render', [NarrationController::class, 'render']);
+        $group->get('/providers', [NarrationController::class, 'providers']);
+        $group->get('/audio/{id}.mp3', [NarrationController::class, 'audio']);
     })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
 
     // Webparser routes (require JWT + Approved)

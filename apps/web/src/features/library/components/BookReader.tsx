@@ -25,6 +25,8 @@ import { inferDiagramFen } from '../utils/inferDiagramFen'
 import { NarrationPanel } from '../narration/NarrationPanel'
 import { GameReviewPanel } from '../review/GameReviewPanel'
 import { ProblemPanel } from '../problem/ProblemPanel'
+import { TrackPlayer } from '../track/TrackPlayer'
+import { demoTrackFor } from '../../../demo/demoTracks'
 import { CorrectionWorkbench } from '../correction/CorrectionWorkbench'
 import { extractProseText, htmlToProseText, planMoveTargets, piecesByTextNode, nodeBeforeOffset } from '../utils/proseText'
 
@@ -722,6 +724,9 @@ export default function BookReader() {
         >
           {showStudy && <StudyBoard />}
           {showStudy && games.length > 0 && <NarrationPanel games={games} text={plainText} />}
+          {showStudy && games.length > 0 && (
+            <TrackPlayer games={games} text={plainText} sample={demoTrackFor(id, currentChapter)} />
+          )}
           {showStudy && games.length > 0 && <ProblemPanel games={games} text={plainText} />}
           {showStudy && games.length > 0 && <CorrectionWorkbench games={games} text={plainText} />}
           {showStudy && games.length > 0 && (
