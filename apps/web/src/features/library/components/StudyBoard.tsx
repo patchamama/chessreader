@@ -4,6 +4,7 @@ import ChessBoard from '../../../shared/chess/ChessBoard'
 import { useNarrationStore } from '../narration/narrationStore'
 import { useMoveHints, nodeQuality } from '../review/useMoveHints'
 import { useReviewStore } from '../review/reviewStore'
+import { useProblemStore } from '../problem/problemStore'
 import { CUE_COLORS } from '../narration/cueStyles'
 import { cuesToBoard, isCueArrow } from '../narration/cueStyles'
 import EvalBar from '../../viewer/components/EvalBar'
@@ -178,6 +179,9 @@ export function StudyBoard() {
         })()
       : null
 
+  // While a problem is being solved nothing may give the move away: no engine
+  // arrow, no next-move arrow, no quality tint, no move hints.
+  const solving = useProblemStore((s) => s.phase === 'solving')
   const reviews = useReviewStore((s) => s.byTree)
   const nextQuality = (() => {
     if (playFen || !activeGame || !nav.successorId) return undefined
@@ -186,7 +190,7 @@ export function StudyBoard() {
     return succ ? nodeQuality(activeGame, succ) : undefined
   })()
   const moveHintsOn = useSettingsStore((s) => s.moveHints)
-  const moveHints = useMoveHints(playFen ?? baseFen, selectedSquare, moveHintsOn && toolMode === 'none')
+  const moveHints = useMoveHints(playFen ?? baseFen, selectedSquare, moveHintsOn && toolMode === 'none' && !solving)
 
   // While the engine panel is active, feed its live score into the eval bar so
   // both stay in sync (and only one worker runs). null → bar uses its own worker.
@@ -203,7 +207,7 @@ export function StudyBoard() {
 
   // While cues are lit the engine/next-move arrows are hidden: every arrow on
   // the board then belongs to what is being said.
-  const cuesLit = narrationCues.length > 0
+  const cuesLit = narrationCues.length > 0 || solving
   const boardArrows = [...cueBoard.arrows, ...buildBoardArrows({
     userArrows: annotations.arrows,
     showEval: showEval && !cuesLit,

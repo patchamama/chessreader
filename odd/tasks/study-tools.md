@@ -47,7 +47,7 @@ Assumptions (not user statements): the app gets a `language` setting (es/en/de, 
 - T3 [S3] inline — paste-text import. Status: done (v0.42.0); "Paste text" tab in the upload form, opened in memory (not saved to the library); PGN gives one chapter per game.
 - T4 [S15] inline — investigate the 3 recognition errors on the WCh 2024 study. Status: done (v0.42.0), see L5.
 - T5 [S4,S19,S21,S9,S26] inline — engine review: accuracy per player, key moments, auto-annotation, move-quality colours, help mode. Status: done (v0.43.0), see L6.
-- T6 [S10] inline — problem mode. Status: pending
+- T6 [S10] inline — problem mode. Status: done (v0.44.0); apps/web/src/features/library/problem/: key positions = moves marked !/!!, followed by a long remark, with several lines, or rated strong by an engine review; the game is played up to each one, 3 attempts, two hint levels, show the move, score. The board hides arrows, quality tint and move hints while solving. Limit: the book text is not hidden, so the answer can be read there.
 - T7 [S7] inline — correction workbench. Status: pending
 - T8 [S5,S13,S18] inline — narration track, backend mp3, voice providers, maximisable settings, mp3 player with seek. Status: pending
 - T9 [S6] inline — demos in EN/ES/DE. Status: pending
