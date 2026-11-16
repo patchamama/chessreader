@@ -78,3 +78,30 @@ describe('a fragment that starts at a later move after a diagram', () => {
     })
   }
 })
+
+describe('verifier regressions (v0.38.0)', () => {
+  const sans = (text: string, algorithm: 1 | 2 | 3) => {
+    const games = recognizeGames(text, { algorithm })
+    return games.map((g) => g.tree.mainline.map((id) => g.tree.nodes.get(id)!.san))
+  }
+  it.each([1, 2, 3] as const)('keeps the mainline after a diagram when a variation interrupted the numbering (alg %i)', (algorithm) => {
+    const text = '1. e4 e5 2. Nf3 Nc6 3. Bb5 (3. Bc4 Bc5 4. c3) a6 4. Ba4 Nf6\n\uFFFC\n5. O-O Be7 6. Re1 b5'
+    const games = sans(text, algorithm)
+    expect(games.length).toBe(1)
+    expect(games[0].length).toBe(12)
+  })
+  it('keeps the mainline after a diagram when prose interrupted the numbering (alg 3)', () => {
+    const text = '1. e4 e5 2. Cf3 Cc6 3. Ab5 a6 4. Aa4 Cf6\n\n5. O-O! La mejor. Ae7 6. Te1 b5\n\uFFFC\n7. Ab3 d6 8. c3 O-O'
+    expect(sans(text, 3)[0].length).toBe(14)
+  })
+  it.each([1, 2, 3] as const)('starts a new game at an inline "1." of a later paragraph when an earlier bracket was never closed (alg %i)', (algorithm) => {
+    const text = '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 (see the note to move 2\n\nSmith – Jones, London 1900 1. d4 d5 2. c4 e6 3. Nc3 Nf6'
+    const games = sans(text, algorithm)
+    expect(games.length).toBe(2)
+    expect(games[1]).toEqual(['d4', 'd5', 'c4', 'e6', 'Nc3', 'Nf6'])
+  })
+  it('a fragment after a diagram is still set apart', () => {
+    const text = '1. e4 e5 2. Nf3 Nc6\n\uFFFC\n23. Rxe5 Qd7'
+    expect(sans(text, 2)[0]).toEqual(['e4', 'e5', 'Nf3', 'Nc6'])
+  })
+})

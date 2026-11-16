@@ -1,10 +1,12 @@
+import { useState } from 'react'
+import { APP_LANGUAGES, type AppLanguage } from './settingsStore'
 import { useSettingsStore, BOARD_THEMES, FONT_FAMILIES, STOCKFISH_VERSIONS, APP_THEME_PRESETS, PIECE_THEMES, type BoardTheme, type FontFamily, type EvalBarDirection, type StockfishVersion, type ImageAlign, type HeadingStyle, type EngineVariations, type AppTheme, type PieceTheme } from './settingsStore'
 
 interface SettingsPanelProps {
   onClose: () => void
 }
 
-const labelClass = 'block text-xs font-semibold text-gray-300 mb-1 mt-3'
+const labelClass = 'block text-xs font-semibold text-gray-300 mb-1 mt-3 break-after-avoid'
 const inputClass = 'w-full rounded bg-gray-700 border border-gray-600 px-2 py-1 text-sm text-white focus:outline-none focus:border-amber-400'
 
 const stepBtn =
@@ -56,6 +58,13 @@ function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; labe
 
 export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const s = useSettingsStore()
+  const [maximised, setMaximised] = useState(false)
+  const choice = (active: boolean) =>
+    `flex-1 rounded py-1 text-xs border transition-colors ${
+      active
+        ? 'bg-amber-400 text-gray-900 border-amber-400 font-semibold'
+        : 'bg-gray-700 text-gray-200 border-gray-600 hover:border-amber-400'
+    }`
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -63,9 +72,22 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
 
       {/* Panel */}
-      <div className="relative ml-auto h-full w-80 bg-gray-900 shadow-2xl overflow-y-auto p-4 flex flex-col gap-1">
-        <div className="flex items-center justify-between mb-2">
+      <div
+        data-testid="settings-panel"
+        className={`relative ml-auto h-full bg-gray-900 shadow-2xl overflow-y-auto p-4 ${
+          maximised ? 'w-full block columns-1 gap-8 sm:columns-2 lg:columns-3 [&>*]:break-inside-avoid' : 'w-80 flex flex-col gap-1'
+        }`}
+      >
+        <div className="flex items-center justify-between mb-2 [column-span:all]">
           <h2 className="text-base font-bold text-white">Settings</h2>
+          <button
+            onClick={() => setMaximised((m) => !m)}
+            className="ml-auto mr-3 text-gray-400 hover:text-white text-sm leading-none"
+            aria-label={maximised ? 'Restore settings size' : 'Maximise settings'}
+            title={maximised ? 'Restore settings size' : 'Maximise settings'}
+          >
+            {maximised ? '🗗' : '🗖'}
+          </button>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-white text-lg leading-none"
@@ -73,6 +95,48 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           >
             ✕
           </button>
+        </div>
+
+        {/* Language */}
+        <label className={labelClass} htmlFor="settings-language">Language (commentary and narration)</label>
+        <select
+          id="settings-language"
+          className={inputClass}
+          value={s.language}
+          onChange={(e) => s.set({ language: e.target.value as AppLanguage })}
+        >
+          {(Object.keys(APP_LANGUAGES) as AppLanguage[]).map((l) => (
+            <option key={l} value={l}>{APP_LANGUAGES[l]}</option>
+          ))}
+        </select>
+
+        {/* Narration */}
+        <label className={labelClass}>Narration: repeat an unanswered move after (seconds, 0 = never)</label>
+        <Stepper
+          value={s.narrationRepeatSeconds}
+          onDec={() => s.set({ narrationRepeatSeconds: Math.max(0, s.narrationRepeatSeconds - 1) })}
+          onInc={() => s.set({ narrationRepeatSeconds: Math.min(60, s.narrationRepeatSeconds + 1) })}
+          decLabel="Decrease repeat delay"
+          incLabel="Increase repeat delay"
+          canDec={s.narrationRepeatSeconds > 0}
+        />
+        <label className={labelClass}>Narration: move announcements</label>
+        <div className="flex gap-2">
+          <Toggle on={s.narrationSayColor} onClick={() => s.set({ narrationSayColor: !s.narrationSayColor })} label="Say colour" />
+        </div>
+        <div className="mt-1 flex gap-2">
+          {(['white', 'both', 'none'] as const).map((v) => (
+            <button key={v} className={choice(s.narrationSayNumber === v)} onClick={() => s.set({ narrationSayNumber: v })}>
+              {v === 'white' ? 'Number: White' : v === 'both' ? 'Number: both' : 'No number'}
+            </button>
+          ))}
+        </div>
+
+        {/* Squares named in the text */}
+        <label className={labelClass}>A square named in the text is shown on</label>
+        <div className="flex gap-2">
+          <button className={choice(s.mentionPreview === 'board')} onClick={() => s.set({ mentionPreview: 'board' })}>Main board</button>
+          <button className={choice(s.mentionPreview === 'thumbnail')} onClick={() => s.set({ mentionPreview: 'thumbnail' })}>Hover thumbnail</button>
         </div>
 
         {/* App theme */}

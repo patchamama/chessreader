@@ -117,3 +117,16 @@ describe('diagrams in the prose text', () => {
     }
   })
 })
+
+describe('nodeBeforeOffset', () => {
+  it('gives the last move written before a point of the text', async () => {
+    const { recognizeGames } = await import('@chess-ebook/chess-shared')
+    const { nodeBeforeOffset } = await import('./proseText')
+    const text = '1. e4 e5 2. Nf3 Nc6\nLa casilla d5 es importante.\n3. Bb5 a6'
+    const [game] = recognizeGames(text, { algorithm: 2 })
+    const at = text.indexOf('d5')
+    const node = nodeBeforeOffset(game.tree, at)!
+    expect(node.san).toBe('Nc6')
+    expect(nodeBeforeOffset(game.tree, 0)).toBeNull()
+  })
+})

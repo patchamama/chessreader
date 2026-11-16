@@ -98,7 +98,28 @@ export const PIECE_THEMES: Record<PieceTheme, { label: string }> = {
   staunty:  { label: 'Staunty'  },
 }
 
+export type AppLanguage = 'es' | 'en' | 'de'
+export const APP_LANGUAGES: Record<AppLanguage, string> = { es: 'Español', en: 'English', de: 'Deutsch' }
+
+/** Language of the browser when it is one the app speaks (English otherwise). */
+export function browserLanguage(): AppLanguage {
+  const code = (typeof navigator !== 'undefined' ? navigator.language : 'en').slice(0, 2).toLowerCase()
+  return code === 'es' || code === 'de' ? code : 'en'
+}
+
 export interface AppSettings {
+  /** Language of the commentary the app writes and of the narration voice. */
+  language: AppLanguage
+  /** Narration: say "White:" / "Black:" before every move. */
+  narrationSayColor: boolean
+  /** Narration: say the move number on White's moves, on both sides' or never. */
+  narrationSayNumber: 'white' | 'both' | 'none'
+  /** Narration, "I move" mode: seconds before an unanswered move is announced again (0 = never). */
+  narrationRepeatSeconds: number
+  /** Selecting a piece colours its destinations by how good each move is. */
+  moveHints: boolean
+  /** A square named in the text: show it on the main board at that point of the game, or in a hover thumbnail. */
+  mentionPreview: 'board' | 'thumbnail'
   boardTheme: BoardTheme
   evalBarDirection: EvalBarDirection
   stockfishVersion: StockfishVersion
@@ -152,6 +173,12 @@ const DEFAULT_EPUB: EpubLayout = {
 }
 
 const DEFAULT: AppSettings = {
+  language: browserLanguage(),
+  narrationSayColor: false,
+  narrationSayNumber: 'white',
+  narrationRepeatSeconds: 5,
+  moveHints: true,
+  mentionPreview: 'board',
   boardTheme: 'blue',
   evalBarDirection: 'vertical',
   stockfishVersion: 'sf10-jsdelivr',

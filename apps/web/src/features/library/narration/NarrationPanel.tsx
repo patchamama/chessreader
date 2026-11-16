@@ -4,6 +4,8 @@ import type { RecognizedGame, Lang } from '@chess-ebook/chess-shared'
 import { useNarrationStore } from './narrationStore'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { cuesToBoard, CUE_COLORS, CUE_LABELS } from './cueStyles'
+import { useSettingsStore } from '../../../shared/settings/settingsStore'
+import ChessBoard from '../../../shared/chess/ChessBoard'
 
 interface NarrationPanelProps {
   /** The games recognised in the chapter and the text they were read from. */
@@ -20,6 +22,8 @@ const T: Record<Lang, Record<string, string>> = {
     simulate: 'Simular variantes', speed: 'Velocidad', step: 'Paso',
     waiting: 'Haz la jugada en el tablero', wrong: 'Esa no es la jugada anunciada.',
     concepts: 'Conceptos mencionados', none: 'No hay partidas en este capítulo.', done: 'Fin de la partida.',
+    mismatch: 'El tablero no está en la posición esperada. Las casillas que parpadean no coinciden; así debería estar:',
+    restore: 'Restaurar posición', sayColor: 'Decir el color', number: 'Número', numWhite: 'Solo blancas', numBoth: 'Ambos', numNone: 'Nunca',
   },
   en: {
     title: 'Narration', game: 'Game', play: 'Narrate', pause: 'Pause', resume: 'Resume', stop: 'Stop',
@@ -29,6 +33,19 @@ const T: Record<Lang, Record<string, string>> = {
     simulate: 'Simulate variations', speed: 'Speed', step: 'Step',
     waiting: 'Make the move on the board', wrong: 'That is not the announced move.',
     concepts: 'Concepts mentioned', none: 'No games in this chapter.', done: 'End of the game.',
+    mismatch: 'The board is not in the expected position. Blinking squares differ; this is how it should be:',
+    restore: 'Restore position', sayColor: 'Say the colour', number: 'Number', numWhite: 'White only', numBoth: 'Both', numNone: 'Never',
+  },
+  de: {
+    title: 'Erzählung', game: 'Partie', play: 'Vorlesen', pause: 'Pause', resume: 'Weiter', stop: 'Stopp',
+    prev: 'Vorheriger Schritt', next: 'Nächster Schritt', auto: 'Automatisch', manual: 'Ich ziehe',
+    autoHint: 'Jeder Zug wird von selbst auf dem Brett ausgeführt',
+    manualHint: 'Der Zug wird angesagt und gezeigt; du führst ihn auf dem Brett aus',
+    simulate: 'Varianten zeigen', speed: 'Tempo', step: 'Schritt',
+    waiting: 'Führe den Zug auf dem Brett aus', wrong: 'Das ist nicht der angesagte Zug.',
+    concepts: 'Erwähnte Begriffe', none: 'Keine Partien in diesem Kapitel.', done: 'Ende der Partie.',
+    mismatch: 'Das Brett steht nicht in der erwarteten Stellung. Blinkende Felder weichen ab; so sollte es aussehen:',
+    restore: 'Stellung wiederherstellen', sayColor: 'Farbe ansagen', number: 'Zugnummer', numWhite: 'Nur Weiß', numBoth: 'Beide', numNone: 'Nie',
   },
 }
 
@@ -42,23 +59,32 @@ export function NarrationPanel({ games, text }: NarrationPanelProps) {
   const activeIndex = games.findIndex((g) => g.tree === activeGame)
   const gameIndex = picked !== null && picked < games.length ? picked : Math.max(0, activeIndex)
 
+  const language = useSettingsStore((s) => s.language)
+  const sayColor = useSettingsStore((s) => s.narrationSayColor)
+  const sayNumber = useSettingsStore((s) => s.narrationSayNumber)
+  const repeatSeconds = useSettingsStore((s) => s.narrationRepeatSeconds)
+  const setSettings = useSettingsStore((s) => s.set)
+  const orientation = useStudyBoardStore((s) => s.orientation)
+
   const script = useMemo(() => {
     const game = games[gameIndex]
     if (!game) return []
     return buildNarrationScript(text, game, {
       from: gameIndex > 0 ? games[gameIndex - 1].charEnd : 0,
       to: gameIndex + 1 < games.length ? games[gameIndex + 1].charStart : text.length,
+      lang: language, sayColor, sayNumber,
     })
-  }, [games, gameIndex, text])
+  }, [games, gameIndex, text, language, sayColor, sayNumber])
 
   const n = useNarrationStore()
-  const { load, stop } = n
+  const { load, stop, setOption } = n
+  useEffect(() => setOption({ repeatAfter: repeatSeconds }), [repeatSeconds, setOption])
   // (Re)load whenever the chapter, the algorithm or the chosen game changes.
   useEffect(() => {
     const game = games[gameIndex]
-    if (game) load(script, game.tree)
+    if (game) load(script, game.tree, language)
     return () => stop()
-  }, [script, games, gameIndex, load, stop])
+  }, [script, games, gameIndex, load, stop, language])
 
   const t = T[n.lang]
   if (games.length === 0) return <p className="text-xs text-slate-400">{t.none}</p>
@@ -138,6 +164,22 @@ export function NarrationPanel({ games, text }: NarrationPanelProps) {
             ))}
           </select>
         </label>
+        <label className="flex items-center gap-1">
+          <input type="checkbox" checked={sayColor} onChange={(e) => setSettings({ narrationSayColor: e.target.checked })} />
+          {t.sayColor}
+        </label>
+        <label className="flex items-center gap-1">
+          {t.number}
+          <select
+            value={sayNumber}
+            onChange={(e) => setSettings({ narrationSayNumber: e.target.value as 'white' | 'both' | 'none' })}
+            className="rounded border border-slate-300 bg-white px-1 py-0.5"
+          >
+            <option value="white">{t.numWhite}</option>
+            <option value="both">{t.numBoth}</option>
+            <option value="none">{t.numNone}</option>
+          </select>
+        </label>
       </div>
 
       <p aria-live="polite" className="mt-2 min-h-[2.5rem] rounded bg-white px-2 py-1.5 text-sm leading-snug text-slate-800">
@@ -149,6 +191,18 @@ export function NarrationPanel({ games, text }: NarrationPanelProps) {
           {t.waiting}: <strong className="font-mono">{n.expected.from} → {n.expected.to}</strong>
           {n.wrongAttempts > 0 && <span className="ml-2 text-red-700">{t.wrong}</span>}
         </p>
+      )}
+
+      {n.mismatch && (
+        <div role="alert" className="mt-1 rounded border border-red-300 bg-red-50 px-2 py-1.5 text-xs text-red-900">
+          <p>{t.mismatch}</p>
+          <div className="mt-1 flex items-end gap-2">
+            <div className="w-36" data-testid="expected-position">
+              <ChessBoard fen={n.mismatch.expectedFen} orientation={orientation} hideLabels />
+            </div>
+            <button className={button} onClick={n.restorePosition}>{t.restore}</button>
+          </div>
+        </div>
       )}
 
       {roles.length > 0 && (

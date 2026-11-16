@@ -111,3 +111,9 @@ describe('spanishToEnglish (full text)', () => {
     expect(result).toContain('Bc4')
   });
 });
+
+describe('promotion in Spanish notation', () => {
+  it('translates the promoted piece letter', () => {
+    expect(spanishToEnglish('5. bxa8=D Dc7 6. e8=T h1=C 7. g8=A')).toBe('5. bxa8=Q Qc7 6. e8=R h1=N 7. g8=B')
+  })
+})

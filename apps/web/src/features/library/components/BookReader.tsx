@@ -23,7 +23,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { DiagramImage } from './DiagramImage'
 import { inferDiagramFen } from '../utils/inferDiagramFen'
 import { NarrationPanel } from '../narration/NarrationPanel'
-import { extractProseText, htmlToProseText, planMoveTargets, piecesByTextNode } from '../utils/proseText'
+import { extractProseText, htmlToProseText, planMoveTargets, piecesByTextNode, nodeBeforeOffset } from '../utils/proseText'
 
 // The reading pane's innerHTML is set ONCE per chapter and then mutated
 // imperatively (SAN spans, highlight classes) by effects. If React re-rendered
@@ -57,6 +57,8 @@ interface MoveTooltip {
   left: number
   fen: string
   lastMove: { from: string; to: string } | null
+  /** A square to mark on the thumbnail (a square the text names). */
+  highlight?: string
 }
 
 interface ResolvedNode {
@@ -155,8 +157,22 @@ export default function BookReader() {
   // Stable refs for callbacks used inside the wrapping effect (stable deps = no re-wrap on click).
   const loadStudyNodeRef = useRef(loadStudyNode)
   const setChooserRef = useRef(setChooser)
-  const setIsolatedHighlightRef = useRef(setIsolatedHighlight)
-  useEffect(() => { setIsolatedHighlightRef.current = setIsolatedHighlight }, [setIsolatedHighlight])
+  const mentionPreview = useSettingsStore((s) => s.mentionPreview)
+  const mentionPreviewRef = useRef(mentionPreview)
+  useEffect(() => { mentionPreviewRef.current = mentionPreview }, [mentionPreview])
+  // A square named in the text only makes sense on the position the text is
+  // talking about: put the board at the last move written before it, then light
+  // the square.
+  const showMention = (entry: { iso: IsolatedMove; tree: GameTree }) => {
+    const at = nodeBeforeOffset(entry.tree, entry.iso.charStart ?? 0)
+    const board = useStudyBoardStore.getState()
+    if (board.activeGame !== entry.tree || board.currentNodeId !== (at?.id ?? null) || board.playFen) {
+      loadStudyPosition(entry.tree, at ? at.id : null, !!at && !entry.tree.mainline.includes(at.id))
+    }
+    setIsolatedHighlight({ square: entry.iso.square, piece: entry.iso.piece })
+  }
+  const showMentionRef = useRef(showMention)
+  useEffect(() => { showMentionRef.current = showMention })
 
   const rawHtml = data?.html ?? ''
 
@@ -192,6 +208,15 @@ export default function BookReader() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recognitionAlgorithm])
 
+  // Opening a chapter selects its first move, so the arrow keys work at once.
+  useEffect(() => {
+    if (games.length === 0) return
+    const board = useStudyBoardStore.getState()
+    if (games.some((g) => g.tree === board.activeGame)) return
+    const first = games[0].tree
+    board.loadPosition(first, first.mainline[0] ?? null, false)
+  }, [games])
+
   // Flatten every game's recognition errors for the error panel.
   const recognitionErrors = useMemo<FlatError[]>(
     () =>
@@ -225,7 +250,7 @@ export default function BookReader() {
   // span's data-node-id, so re-wrapping never detaches behaviour from spans.
   const moveRegistry = useRef(new Map<string, ResolvedNode>())
   // Registry for isolated prose moves: span key → { square, piece }.
-  const isoRegistry = useRef(new Map<string, IsolatedMove>())
+  const isoRegistry = useRef(new Map<string, { iso: IsolatedMove; tree: GameTree }>())
 
   // Wraps SAN moves in spans. Re-runs ONLY when the content changes (new
   // chapter), NOT on click/hover — the active-move highlight is a separate,
@@ -288,7 +313,7 @@ export default function BookReader() {
             if (!isoKey) {
               isoKey = `iso-${isoSeq++}`
               isoKeys.set(t, isoKey)
-              isoRegistry.current.set(isoKey, t.iso)
+              isoRegistry.current.set(isoKey, { iso: t.iso, tree: games[t.gameIndex].tree })
             }
             span.setAttribute('data-iso-square', t.iso.square)
             span.setAttribute('data-iso-key', isoKey)
@@ -407,8 +432,19 @@ export default function BookReader() {
       // Isolated prose move → preview its square on the study board on hover.
       const isoKey = span.dataset.isoKey
       if (isoKey) {
-        const iso = isoRegistry.current.get(isoKey)
-        if (iso) setIsolatedHighlightRef.current({ square: iso.square, piece: iso.piece })
+        const entry = isoRegistry.current.get(isoKey)
+        if (!entry) return
+        if (mentionPreviewRef.current === 'thumbnail') {
+          // Leave the main board alone: a thumbnail of the game at this point.
+          const at = nodeBeforeOffset(entry.tree, entry.iso.charStart ?? 0)
+          const rect = span.getBoundingClientRect()
+          setTooltipRef.current({
+            top: rect.bottom + 6, left: rect.left, fen: at ? at.fen : entry.tree.startFen,
+            lastMove: null, highlight: entry.iso.square,
+          })
+        } else {
+          showMentionRef.current(entry)
+        }
         return
       }
       const fen = span.dataset.fen
@@ -429,7 +465,7 @@ export default function BookReader() {
 
     const onOut = (e: Event) => {
       const span = findSpan(e.target)
-      if (!span || !span.dataset.fen) return
+      if (!span || (!span.dataset.fen && !span.dataset.isoKey)) return
       // Don't hide if moving into the tooltip itself.
       const related = (e as MouseEvent).relatedTarget as HTMLElement | null
       if (related?.closest?.('[data-move-tooltip]')) return
@@ -446,8 +482,8 @@ export default function BookReader() {
       // Isolated prose move → highlight its square on the study board.
       const isoKey = span.dataset.isoKey
       if (isoKey) {
-        const iso = isoRegistry.current.get(isoKey)
-        if (iso) setIsolatedHighlightRef.current({ square: iso.square, piece: iso.piece })
+        const entry = isoRegistry.current.get(isoKey)
+        if (entry) showMentionRef.current(entry)
         return
       }
 
@@ -721,7 +757,15 @@ export default function BookReader() {
           onMouseLeave={() => { if (tooltipTimer.current) clearTimeout(tooltipTimer.current); setTooltip(null) }}
         >
           <div style={{ width: 220 }}>
-            <ChessBoardThemed fen={tooltip.fen} orientation="white" lastMove={tooltip.lastMove} hideLabels />
+            <ChessBoardThemed
+              fen={tooltip.fen}
+              orientation="white"
+              lastMove={tooltip.lastMove}
+              hideLabels
+              customSquareStyles={tooltip.highlight
+                ? { [tooltip.highlight]: { backgroundColor: 'rgba(250, 204, 21, 0.55)', boxShadow: 'inset 0 0 0 3px rgba(202, 138, 4, 0.9)' } }
+                : undefined}
+            />
           </div>
         </div>
       )}

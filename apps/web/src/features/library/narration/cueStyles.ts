@@ -18,18 +18,26 @@ export const CUE_COLORS: Record<CueRole, string> = {
   to: '#65a30d',
   capture: '#dc2626',
   check: '#be123c',
+  good: '#16a34a',
+  dubious: '#f59e0b',
+  bad: '#e11d48',
 }
 
 export const CUE_LABELS: Record<Lang, Record<CueRole, string>> = {
   es: {
     mention: 'Casilla mencionada', piece: 'Pieza mencionada', attacker: 'Ataca', target: 'Atacada',
     defender: 'Defiende', line: 'Diagonal, columna o fila', pawn: 'Peones', from: 'Origen',
-    to: 'Destino', capture: 'Captura', check: 'Jaque',
+    to: 'Destino', capture: 'Captura', check: 'Jaque', good: 'Buena jugada', dubious: 'Jugada dudosa', bad: 'Mala jugada',
   },
   en: {
     mention: 'Square mentioned', piece: 'Piece mentioned', attacker: 'Attacks', target: 'Attacked',
     defender: 'Defends', line: 'Diagonal, file or rank', pawn: 'Pawns', from: 'From',
-    to: 'To', capture: 'Capture', check: 'Check',
+    to: 'To', capture: 'Capture', check: 'Check', good: 'Good move', dubious: 'Dubious move', bad: 'Bad move',
+  },
+  de: {
+    mention: 'Genanntes Feld', piece: 'Genannte Figur', attacker: 'Greift an', target: 'Angegriffen',
+    defender: 'Verteidigt', line: 'Diagonale, Linie oder Reihe', pawn: 'Bauern', from: 'Von',
+    to: 'Nach', capture: 'Schlagen', check: 'Schach', good: 'Guter Zug', dubious: 'Zweifelhafter Zug', bad: 'Schlechter Zug',
   },
 }
 
@@ -51,7 +59,7 @@ export interface CueBoard {
 
 /** Lines sit under everything; a square named twice keeps its strongest role. */
 const WEIGHT: Record<CueRole, number> = {
-  line: 0, mention: 1, pawn: 2, from: 2, to: 3, piece: 4, defender: 5, attacker: 6, capture: 6, target: 7, check: 8,
+  line: 0, mention: 1, pawn: 2, from: 2, to: 3, piece: 4, defender: 5, attacker: 6, capture: 6, good: 6, dubious: 6, bad: 6, target: 7, check: 8,
 }
 
 export function cuesToBoard(cues: BoardCue[]): CueBoard {

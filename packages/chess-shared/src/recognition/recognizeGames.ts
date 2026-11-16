@@ -101,6 +101,12 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
   let afterDiagram = false;
   let inFragment = false;
   let fragmentLastPly = 0;
+  // Furthest ply written at top level so far, whatever the paragraph. The
+  // number-only reading above stalls when a variation or a remark interrupts a
+  // line ("3. Bb5 (3. Bc4 …) a6 4. Ba4"); a paragraph is a fragment only when it
+  // jumps past EVERYTHING the game has reached.
+  let maxTopPly = 0;
+  let prevTopPly = 0;
 
   const startNewGame = () => {
     if (current.some(t => t.type === 'move')) gameSequences.push(current);
@@ -108,11 +114,14 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
     depth = 0;
     lastMainPly = 0;
     inFragment = false;
+    maxTopPly = 0;
+    prevTopPly = 0;
   };
 
   for (const token of tokens) {
     if (token.type === 'paragraph-break') {
       openedInParagraph = false;
+      prevTopPly = 0;
       if (depth === 0) { paragraphDecided = false; inMainParagraph = false; }
     } else if (token.type === 'variation-open') {
       depth++;
@@ -132,7 +141,9 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
     // position. Post-result analysis uses higher move numbers (19., 20., …) and
     // stays in this game.
     if (token.type === 'move-number' && token.moveNumber === 1 && !token.isEllipsis) {
-      const topLevel = depth === 0 || (!!token.atParagraphStart && !openedInParagraph);
+      // Inside a bracket opened in an EARLIER paragraph and never closed, a "1."
+      // of a later paragraph is a new game ("Smith – Jones, London 1900 1. d4").
+      const topLevel = depth === 0 || !openedInParagraph;
       if (topLevel && (sawMove1 || inFragment) && (inFragment || current.some(t => t.type === 'move'))) {
         startNewGame();
       }
@@ -147,8 +158,8 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
       if (inFragment) {
         // Back to the game at its own next ply (unless the fragment itself
         // continues there); anything else stays with the fragment.
-        if (p === lastMainPly + 1 && p !== fragmentLastPly + 1) inFragment = false;
-      } else if (afterDiagram && lastMainPly > 0 && p > lastMainPly + 1) {
+        if ((p === lastMainPly + 1 || p === maxTopPly + 1) && p !== fragmentLastPly + 1) inFragment = false;
+      } else if (afterDiagram && lastMainPly > 0 && p > Math.max(lastMainPly, maxTopPly) + 1) {
         inFragment = true;
         fragmentLastPly = p - 1;
       }
@@ -158,6 +169,12 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
     if (inFragment) {
       if (token.type === 'move' && !token.isolated && depth === 0) fragmentLastPly = Math.max(fragmentLastPly, ply(token));
       continue; // set apart: not part of the current game
+    }
+
+    if (token.type === 'move' && depth === 0 && !token.isolated) {
+      const here = token.moveNumber !== undefined ? ply(token) : prevTopPly > 0 ? prevTopPly + 1 : 0;
+      prevTopPly = here;
+      maxTopPly = Math.max(maxTopPly, here);
     }
 
     if (token.type === 'move' && depth === 0 && !token.isolated && token.moveNumber !== undefined) {

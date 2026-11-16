@@ -18,10 +18,13 @@ export type NarrationStatus = 'idle' | 'playing' | 'paused' | 'waiting-move' | '
 interface Runtime {
   speaker: Speaker
   delay: (ms: number) => Promise<void>
+  /** Wait used to repeat an announcement nobody answered. */
+  timeout: (ms: number) => Promise<void>
 }
 let runtime: Runtime = {
   speaker: browserSpeaker(),
   delay: (ms) => new Promise((r) => setTimeout(r, ms)),
+  timeout: (ms) => new Promise((r) => setTimeout(r, ms)),
 }
 /** Swap the speaker/timer (tests, or another output device). */
 export function setNarrationRuntime(next: Partial<Runtime>) {
@@ -45,15 +48,22 @@ interface NarrationState {
   /** 'manual' mode: the move the narration is waiting for. */
   expected: { from: string; to: string; nodeId: string } | null
   wrongAttempts: number
+  /** 'manual' mode: the board is not where the narration is — the squares that
+   *  differ from the expected position, and that position. */
+  mismatch: { squares: string[]; expectedFen: string } | null
+  /** 'manual' mode: seconds without the move before the announcement is repeated (0 = never). */
+  repeatAfter: number
   /** Glossary concepts mentioned so far, in order of appearance. */
   concepts: string[]
 
-  load: (script: NarrationStep[], tree: GameTree) => void
+  load: (script: NarrationStep[], tree: GameTree, lang?: Lang) => void
+  /** Drop the pieces moved by hand and show the position the narration expects. */
+  restorePosition: () => void
   play: () => void
   pause: () => void
   stop: () => void
   goTo: (stepIndex: number) => void
-  setOption: (o: Partial<Pick<NarrationState, 'mode' | 'simulate' | 'rate'>>) => void
+  setOption: (o: Partial<Pick<NarrationState, 'mode' | 'simulate' | 'rate' | 'repeatAfter'>>) => void
 }
 
 /** Bumped to cancel the running loop (pause, stop, jump, reload). */
@@ -84,18 +94,31 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
         if (mode === 'manual') {
           // Announce and show the move on the position before it, then wait.
           show(tree, node.parentId)
-          set({ cues: sentence.cues, caption: step.speech, status: 'playing' })
+          set({ cues: sentence.cues, caption: step.caption, status: 'playing', mismatch: null })
           await runtime.speaker.speak(step.speech, lang, rate)
           if (!alive()) return
+          let moved = false
+          const waitMove = new Promise<void>((resolve) => { moveWaiter = () => { moved = true; resolve() } })
           set({ status: 'waiting-move', expected: { from: node.from, to: node.to, nodeId: node.id }, wrongAttempts: 0 })
-          await new Promise<void>((resolve) => { moveWaiter = resolve })
+          // The move may already be on the board (made while it was announced).
+          const played = board().playFen
+          if (played && samePosition(played, node.fen)) moved = true
+          else if (played) set({ mismatch: { squares: diffSquares(played, node.fen), expectedFen: node.fen } })
+          while (!moved && alive()) {
+            const repeat = get().repeatAfter
+            await Promise.race([waitMove, repeat > 0 ? runtime.timeout(repeat * 1000) : new Promise<void>(() => {})])
+            if (moved || !alive()) break
+            // Nobody moved: say it and light it again.
+            set({ cues: sentence.cues, caption: step.caption })
+            await runtime.speaker.speak(step.speech, lang, rate)
+          }
           moveWaiter = null
           if (!alive()) return
-          set({ status: 'playing', expected: null })
+          set({ status: 'playing', expected: null, mismatch: null })
           show(tree, node.id)
         } else {
           show(tree, node.id)
-          set({ cues: sentence.cues, caption: step.speech })
+          set({ cues: sentence.cues, caption: step.caption })
           await runtime.speaker.speak(step.speech, lang, rate)
           if (!alive()) return
         }
@@ -105,23 +128,26 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
         for (const sentence of step.sentences) {
           set({ cues: sentence.cues, caption: sentence.text })
           addConcepts(sentence.cues)
-          await runtime.speaker.speak(sentence.speech, lang, rate)
-          if (!alive()) return
-          if (simulate && sentence.moves.length > 0) {
-            // Play the quoted line on the board, move by move, then go back.
-            for (const id of sentence.moves) {
-              const v = tree.nodes.get(id)
-              if (!v) continue
-              show(tree, id)
+          const quotes = simulate && sentence.parts.some((p) => p.moveId)
+          if (!quotes) {
+            await runtime.speaker.speak(sentence.speech, lang, rate)
+            if (!alive()) return
+            continue
+          }
+          // A quoted line: every move goes on the board as it is said.
+          for (const part of sentence.parts) {
+            const v = part.moveId ? tree.nodes.get(part.moveId) : undefined
+            if (v) {
+              show(tree, v.id)
               set({ cues: [moveCue({ san: v.san, from: v.from, to: v.to, fen: v.fen })] })
-              await runtime.delay(1100 / rate)
-              if (!alive()) return
             }
-            show(tree, step.nodeId)
-            set({ cues: [] })
-            await runtime.delay(500 / rate)
+            await runtime.speaker.speak(part.speech, lang, rate)
             if (!alive()) return
           }
+          await runtime.delay(600 / rate)
+          if (!alive()) return
+          show(tree, step.nodeId)
+          set({ cues: [] })
         }
       }
       set({ stepIndex: get().stepIndex + 1 })
@@ -150,30 +176,47 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
     caption: '',
     expected: null,
     wrongAttempts: 0,
+    mismatch: null,
+    repeatAfter: 5,
     concepts: [],
 
-    load: (script, tree) => {
+    restorePosition: () => {
+      board().resetPlay()
+      set({ mismatch: null })
+    },
+    load: (script, tree, lang) => {
       halt()
       set({
         script, tree, stepIndex: 0, status: 'idle', cues: [], caption: '', expected: null, wrongAttempts: 0,
-        concepts: [], lang: detectLang(script.map((s) => s.sentences.map((x) => x.text).join(' ')).join(' ')),
+        mismatch: null, concepts: [], lang: lang ?? detectLang(script.map((s) => s.sentences.map((x) => x.text).join(' ')).join(' ')),
       })
     },
     play: () => {
       const s = get()
       if (!s.tree || s.script.length === 0 || s.status === 'playing' || s.status === 'waiting-move') return
       halt()
-      set({ status: 'playing', stepIndex: s.status === 'finished' ? 0 : s.stepIndex, expected: null })
+      // Start where the board is: the move the reader selected, if it is not
+      // the one the narration stopped at.
+      let stepIndex = s.status === 'finished' ? 0 : s.stepIndex
+      const b = board()
+      const here = s.script[stepIndex]
+      if (s.status !== 'finished' && b.activeGame === s.tree && b.currentNodeId && here?.nodeId !== b.currentNodeId) {
+        const selected = s.script.findIndex((x) => x.kind === 'move' && x.nodeId === b.currentNodeId)
+        if (selected >= 0) stepIndex = selected
+      }
+      set({ status: 'playing', stepIndex, expected: null, mismatch: null })
       void run(runToken)
     },
     pause: () => {
       if (get().status !== 'playing' && get().status !== 'waiting-move') return
       halt()
-      set({ status: 'paused', expected: null })
+      set({ status: 'paused', expected: null, mismatch: null })
     },
     stop: () => {
       halt()
-      set({ status: 'idle', stepIndex: 0, cues: [], caption: '', expected: null, wrongAttempts: 0 })
+      const { tree, status } = get()
+      if (tree && status !== 'idle' && board().activeGame === tree) show(tree, null)
+      set({ status: 'idle', stepIndex: 0, cues: [], caption: '', expected: null, wrongAttempts: 0, mismatch: null })
     },
     goTo: (stepIndex) => {
       const { script, tree, status } = get()
@@ -184,8 +227,8 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
       const step = script[index]
       show(tree, step.kind === 'move' && get().mode === 'manual' ? tree.nodes.get(step.nodeId!)!.parentId : step.nodeId)
       set({
-        stepIndex: index, cues: step.sentences[0].cues, expected: null,
-        caption: step.kind === 'move' ? step.speech : step.sentences[0].text,
+        stepIndex: index, cues: step.sentences[0].cues, expected: null, mismatch: null,
+        caption: step.kind === 'move' ? step.caption : step.sentences[0].text,
         status: resume ? 'playing' : 'paused',
       })
       if (resume) void run(runToken)
@@ -197,16 +240,44 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
 // 'manual' mode: the user's move on the study board answers the narration.
 // Free play sets `playFen`; compare it with the position the announced move
 // leads to (piece placement, side to move, castling, en passant).
-const samePosition = (a: string, b: string) => a.split(' ').slice(0, 4).join(' ') === b.split(' ').slice(0, 4).join(' ')
+function samePosition(a: string, b: string) {
+  return a.split(' ').slice(0, 4).join(' ') === b.split(' ').slice(0, 4).join(' ')
+}
+
+/** Squares whose content differs between two positions. */
+export function diffSquares(fenA: string, fenB: string): string[] {
+  const cells = (fen: string) => {
+    const out: string[] = []
+    for (const row of fen.split(' ')[0].split('/')) {
+      for (const ch of row) {
+        if (/\d/.test(ch)) for (let i = 0; i < Number(ch); i++) out.push('')
+        else out.push(ch)
+      }
+    }
+    return out
+  }
+  const a = cells(fenA)
+  const b = cells(fenB)
+  const out: string[] = []
+  for (let i = 0; i < 64; i++) if (a[i] !== b[i]) out.push(`${'abcdefgh'[i % 8]}${8 - Math.floor(i / 8)}`)
+  return out
+}
+
 useStudyBoardStore.subscribe((s, prev) => {
-  if (!s.playFen || s.playFen === prev.playFen) return
+  if (s.playFen === prev.playFen) return
   const n = useNarrationStore.getState()
   if (n.status !== 'waiting-move' || !n.expected || !n.tree) return
   const node = n.tree.nodes.get(n.expected.nodeId)
-  if (node && samePosition(s.playFen, node.fen)) {
-    const w = moveWaiter
-    moveWaiter = null
-    w?.()
+  if (!node) return
+  if (!s.playFen) {
+    if (n.mismatch) useNarrationStore.setState({ mismatch: null })
+    return
+  }
+  if (samePosition(s.playFen, node.fen)) {
+    moveWaiter?.()
+  } else if (n.mismatch) {
+    // Already off the expected position: keep showing what still differs.
+    useNarrationStore.setState({ mismatch: { squares: diffSquares(s.playFen, node.fen), expectedFen: node.fen } })
   } else {
     useStudyBoardStore.getState().resetPlay()
     useNarrationStore.setState({ wrongAttempts: n.wrongAttempts + 1 })

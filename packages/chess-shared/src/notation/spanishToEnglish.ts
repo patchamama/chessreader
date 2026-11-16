@@ -107,7 +107,9 @@ export function spanishToEnglish(text: string): string {
     // R (Rey/King) -> K  — only in Spanish context (no English markers present)
     .replace(new RegExp(`(?<=^|[\\s(])R${tail}`, 'g'), 'K')
     // Restore Rook placeholder
-    .replace(/\x00ROOK\x00/g, 'R');
+    .replace(/\x00ROOK\x00/g, 'R')
+    // Promotion: the piece the pawn becomes ("bxa8=D" → "bxa8=Q").
+    .replace(/([a-h][18])=([DTAC])(?![a-z])/g, (_m, sq: string, p: string) => `${sq}=${({ D: 'Q', T: 'R', A: 'B', C: 'N' } as Record<string, string>)[p]}`);
 
   return result;
 }

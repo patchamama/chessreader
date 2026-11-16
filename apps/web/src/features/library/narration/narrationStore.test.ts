@@ -41,6 +41,7 @@ describe('narration, automatic mode', () => {
   it('speaks every sentence in order and ends on the last move', async () => {
     const n = useNarrationStore.getState()
     n.load(script, game.tree)
+    n.setOption({ simulate: false })
     n.play()
     await settle(() => useNarrationStore.getState().status === 'finished')
     expect(spoken).toEqual(script.flatMap((s) => s.sentences.map((x) => x.speech)))
@@ -109,7 +110,7 @@ describe('narration, "I move the pieces" mode', () => {
     n.play()
     await settle(() => useNarrationStore.getState().status === 'waiting-move')
     const s = useNarrationStore.getState()
-    expect(spoken[spoken.length - 1]).toBe('1. Blancas: peón a e 4')
+    expect(spoken[spoken.length - 1]).toBe('1. peón a e 4')
     expect(s.expected).toMatchObject({ from: 'e2', to: 'e4' })
     // The board still shows the position BEFORE the move, with the move lit.
     expect(useStudyBoardStore.getState().currentNodeId).toBeNull()
@@ -140,7 +141,7 @@ describe('narration, "I move the pieces" mode', () => {
     await settle(() => useNarrationStore.getState().expected?.to === 'e5')
     expect(useStudyBoardStore.getState().currentNodeId).toBe(main[0])
     expect(useNarrationStore.getState().status).toBe('waiting-move')
-    expect(spoken[spoken.length - 1]).toBe('1. Negras: peón a e 5')
+    expect(spoken[spoken.length - 1]).toBe('peón a e 5')
   })
 })
 
@@ -179,5 +180,96 @@ describe('narration controls', () => {
     expect(useNarrationStore.getState().stepIndex).toBe(idx)
     expect(useStudyBoardStore.getState().currentNodeId).toBe(script[idx].nodeId)
     expect(useNarrationStore.getState().caption).toBe(script[idx].sentences[0].text)
+  })
+})
+
+describe('narration fixes', () => {
+  const variationIds = script[8].sentences[1].moves
+
+  it('shows each quoted variation move WHILE it is said, not after the sentence', async () => {
+    const atSpeech: Array<[string, string | null]> = []
+    setNarrationRuntime({
+      speaker: { speak: async (text) => { atSpeech.push([text, useStudyBoardStore.getState().currentNodeId]) }, cancel: () => {} },
+      delay: async () => {},
+    })
+    const n = useNarrationStore.getState()
+    n.load(script, game.tree)
+    n.setOption({ simulate: true, mode: 'auto' })
+    n.play()
+    await settle(() => useNarrationStore.getState().status === 'finished')
+    const exd4 = atSpeech.find(([text]) => text.startsWith('peón e por de 4'))!
+    expect(exd4[1]).toBe(variationIds[0])
+    const nxd4 = atSpeech.find(([text]) => text.startsWith('caballo por de 4'))!
+    expect(nxd4[1]).toBe(variationIds[1])
+  })
+
+  it('starts at the move selected on the board, not at the beginning', async () => {
+    const n = useNarrationStore.getState()
+    n.load(script, game.tree)
+    n.setOption({ mode: 'auto', simulate: false })
+    useStudyBoardStore.getState().loadPosition(game.tree, main[4], false)
+    n.play()
+    await settle(() => useNarrationStore.getState().status === 'finished')
+    expect(spoken[0]).toBe(script.find((s) => s.nodeId === main[4] && s.kind === 'move')!.speech)
+  })
+
+  it('manual mode accepts the move made while it was still being announced', async () => {
+    const node = game.tree.nodes.get(main[0])!
+    setNarrationRuntime({
+      speaker: {
+        speak: async (text) => {
+          spoken.push(text)
+          if (text.includes('peón a e 4')) useStudyBoardStore.getState().playMove(node.from, node.to, game.tree.startFen)
+        },
+        cancel: () => {},
+      },
+      delay: async () => {},
+    })
+    const n = useNarrationStore.getState()
+    n.load(script, game.tree)
+    n.setOption({ mode: 'manual', simulate: false })
+    n.goTo(1)
+    n.play()
+    await settle(() => useNarrationStore.getState().stepIndex >= 2)
+    expect(useNarrationStore.getState().stepIndex).toBeGreaterThanOrEqual(2)
+  })
+
+  it('manual mode reports the squares that differ when the board is somewhere else', async () => {
+    setNarrationRuntime({
+      speaker: {
+        speak: async (text) => {
+          if (text.includes('peón a e 4')) useStudyBoardStore.getState().playMove('d2', 'd4', game.tree.startFen)
+        },
+        cancel: () => {},
+      },
+      delay: async () => {},
+    })
+    const n = useNarrationStore.getState()
+    n.load(script, game.tree)
+    n.setOption({ mode: 'manual', simulate: false })
+    n.goTo(1)
+    n.play()
+    await settle(() => useNarrationStore.getState().mismatch !== null)
+    const m = useNarrationStore.getState().mismatch!
+    expect(m.squares.sort()).toEqual(['d2', 'd4', 'e2', 'e4'])
+    expect(m.expectedFen).toBe(game.tree.nodes.get(main[0])!.fen)
+    expect(useNarrationStore.getState().status).toBe('waiting-move')
+  })
+
+  it('manual mode repeats the announcement when no move comes', async () => {
+    let timeouts = 0
+    setNarrationRuntime({
+      speaker: { speak: async (text) => { spoken.push(text) }, cancel: () => {} },
+      delay: async () => {},
+      timeout: () => (timeouts++ < 2 ? Promise.resolve() : new Promise(() => {})),
+    })
+    const n = useNarrationStore.getState()
+    n.load(script, game.tree)
+    n.setOption({ mode: 'manual', simulate: false, repeatAfter: 5 })
+    n.goTo(1)
+    n.play()
+    await settle(() => spoken.length >= 3)
+    expect(spoken).toEqual([script[1].speech, script[1].speech, script[1].speech])
+    expect(useNarrationStore.getState().status).toBe('waiting-move')
   })
 })

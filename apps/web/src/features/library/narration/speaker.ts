@@ -6,7 +6,7 @@ export interface Speaker {
   cancel(): void
 }
 
-const LOCALE: Record<Lang, string> = { es: 'es-ES', en: 'en-US' }
+const LOCALE: Record<Lang, string> = { es: 'es-ES', en: 'en-US', de: 'de-DE' }
 
 /**
  * Narrator on the browser's speech synthesis (no network, no key). Where the

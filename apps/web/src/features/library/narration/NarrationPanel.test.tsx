@@ -5,6 +5,7 @@ import { NarrationPanel } from './NarrationPanel'
 import { useNarrationStore, setNarrationRuntime } from './narrationStore'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { cuesToBoard, CUE_COLORS, isCueArrow } from './cueStyles'
+import { useSettingsStore } from '../../../shared/settings/settingsStore'
 
 const TEXT = [
   '1. e4 e5 2. ♘f3 d6',
@@ -15,6 +16,7 @@ const games = recognizeGames(TEXT, { algorithm: 2 })
 
 beforeEach(() => {
   useStudyBoardStore.getState().reset()
+  useSettingsStore.setState({ language: 'es', narrationSayColor: false, narrationSayNumber: 'white' })
   setNarrationRuntime({ speaker: { speak: async () => {}, cancel: () => {} }, delay: async () => {} })
 })
 
@@ -65,5 +67,27 @@ describe('cuesToBoard', () => {
     expect(board.arrows).toEqual([{ startSquare: 'b3', endSquare: 'f7', color: CUE_COLORS.attacker }])
     expect(isCueArrow(board.arrows[0])).toBe(true)
     expect(isCueArrow({ startSquare: 'a1', endSquare: 'a2', color: 'red' })).toBe(false)
+  })
+})
+
+describe('NarrationPanel language and options', () => {
+  it('speaks the language chosen for the app, whatever the text is written in', async () => {
+    const said: Array<[string, string]> = []
+    setNarrationRuntime({ speaker: { speak: async (text, lang) => { said.push([text, lang]) }, cancel: () => {} }, delay: async () => {} })
+    useSettingsStore.setState({ language: 'de' })
+    render(<NarrationPanel games={games} text={TEXT} />)
+    fireEvent.click(screen.getByRole('button', { name: /Vorlesen/ }))
+    await waitFor(() => expect(said.length).toBeGreaterThan(0))
+    expect(said[0]).toEqual(['1. Bauer nach e 4', 'de'])
+  })
+
+  it('saying the colour is an option, off by default', async () => {
+    const said: string[] = []
+    setNarrationRuntime({ speaker: { speak: async (text) => { said.push(text) }, cancel: () => {} }, delay: async () => {} })
+    render(<NarrationPanel games={games} text={TEXT} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Decir el color' }))
+    fireEvent.click(screen.getByRole('button', { name: /Narrar/ }))
+    await waitFor(() => expect(said.length).toBeGreaterThan(0))
+    expect(said[0]).toBe('1. Blancas: peón a e 4')
   })
 })

@@ -32,7 +32,27 @@ export type CueRole =
   | 'from'      // origin of a move
   | 'to'        // destination of a move
   | 'capture'   // destination of a capture
-  | 'check';    // the king in check
+  | 'check'     // the king in check
+  | 'good'      // destination of a good move (text "!" or engine)
+  | 'dubious'   // destination of a dubious move ("?!", "!?")
+  | 'bad';      // destination of a bad move ("?", "??")
+
+/** How good a move is, as the text marks it or an engine judges it. */
+export type MoveQuality = 'brilliant' | 'good' | 'interesting' | 'dubious' | 'mistake' | 'blunder';
+
+const QUALITY_ROLE: Record<MoveQuality, CueRole> = {
+  brilliant: 'good', good: 'good', interesting: 'dubious', dubious: 'dubious', mistake: 'bad', blunder: 'bad',
+};
+
+/** Quality a move is given by its annotation glyph or NAG ("!", "??", "$6"). */
+export function qualityFromAnnotation(mark: string): MoveQuality | undefined {
+  const m = /^\s*(\?\?|!!|\?!|!\?|\?|!|\$[1-6]\b)/.exec(mark);
+  if (!m) return undefined;
+  return ({
+    '!!': 'brilliant', '!': 'good', '!?': 'interesting', '?!': 'dubious', '?': 'mistake', '??': 'blunder',
+    $1: 'good', $2: 'mistake', $3: 'brilliant', $4: 'blunder', $5: 'interesting', $6: 'dubious',
+  } as Record<string, MoveQuality>)[m[1]];
+}
 
 export interface CueSquare {
   square: string;
@@ -46,7 +66,7 @@ export interface CueArrow {
   role: CueRole;
 }
 
-export type CueKind = 'square' | 'piece' | 'line' | 'relation' | 'structure' | 'move' | 'concept';
+export type CueKind = 'square' | 'piece' | 'line' | 'relation' | 'structure' | 'move' | 'concept' | 'area' | 'route';
 
 export interface BoardCue {
   kind: CueKind;
@@ -56,6 +76,8 @@ export interface BoardCue {
   arrows: CueArrow[];
   /** Glossary concept this cue illustrates, if any. */
   concept?: string;
+  /** For a move cue: how good the move is (a board may colour it). */
+  quality?: MoveQuality;
   /** Offsets of the phrase in the analysed text. */
   start: number;
   end: number;
@@ -83,8 +105,12 @@ const plainText = (s: string) =>
 const PIECE_WORDS: Record<string, PieceSymbol> = {
   rey: 'k', dama: 'q', reina: 'q', torre: 'r', alfil: 'b', caballo: 'n', peon: 'p',
   king: 'k', queen: 'q', rook: 'r', bishop: 'b', knight: 'n', pawn: 'p',
+  konig: 'k', konige: 'k', konigs: 'k', damen: 'q', turm: 'r', turme: 'r', turms: 'r',
+  laufer: 'b', laufers: 'b', springer: 'n', springers: 'n', bauer: 'p', bauern: 'p',
 };
-const PIECE_RE = 'rey|damas?|reina|torres?|alfil(?:es)?|caballos?|peon(?:es)?|kings?|queens?|rooks?|bishops?|knights?|pawns?';
+const PIECE_RE = 'rey|damas?|reina|torres?|alfil(?:es)?|caballos?|peon(?:es)?|kings?|queens?|rooks?|bishops?|knights?|pawns?|konig(?:e|s)?|damen?|turm(?:e|s)?|laufers?|springers?|bauern?';
+const COLOUR_RE = 'blanc[oa]s?|negr[oa]s?|white|black|wei(?:ß|ss)\\w*|schwarz\\w*';
+const ON_RE = '(?:de|en|on|at|auf|von)\\s+(?:(?:la\\s+|the\\s+|dem\\s+)?(?:casilla|square|feld)\\s+)?';
 const pieceOf = (word: string): PieceSymbol => {
   const w = word.replace(/(es|s)$/, '');
   return PIECE_WORDS[word] ?? PIECE_WORDS[w] ?? PIECE_WORDS[word.replace(/s$/, '')] ?? 'p';
@@ -97,6 +123,8 @@ const ORDINALS: Record<string, number> = {
 
 interface Ref {
   square: string;
+  /** Set for a piece named WITHOUT a square ("la dama"): which piece it is depends on who acts on it. */
+  bare?: PieceSymbol;
   /** true when a piece of the named kind really stands on the square. */
   piece: boolean;
   start: number;
@@ -125,7 +153,7 @@ export function analyseComment(text: string, fen: string, options: AnalyseOption
   const refs: Ref[] = [];
   const claimed = new Set<number>(); // start offsets of squares used by a piece ref
   {
-    const re = new RegExp(`\\b(${PIECE_RE})(?:\\s+(?:blanc[oa]s?|negr[oa]s?|white|black))?\\s+(?:de|en|on|at)\\s+([a-h][1-8])(?![0-9a-z])`, 'g');
+    const re = new RegExp(`\\b(${PIECE_RE})(?:\\s+(?:${COLOUR_RE}))?\\s+${ON_RE}([a-h][1-8])(?![0-9a-z])`, 'g');
     let m: RegExpExecArray | null;
     while ((m = re.exec(plain)) !== null) {
       const square = m[2];
@@ -153,11 +181,12 @@ export function analyseComment(text: string, fen: string, options: AnalyseOption
     return found.length === 1 ? found[0] : null;
   };
   {
-    const re = new RegExp(`\\b(?:el|la|su|the|his|her|its)\\s+(${PIECE_RE})\\b(?!\\s+(?:blanc[oa]s?|negr[oa]s?|white|black)?\\s*(?:de|en|on|at)\\s+[a-h][1-8])`, 'g');
+    const re = new RegExp(`\\b(?:el|la|su|al|del|the|his|her|its|der|die|das|den|dem|seine?n?|ihre?n?)\\s+(${PIECE_RE})\\b(?!\\s+(?:${COLOUR_RE})?\\s*${ON_RE}[a-h][1-8])`, 'g');
     let m: RegExpExecArray | null;
     while ((m = re.exec(plain)) !== null) {
-      const square = resolveBare(m[1]);
-      if (square) refs.push({ square, piece: true, start: m.index, end: m.index + m[0].length });
+      // Kept even when it cannot be resolved yet: as the OBJECT of a verb it is
+      // looked up among the pieces the acting piece really reaches.
+      refs.push({ square: resolveBare(m[1]) ?? '', bare: pieceOf(m[1]), piece: true, start: m.index, end: m.index + m[0].length });
     }
   }
 
@@ -187,7 +216,7 @@ export function analyseComment(text: string, fen: string, options: AnalyseOption
       start, end,
     });
   };
-  for (const m of plain.matchAll(/diagonal\s+([a-h][1-8])\s*[-–—]\s*([a-h][1-8])/g)) {
+  for (const m of plain.matchAll(/diagonale?\s+([a-h][1-8])\s*[-–—]\s*([a-h][1-8])/g)) {
     addLine(lineSquares(m[1], m[2]), m.index!, m.index! + m[0].length);
   }
   for (const m of plain.matchAll(/gran diagonal|long diagonal/g)) {
@@ -196,8 +225,8 @@ export function analyseComment(text: string, fen: string, options: AnalyseOption
     const near = [...refs.map((r) => r.square), options.lastMove?.to ?? ''];
     addLine(near.some((s) => b.includes(s)) && !near.some((s) => a.includes(s)) ? b : a, m.index!, m.index! + m[0].length);
   }
-  for (const m of plain.matchAll(/columna\s+([a-h])(?![a-z0-9])|(?<![a-z])([a-h])[- ]file\b/g)) {
-    const f = m[1] ?? m[2];
+  for (const m of plain.matchAll(/columna\s+([a-h])(?![a-z0-9])|(?<![a-z])([a-h])[- ]file\b|(?<![a-z])([a-h])-linie\b/g)) {
+    const f = m[1] ?? m[2] ?? m[3];
     addLine(lineSquares(`${f}1`, `${f}8`), m.index!, m.index! + m[0].length);
   }
   for (const m of plain.matchAll(/(primera|segunda|tercera|cuarta|quinta|sexta|septima|octava)\s+(?:fila|linea|horizontal)|fila\s+([1-8])|(first|second|third|fourth|fifth|sixth|seventh|eighth)\s+rank|([1-8])(?:st|nd|rd|th)\s+rank/g)) {
@@ -205,10 +234,40 @@ export function analyseComment(text: string, fen: string, options: AnalyseOption
     addLine(lineSquares(`a${r}`, `h${r}`), m.index!, m.index! + m[0].length);
   }
 
+  // ── the centre: exactly d4, e4, d5, e5 ────────────────────────────────────
+  for (const m of plain.matchAll(/\b(?:centro|centre|center|zentrums?)\b/g)) {
+    cues.push({
+      kind: 'area', label: text.slice(m.index!, m.index! + m[0].length),
+      squares: ['d4', 'e4', 'd5', 'e5'].map((square) => ({ square, role: 'mention' as const })), arrows: [],
+      start: m.index!, end: m.index! + m[0].length,
+    });
+  }
+
+  // ── a piece travelling to a square: show the way, hop by hop ──────────────
+  {
+    const re = new RegExp(
+      `\\b(${PIECE_RE})(?:\\s+${ON_RE}([a-h][1-8]))?[^.;]{0,40}?\\b(?:salt[ao]\\w*|se dirige|dirigirse|viaj\\w+|ruta|camino|rumbo|lleg\\w+|heads?|heading|jumps?|hops?|route|manoeuvres?|maneuvers?|springt|wandert|strebt)\\b[^.;]{0,30}?\\b(?:a|hasta|hacia|to|towards?|nach|auf)\\s+(?:(?:la\\s+|the\\s+|das\\s+)?(?:casilla|square|feld)\\s+)?([a-h][1-8])(?![0-9a-z])`, 'g');
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(plain)) !== null) {
+      const origin = m[2] ?? resolveBare(m[1]);
+      if (!origin || !at(origin)) continue;
+      const path = piecePath(chess, origin, m[3]);
+      if (path.length < 2) continue;
+      cues.push({
+        kind: 'route', label: text.slice(m.index, m.index + m[0].length),
+        squares: path.map((square, i) => ({
+          square, role: i === 0 ? 'from' as const : i === path.length - 1 ? 'to' as const : 'mention' as const,
+        })),
+        arrows: path.slice(1).map((to, i) => ({ from: path[i], to, role: 'to' as const })),
+        start: m.index, end: m.index + m[0].length,
+      });
+    }
+  }
+
   // ── relations, sentence by sentence ───────────────────────────────────────
-  const ATTACK = /atac|amenaz|apunta|presion|captur|attack|threat|aim|hit/;
-  const DEFEND = /defiend|defend|proteg|protect|cubre|cover|control|sostien|guard/;
-  const PASSIVE = /(clavad[ao]s?|atacad[ao]s?|defendid[ao]s?|protegid[ao]s?)\s+por|(pinned|attacked|defended|protected|covered)\s+by/;
+  const ATTACK = /atac|amenaz|apunta|presion|captur|attack|threat|aim|hit|greift|angreif|bedroh|droht/;
+  const DEFEND = /defiend|defend|proteg|protect|cubre|cover|control|sostien|guard|verteidig|deckt|schutz|beherrsch|kontroll/;
+  const PASSIVE = /(clavad[ao]s?|atacad[ao]s?|defendid[ao]s?|protegid[ao]s?)\s+por|(pinned|attacked|defended|protected|covered)\s+by|(gefesselt|angegriffen|gedeckt|verteidigt)\s+(?:von|durch)/;
   // A relation needs its SUBJECT before the verb, in the same clause: "X ataca
   // Y". Two pieces that are objects of different verbs ("sostienen el peón de
   // e5, pero encierran al alfil de f8") are not related. A verb with no subject
@@ -229,7 +288,7 @@ export function analyseComment(text: string, fen: string, options: AnalyseOption
     if (!verb) continue;
     const at0 = start + verb.index;
     const defend = passive
-      ? /defendid|protegid|defended|protected|covered/.test(passive[0])
+      ? /defendid|protegid|defended|protected|covered|gedeckt|verteidigt/.test(passive[0])
       : !ATTACK.test(clause);
 
     let agents: Ref[];
@@ -246,11 +305,27 @@ export function analyseComment(text: string, fen: string, options: AnalyseOption
       }
       targets = [...pieces, ...squares].filter((t) => t.start > at0).sort((a, b) => a.start - b.start);
     }
+    agents = agents.filter((a) => a.square && at(a.square));
+    // A piece named without a square is the one the acting piece really reaches
+    // in one move: an ENEMY piece when it attacks, a friendly one when it defends.
+    targets = targets.flatMap((t) => {
+      if (!t.bare || passive) return t.square ? [t] : [];
+      const found = new Set<string>();
+      for (const a of agents) {
+        const side = at(a.square)!.color;
+        for (const square of attacksFrom(chess, a.square)) {
+          const p = at(square);
+          if (p && p.type === t.bare && (p.color === side) === defend) found.add(square);
+        }
+      }
+      return [...found].sort().map((square) => ({ ...t, square }));
+    });
     targets = targets.filter((t) => !agents.some((a) => a.square === t.square));
     if (agents.length === 0 || targets.length === 0) continue;
     const agentRole: CueRole = defend ? 'defender' : 'attacker';
     const targetRole: CueRole = defend ? 'piece' : 'target';
-    const concept = passive && /clavad|pinned/.test(passive[0]) ? 'pin' : undefined;
+    const concept = passive && /clavad|pinned|gefesselt/.test(passive[0]) ? 'pin'
+      : !defend && targets.length >= 2 && agents.length === 1 ? 'double-attack' : undefined;
     cues.push({
       kind: 'relation',
       label: text.slice(start, end).trim(),
@@ -309,13 +384,79 @@ function pawnStructure(chess: Chess, concept: string, plain: string): string[] {
   return out.sort();
 }
 
+const STEPS: Record<string, [number, number][]> = {
+  n: [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]],
+  k: [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]],
+  b: [[1, 1], [1, -1], [-1, 1], [-1, -1]],
+  r: [[1, 0], [-1, 0], [0, 1], [0, -1]],
+};
+STEPS.q = [...STEPS.b, ...STEPS.r];
+const onBoard = (f: number, r: number) => f >= 0 && f < 8 && r >= 0 && r < 8;
+
+/** Squares the piece on `square` attacks in the position (blockers respected). */
+export function attacksFrom(chess: Chess, square: string): string[] {
+  const piece = chess.get(square as Square);
+  if (!piece) return [];
+  const f = fileOf(square);
+  const r = rankOf(square);
+  const out: string[] = [];
+  if (piece.type === 'p') {
+    const dr = piece.color === 'w' ? 1 : -1;
+    for (const df of [-1, 1]) if (onBoard(f + df, r + dr)) out.push(sq(f + df, r + dr));
+    return out;
+  }
+  const slider = 'bqr'.includes(piece.type);
+  for (const [df, dr] of STEPS[piece.type]) {
+    let nf = f + df;
+    let nr = r + dr;
+    while (onBoard(nf, nr)) {
+      out.push(sq(nf, nr));
+      if (!slider || chess.get(sq(nf, nr) as Square)) break;
+      nf += df;
+      nr += dr;
+    }
+  }
+  return out;
+}
+
+/** Shortest way for the piece on `from` to reach `to` by its own moves, on the
+ *  board as it stands (own pieces block; the other side does not move). */
+export function piecePath(chess: Chess, from: string, to: string): string[] {
+  const piece = chess.get(from as Square);
+  if (!piece || piece.type === 'p' || from === to) return [];
+  const board = new Chess(chess.fen());
+  const prev = new Map<string, string | null>([[from, null]]);
+  const queue = [from];
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    if (cur === to) break;
+    // Stand the piece on `cur` to read its reach from there.
+    const saved = board.get(cur as Square);
+    if (cur !== from) { board.remove(from as Square); board.put(piece, cur as Square); }
+    const reach = attacksFrom(board, cur).filter((s) => {
+      const p = s === from ? undefined : chess.get(s as Square);
+      return !p || p.color !== piece.color;
+    });
+    if (cur !== from) { board.remove(cur as Square); if (saved) board.put(saved, cur as Square); board.put(piece, from as Square); }
+    for (const next of reach) {
+      if (prev.has(next)) continue;
+      prev.set(next, cur);
+      queue.push(next);
+    }
+  }
+  if (!prev.has(to)) return [];
+  const path: string[] = [];
+  for (let s: string | null = to; s; s = prev.get(s) ?? null) path.unshift(s);
+  return path;
+}
+
 /** The cue of a move itself: origin, destination, capture, castling, check. */
-export function moveCue(move: { san: string; from: string; to: string; fen: string }): BoardCue {
+export function moveCue(move: { san: string; from: string; to: string; fen: string; quality?: MoveQuality }): BoardCue {
   const squares: CueSquare[] = [];
   const castle = /^O-O/.test(move.san);
   const capture = move.san.includes('x');
   squares.push({ square: move.from, role: 'from' });
-  squares.push({ square: move.to, role: capture ? 'capture' : 'to' });
+  squares.push({ square: move.to, role: move.quality ? QUALITY_ROLE[move.quality] : capture ? 'capture' : 'to' });
   if (castle) {
     const rank = move.to[1];
     const long = move.san.startsWith('O-O-O');
@@ -332,6 +473,7 @@ export function moveCue(move: { san: string; from: string; to: string; fen: stri
     kind: 'move', label: move.san, squares,
     arrows: [{ from: move.from, to: move.to, role: 'to' }],
     ...(castle ? { concept: 'castling' } : {}),
+    ...(move.quality ? { quality: move.quality } : {}),
     start: 0, end: 0,
   };
 }

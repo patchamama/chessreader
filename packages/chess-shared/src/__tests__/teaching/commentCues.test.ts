@@ -166,3 +166,60 @@ describe('relations need a subject before the verb, inside the same clause', () 
     expect(cues.filter((c) => c.kind === 'relation')).toEqual([])
   })
 })
+
+describe('cue fixes', () => {
+  const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+  it('"the centre" lights exactly the four central squares', () => {
+    for (const text of ['Las blancas dominan el centro.', 'White controls the centre.', 'Weiß beherrscht das Zentrum.']) {
+      const cue = analyseComment(text, START).find((c) => c.kind === 'area')!
+      expect(cue.squares.map((s) => s.square).sort()).toEqual(['d4', 'd5', 'e4', 'e5'])
+    }
+  })
+  it('an attacked piece named without a square is the ENEMY piece the attacker reaches in one move', () => {
+    // White knight d5 attacks the black queen f6; a white queen stands on b3.
+    const fen = 'r3kb1r/ppp2ppp/2n2q2/3N4/4P3/1Q6/PP3PPP/R1B1KB1R b KQkq - 0 1'
+    const cues = analyseComment('El caballo ocupa la casilla central d5 y ataca a la dama.', fen, { lastMove: { from: 'c3', to: 'd5' } })
+    const rel = cues.find((c) => c.kind === 'relation')!
+    expect(rel.squares).toEqual([
+      { square: 'd5', role: 'attacker', blink: true },
+      { square: 'f6', role: 'target', blink: true },
+    ])
+  })
+  it('no relation is drawn when the attacker cannot reach any such enemy piece', () => {
+    const cues = analyseComment('El caballo ataca a la dama.', START, { lastMove: { from: 'g1', to: 'f3' } })
+    expect(cues.filter((c) => c.kind === 'relation')).toEqual([])
+  })
+  it('a double attack shows every attacked piece', () => {
+    // Knight c7 forks king e8 and rook a8.
+    const fen = 'r3k3/2N5/8/8/8/8/8/4K3 b - - 0 1'
+    const cues = analyseComment('El caballo ataca al rey y a la torre.', fen, { lastMove: { from: 'd5', to: 'c7' } })
+    const rel = cues.find((c) => c.kind === 'relation')!
+    expect(rel.squares.filter((s) => s.role === 'target').map((s) => s.square).sort()).toEqual(['a8', 'e8'])
+  })
+  it('"alfil de casilla b3" / "peón de la casilla a2" name a piece', () => {
+    const fen = '4k3/8/8/8/8/1B6/P7/4K3 w - - 0 1'
+    const cues = analyseComment('El alfil de casilla b3 y el peón de la casilla a2.', fen)
+    expect(cues.filter((c) => c.kind === 'piece').map((c) => c.squares[0].square)).toEqual(['b3', 'a2'])
+  })
+  it('a knight heading for a far square shows its route', () => {
+    const cues = analyseComment('El caballo salta hasta la casilla d5.', 'rnbqkbnr/pppppppp/8/8/8/2N5/PPPPPPPP/R1BQKBNR b KQkq - 1 1', { lastMove: { from: 'b1', to: 'c3' } })
+    const route = cues.find((c) => c.kind === 'route')!
+    expect(route.arrows).toEqual([{ from: 'c3', to: 'd5', role: 'to' }])
+    const far = analyseComment('El caballo de g1 se dirige a d5.', START).find((c) => c.kind === 'route')!
+    expect(far.arrows.length).toBe(3)
+    expect(far.arrows[0].from).toBe('g1')
+    expect(far.arrows[2].to).toBe('d5')
+  })
+  it('reads German piece names and lines', () => {
+    const fen = '4k3/8/8/8/8/1B6/P7/4K3 w - - 0 1'
+    const cues = analyseComment('Der Läufer auf b3 beherrscht die Diagonale a2-g8.', fen)
+    expect(cues.some((c) => c.kind === 'piece' && c.squares[0].square === 'b3')).toBe(true)
+    expect(cues.find((c) => c.kind === 'line')!.squares.length).toBe(7)
+  })
+  it('the glossary has German titles and definitions', () => {
+    const [hit] = findConcepts('Eine Fesselung des Springers.')
+    expect(hit.id).toBe('pin')
+    expect(hit.title.de).toBe('Fesselung')
+    expect(hit.definition.de.length).toBeGreaterThan(20)
+  })
+})

@@ -185,6 +185,7 @@ export function StudyBoard() {
 
   // Narration cues: what the commentary being read says, lit on the board.
   const narrationCues = useNarrationStore((s) => s.cues)
+  const narrationMismatch = useNarrationStore((s) => s.mismatch)
   const cueBoard = cuesToBoard(narrationCues)
 
   // While cues are lit the engine/next-move arrows are hidden: every arrow on
@@ -246,6 +247,15 @@ export function StudyBoard() {
   )
   for (const [square, style] of Object.entries(cueBoard.squareStyles)) {
     highlightStyles[square] = { ...highlightStyles[square], ...style }
+  }
+  // The board is off the position the narration expects: blink what differs.
+  for (const square of narrationMismatch?.squares ?? []) {
+    highlightStyles[square] = {
+      ...highlightStyles[square],
+      backgroundColor: 'rgba(225, 29, 72, 0.55)',
+      boxShadow: 'inset 0 0 0 3px #e11d48',
+      animation: 'cue-blink 0.9s ease-in-out infinite',
+    }
   }
   if (isolatedHighlight) {
     highlightStyles[isolatedHighlight.square] = {

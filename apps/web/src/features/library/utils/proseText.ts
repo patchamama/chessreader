@@ -198,3 +198,16 @@ export function piecesByTextNode<T extends { start: number; end: number }>(
   for (const list of byNode.values()) list.sort((a, b) => a.start - b.start)
   return byNode
 }
+
+/**
+ * The last move written before `offset`: the position a remark at that point of
+ * the text talks about (null = before the first move, i.e. the start position).
+ */
+export function nodeBeforeOffset(tree: GameTree, offset: number): GameNode | null {
+  let best: GameNode | null = null
+  for (const node of tree.nodes.values()) {
+    if (node.invalid || node.charEnd === undefined || node.charEnd > offset) continue
+    if (!best || node.charEnd > best.charEnd!) best = node
+  }
+  return best
+}
