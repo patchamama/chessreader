@@ -139,6 +139,12 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           <button className={choice(s.mentionPreview === 'thumbnail')} onClick={() => s.set({ mentionPreview: 'thumbnail' })}>Hover thumbnail</button>
         </div>
 
+        {/* Help mode */}
+        <label className={labelClass}>Help mode: colour the moves of the selected piece (red = bad)</label>
+        <div className="flex gap-2">
+          <Toggle on={s.moveHints} onClick={() => s.set({ moveHints: !s.moveHints })} label="Move hints" />
+        </div>
+
         {/* App theme */}
         <label className={labelClass}>App theme</label>
         <div className="flex gap-2">

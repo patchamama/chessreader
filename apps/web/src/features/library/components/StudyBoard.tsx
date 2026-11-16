@@ -2,6 +2,9 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { Chess } from 'chess.js'
 import ChessBoard from '../../../shared/chess/ChessBoard'
 import { useNarrationStore } from '../narration/narrationStore'
+import { useMoveHints, nodeQuality } from '../review/useMoveHints'
+import { useReviewStore } from '../review/reviewStore'
+import { CUE_COLORS } from '../narration/cueStyles'
 import { cuesToBoard, isCueArrow } from '../narration/cueStyles'
 import EvalBar from '../../viewer/components/EvalBar'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
@@ -175,6 +178,16 @@ export function StudyBoard() {
         })()
       : null
 
+  const reviews = useReviewStore((s) => s.byTree)
+  const nextQuality = (() => {
+    if (playFen || !activeGame || !nav.successorId) return undefined
+    void reviews // re-read when a review arrives
+    const succ = activeGame.nodes.get(nav.successorId)
+    return succ ? nodeQuality(activeGame, succ) : undefined
+  })()
+  const moveHintsOn = useSettingsStore((s) => s.moveHints)
+  const moveHints = useMoveHints(playFen ?? baseFen, selectedSquare, moveHintsOn && toolMode === 'none')
+
   // While the engine panel is active, feed its live score into the eval bar so
   // both stay in sync (and only one worker runs). null → bar uses its own worker.
   const engineBest = engine.lines[0]
@@ -255,6 +268,21 @@ export function StudyBoard() {
       backgroundColor: 'rgba(225, 29, 72, 0.55)',
       boxShadow: 'inset 0 0 0 3px #e11d48',
       animation: 'cue-blink 0.9s ease-in-out infinite',
+    }
+  }
+  // How good the game's NEXT move is (the text's mark, or the engine review):
+  // its destination is tinted before it is played — red for a bad move.
+  if (nextQuality && nextMove && !cuesLit) {
+    const color = CUE_COLORS[nextQuality === 'mistake' || nextQuality === 'blunder' ? 'bad' : nextQuality === 'good' || nextQuality === 'brilliant' ? 'good' : 'dubious']
+    highlightStyles[nextMove.to] = { ...highlightStyles[nextMove.to], boxShadow: `inset 0 0 0 4px ${color}` }
+  }
+  // Help mode: every destination of the selected piece, coloured by how good the move is.
+  for (const [square, hint] of Object.entries(moveHints)) {
+    const color = CUE_COLORS[hint]
+    highlightStyles[square] = {
+      ...highlightStyles[square],
+      background: `radial-gradient(circle, ${color} 0 32%, transparent 34%)`,
+      boxShadow: `inset 0 0 0 3px ${color}`,
     }
   }
   if (isolatedHighlight) {

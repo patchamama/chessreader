@@ -120,6 +120,8 @@ export interface AppSettings {
   moveHints: boolean
   /** A square named in the text: show it on the main board at that point of the game, or in a hover thumbnail. */
   mentionPreview: 'board' | 'thumbnail'
+  /** Engine depth used to review a whole game. */
+  reviewDepth: number
   boardTheme: BoardTheme
   evalBarDirection: EvalBarDirection
   stockfishVersion: StockfishVersion
@@ -179,6 +181,7 @@ const DEFAULT: AppSettings = {
   narrationRepeatSeconds: 5,
   moveHints: true,
   mentionPreview: 'board',
+  reviewDepth: 14,
   boardTheme: 'blue',
   evalBarDirection: 'vertical',
   stockfishVersion: 'sf10-jsdelivr',

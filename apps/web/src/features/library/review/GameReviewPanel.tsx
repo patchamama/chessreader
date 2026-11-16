@@ -1,0 +1,289 @@
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Chess } from 'chess.js'
+import { annotateGame, extractPlayers, numberLine, openingName, reviewGame } from '@chess-ebook/chess-shared'
+import type { KeyMoment, Lang, MoveQuality, RecognizedGame } from '@chess-ebook/chess-shared'
+import { useStudyBoardStore } from '../store/studyBoardStore'
+import { useSettingsStore, STOCKFISH_VERSIONS } from '../../../shared/settings/settingsStore'
+import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
+import { textToChapters } from '../utils/textToChapters'
+import { analyseGame } from './reviewEngine'
+import { reviewEngine, summarise, useReviewStore } from './reviewStore'
+
+interface GameReviewPanelProps {
+  games: RecognizedGame[]
+  text: string
+  bookId: number
+  chapter: number
+}
+
+const T: Record<Lang, Record<string, string>> = {
+  en: {
+    title: 'Engine review', run: 'Review game with the engine', all: 'Review every game of the chapter', cancel: 'Cancel',
+    analysing: 'Analysing position', accuracy: 'accuracy', white: 'White', black: 'Black', opening: 'Opening',
+    moments: 'Key moments', none: 'No turning points: a steady game.', go: 'Go to', line: 'Play the line',
+    better: 'Better was', follow: 'There followed', level: 'Commentary level', l1: '1 · marks only', l2: '2 · remarks and better lines',
+    l3: '3 · tactics, opening and summary', open: 'Open annotated game', chapter: 'This chapter', book: 'Whole book',
+    games: 'games', depth: 'Depth', brilliant: 'brilliant', good: 'very good', dubious: 'inaccuracies', mistake: 'mistakes', blunder: 'blunders',
+    players: 'Players are read from PGN tags, from lines "White: … / Black: …" or from a heading "White – Black".',
+  },
+  es: {
+    title: 'Revisión con el motor', run: 'Revisar la partida con el motor', all: 'Revisar todas las partidas del capítulo', cancel: 'Cancelar',
+    analysing: 'Analizando posición', accuracy: 'de precisión', white: 'Blancas', black: 'Negras', opening: 'Apertura',
+    moments: 'Momentos clave', none: 'Sin puntos de inflexión: una partida pareja.', go: 'Ir a', line: 'Reproducir la línea',
+    better: 'Era mejor', follow: 'Siguió', level: 'Nivel de comentario', l1: '1 · solo signos', l2: '2 · comentarios y líneas mejores',
+    l3: '3 · táctica, apertura y resumen', open: 'Abrir la partida comentada', chapter: 'Este capítulo', book: 'Todo el libro',
+    games: 'partidas', depth: 'Profundidad', brilliant: 'brillantes', good: 'muy buenas', dubious: 'imprecisiones', mistake: 'errores', blunder: 'errores graves',
+    players: 'Los jugadores se leen de las etiquetas PGN, de líneas "Blancas: … / Negras: …" o de un encabezado "Blancas – Negras".',
+  },
+  de: {
+    title: 'Engine-Analyse', run: 'Partie mit der Engine prüfen', all: 'Alle Partien des Kapitels prüfen', cancel: 'Abbrechen',
+    analysing: 'Analysiere Stellung', accuracy: 'Genauigkeit', white: 'Weiß', black: 'Schwarz', opening: 'Eröffnung',
+    moments: 'Schlüsselmomente', none: 'Keine Wendepunkte: eine ausgeglichene Partie.', go: 'Gehe zu', line: 'Variante abspielen',
+    better: 'Besser war', follow: 'Es folgte', level: 'Kommentarstufe', l1: '1 · nur Zeichen', l2: '2 · Anmerkungen und bessere Varianten',
+    l3: '3 · Taktik, Eröffnung und Zusammenfassung', open: 'Kommentierte Partie öffnen', chapter: 'Dieses Kapitel', book: 'Ganzes Buch',
+    games: 'Partien', depth: 'Tiefe', brilliant: 'glänzend', good: 'sehr gut', dubious: 'Ungenauigkeiten', mistake: 'Fehler', blunder: 'grobe Fehler',
+    players: 'Die Spieler werden aus PGN-Tags, aus Zeilen "Weiß: … / Schwarz: …" oder aus einer Überschrift "Weiß – Schwarz" gelesen.',
+  },
+}
+
+const GLYPH: Record<MoveQuality, string> = { brilliant: '!!', good: '!', interesting: '!?', dubious: '?!', mistake: '?', blunder: '??' }
+const TONE: Record<MoveQuality, string> = {
+  brilliant: 'border-emerald-300 bg-emerald-50', good: 'border-emerald-300 bg-emerald-50', interesting: 'border-amber-300 bg-amber-50',
+  dubious: 'border-amber-300 bg-amber-50', mistake: 'border-red-300 bg-red-50', blunder: 'border-red-400 bg-red-50',
+}
+
+/**
+ * Engine review of a game: how accurately each player played, the moves that
+ * changed the game (each with a way back to its position and the line to look
+ * at), and the game written out with commentary at a chosen level.
+ */
+export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPanelProps) {
+  const lang = useSettingsStore((s) => s.language)
+  const depth = useSettingsStore((s) => s.reviewDepth)
+  const sfUrl = STOCKFISH_VERSIONS[useSettingsStore((s) => s.stockfishVersion)].url
+  const setSettings = useSettingsStore((s) => s.set)
+  const activeGame = useStudyBoardStore((s) => s.activeGame)
+  const loadPosition = useStudyBoardStore((s) => s.loadPosition)
+  const byTree = useReviewStore((s) => s.byTree)
+  const records = useReviewStore((s) => s.records)
+  const setReview = useReviewStore((s) => s.setReview)
+  const openBook = useExternalBookStore((s) => s.open)
+  const navigate = useNavigate()
+  const [progress, setProgress] = useState<{ done: number; total: number; game: number } | null>(null)
+  const [level, setLevel] = useState<1 | 2 | 3>(2)
+  const abort = useRef<AbortController | null>(null)
+  useEffect(() => () => abort.current?.abort(), [])
+
+  const t = T[lang]
+  if (games.length === 0) return null
+  const gameIndex = Math.max(0, games.findIndex((g) => g.tree === activeGame))
+  const game = games[gameIndex]
+  const reviewed = byTree.get(game.tree)
+  const playersOf = (i: number) => extractPlayers(text.slice(i > 0 ? games[i - 1].charEnd : 0, games[i].charEnd))
+  const players = playersOf(gameIndex)
+
+  async function run(indexes: number[]) {
+    abort.current?.abort()
+    const ctrl = new AbortController()
+    abort.current = ctrl
+    try {
+      for (const i of indexes) {
+        const tree = games[i].tree
+        const plies = await analyseGame(tree, reviewEngine(sfUrl), {
+          depth, signal: ctrl.signal, onProgress: (done, total) => setProgress({ done, total, game: i }),
+        })
+        const review = reviewGame(plies)
+        const who = playersOf(i)
+        setReview(tree, { plies, review }, {
+          bookId, chapter, gameIndex: i, white: who.white, black: who.black,
+          accuracyWhite: review.white.accuracy, accuracyBlack: review.black.accuracy, moves: plies.length,
+        })
+      }
+    } catch {
+      // aborted: keep what was finished
+    } finally {
+      if (abort.current === ctrl) { abort.current = null; setProgress(null) }
+    }
+  }
+
+  const goTo = (nodeId: string) => loadPosition(game.tree, nodeId, false)
+
+  /** Put the board before the move and play the line on it, move by move. */
+  function playLine(k: KeyMoment) {
+    const node = game.tree.nodes.get(k.nodeId)
+    if (!node) return
+    const bad = k.quality === 'mistake' || k.quality === 'blunder'
+    const from = bad ? node.parentId : k.nodeId
+    loadPosition(game.tree, from, false)
+    const startFen = from ? game.tree.nodes.get(from)!.fen : game.tree.startFen
+    const chess = new Chess(startFen)
+    const line = bad ? k.line : k.line.slice(1)
+    line.forEach((san, i) => {
+      let move
+      try { move = chess.move(san) } catch { return }
+      setTimeout(() => useStudyBoardStore.getState().playMove(move.from, move.to, startFen), 700 * (i + 1))
+    })
+  }
+
+  function openAnnotated() {
+    if (!reviewed) return
+    const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
+    const annotated = annotateGame(reviewed.plies, reviewed.review, { level, lang, white: players.white, black: players.black })
+    const { title, chapters } = textToChapters(annotated, `${names} (${t.title.toLowerCase()})`)
+    openBook(title, chapters)
+    navigate(`/read/${EXTERNAL_BOOK_ID}`)
+  }
+
+  const button = 'rounded border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40'
+  const chapterRecords = records.filter((r) => r.bookId === bookId && r.chapter === chapter)
+  const bookRecords = records.filter((r) => r.bookId === bookId)
+  const opening = reviewed ? openingName(reviewed.plies.map((p) => p.san), lang) : null
+
+  const side = (color: 'white' | 'black') => {
+    const r = reviewed!.review[color]
+    return (
+      <div
+        data-testid={`accuracy-${color}`}
+        data-accuracy={r.accuracy}
+        className="flex-1 rounded border border-slate-200 bg-white px-2 py-1.5"
+      >
+        <p className="truncate text-xs font-semibold text-slate-800">
+          {color === 'white' ? '♔' : '♚'} {players[color] ?? t[color]}
+        </p>
+        <p className="text-lg font-bold tabular-nums text-slate-900">
+          {r.accuracy.toFixed(1)}% <span className="text-[11px] font-normal text-slate-500">{t.accuracy}</span>
+        </p>
+        <p className="text-[11px] leading-snug text-slate-600">
+          {r.brilliant} {t.brilliant} · {r.good} {t.good} · {r.inaccuracies} {t.dubious} · {r.mistakes} {t.mistake} · {r.blunders} {t.blunder}
+        </p>
+      </div>
+    )
+  }
+
+  const summary = (label: string, rows: typeof records, testId: string) =>
+    rows.length > 0 && (
+      <div data-testid={testId} className="mt-2 rounded border border-slate-200 bg-white px-2 py-1.5">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          {label} · {rows.length} {t.games}
+        </p>
+        <ul className="mt-0.5 text-xs text-slate-700">
+          {summarise(rows).map((p) => (
+            <li key={p.name} className="flex justify-between gap-2">
+              <span className="truncate">{p.name} <span className="text-slate-400">({p.games})</span></span>
+              <span className="tabular-nums font-semibold">{p.accuracy.toFixed(1)}%</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+
+  return (
+    <section aria-label={t.title} className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-3">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-800">{t.title}</h3>
+        <label className="ml-auto flex items-center gap-1 text-[11px] text-slate-600">
+          {t.depth}
+          <select
+            value={depth}
+            onChange={(e) => setSettings({ reviewDepth: Number(e.target.value) })}
+            className="rounded border border-slate-300 bg-white px-1 py-0.5"
+          >
+            {[8, 10, 12, 14, 16, 18].map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </label>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {progress ? (
+          <button className={button} onClick={() => abort.current?.abort()}>{t.cancel}</button>
+        ) : (
+          <>
+            <button
+              className="rounded border border-indigo-700 bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+              onClick={() => void run([gameIndex])}
+            >
+              {t.run}
+            </button>
+            {games.length > 1 && (
+              <button className={button} onClick={() => void run(games.map((_, i) => i))}>{t.all}</button>
+            )}
+          </>
+        )}
+      </div>
+
+      {progress && (
+        <div className="mt-2" role="status">
+          <p className="text-[11px] text-slate-600">
+            {t.analysing} {progress.done}/{progress.total}{games.length > 1 ? ` · ${progress.game + 1}/${games.length}` : ''}
+          </p>
+          <div className="mt-1 h-1.5 overflow-hidden rounded bg-slate-200">
+            <div className="h-full bg-indigo-500" style={{ width: `${(100 * progress.done) / progress.total}%` }} />
+          </div>
+        </div>
+      )}
+
+      {reviewed && (
+        <>
+          <div className="mt-2 flex gap-2">{side('white')}{side('black')}</div>
+          {opening && <p className="mt-1 text-xs text-slate-600">{t.opening}: <strong>{opening}</strong></p>}
+
+          <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-indigo-800">{t.moments}</p>
+          {reviewed.review.keyMoments.length === 0 && <p className="text-xs text-slate-500">{t.none}</p>}
+          <ul className="mt-1 flex flex-col gap-1">
+            {reviewed.review.keyMoments.map((k) => {
+              const label = `${k.moveNumber}${k.color === 'white' ? '.' : '...'} ${k.san.replace(/[!?]+$/, '')}`
+              const bad = k.quality === 'mistake' || k.quality === 'blunder'
+              const shown = bad ? k.line : k.line.slice(1)
+              const next = k.color === 'white' ? { n: k.moveNumber, c: 'black' as const } : { n: k.moveNumber + 1, c: 'white' as const }
+              return (
+                <li key={k.nodeId} className={`rounded border px-2 py-1 text-xs ${TONE[k.quality]}`}>
+                  <p className="font-semibold text-slate-800">
+                    {label}{GLYPH[k.quality]}{' '}
+                    <span className="font-normal text-slate-600">
+                      ({k.swing > 0 ? '+' : ''}{k.swing.toFixed(0)}%)
+                    </span>
+                  </p>
+                  {shown.length > 0 && (
+                    <p className="text-slate-700">
+                      {bad
+                        ? `${t.better} ${numberLine(shown, k.moveNumber, k.color)}`
+                        : `${t.follow} ${numberLine(shown, next.n, next.c)}`}
+                    </p>
+                  )}
+                  <div className="mt-1 flex gap-1">
+                    <button className={button} aria-label={`${t.go} ${label}`} onClick={() => goTo(k.nodeId)}>↪ {t.go} {label}</button>
+                    {shown.length > 0 && <button className={button} onClick={() => playLine(k)}>▶ {t.line}</button>}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-indigo-200 pt-2">
+            <label className="flex items-center gap-1 text-[11px] text-slate-700">
+              {t.level}
+              <select
+                aria-label={t.level}
+                value={level}
+                onChange={(e) => setLevel(Number(e.target.value) as 1 | 2 | 3)}
+                className="rounded border border-slate-300 bg-white px-1 py-0.5"
+              >
+                <option value={1}>{t.l1}</option>
+                <option value={2}>{t.l2}</option>
+                <option value={3}>{t.l3}</option>
+              </select>
+            </label>
+            <button className={button} onClick={openAnnotated}>{t.open}</button>
+          </div>
+        </>
+      )}
+
+      {summary(t.chapter, chapterRecords, 'chapter-summary')}
+      {summary(t.book, bookRecords, 'book-summary')}
+      {(chapterRecords.length > 0 || reviewed) && !players.white && !players.black && (
+        <p className="mt-1 text-[11px] text-slate-500">{t.players}</p>
+      )}
+    </section>
+  )
+}
