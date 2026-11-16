@@ -41,7 +41,7 @@ const ALL_ADMIN_KEYS = [
 export function usePendingUsers() {
   return useQuery<PendingUser[]>({
     queryKey: ['admin', 'pending-users'],
-    queryFn: () => httpClient<{ users: PendingUser[] }>('/api/admin/pending-users', { method: 'GET' }).then(r => (r as any).users ?? r),
+    queryFn: () => httpClient<{ users?: PendingUser[] } | PendingUser[]>('/api/admin/pending-users', { method: 'GET' }).then(r => (Array.isArray(r) ? r : r.users ?? [])),
   })
 }
 

@@ -47,7 +47,7 @@ describe('libraryApi — new hooks', () => {
       await result.current.mutateAsync({ id: 1, title: 'T', author: 'A', description: 'D' })
     })
 
-    const keys = invalidateSpy.mock.calls.map((c) => JSON.stringify((c[0] as any)?.queryKey))
+    const keys = invalidateSpy.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey?: unknown } | undefined)?.queryKey))
     expect(keys).toEqual(expect.arrayContaining([JSON.stringify(['library', 'books'])]))
   })
 

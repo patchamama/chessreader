@@ -98,7 +98,7 @@ describe('adminApi — new hooks', () => {
     await act(async () => { await result.current.mutateAsync(1) })
 
     // Should have invalidated all three
-    const invalidatedKeys = invalidateSpy.mock.calls.map((c) => JSON.stringify((c[0] as any)?.queryKey))
+    const invalidatedKeys = invalidateSpy.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey?: unknown } | undefined)?.queryKey))
     expect(invalidatedKeys).toEqual(
       expect.arrayContaining([
         JSON.stringify(['admin', 'active-users']),

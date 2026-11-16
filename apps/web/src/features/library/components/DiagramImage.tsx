@@ -125,7 +125,6 @@ export function DiagramImage({ src, alt, fen }: Props) {
             aria-label={`${alt} (generated)`}
             onContextMenu={onContextMenu}
             className="block"
-            // eslint-disable-next-line react/no-danger
             dangerouslySetInnerHTML={{ __html: svg ?? '' }}
           />
           {loading && <span className="block text-[10px] text-slate-400">Generating…</span>}
