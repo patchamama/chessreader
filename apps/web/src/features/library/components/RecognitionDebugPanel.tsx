@@ -30,12 +30,14 @@ const KIND_LABEL: Record<RecognitionError['kind'], string> = {
   'missing-move': 'Missing move',
   unreferenced: 'Unreferenced',
   'wrong-number': 'Wrong number',
+  'wrong-move': 'Wrong move',
 }
 
 const KIND_COLOR: Record<RecognitionError['kind'], string> = {
   'missing-move': 'bg-amber-200 text-amber-900',
   unreferenced: 'bg-rose-200 text-rose-900',
   'wrong-number': 'bg-violet-200 text-violet-900',
+  'wrong-move': 'bg-red-200 text-red-900',
 }
 
 /** One token of a serialised line: a move (with a node for hover) or punctuation. */
@@ -153,7 +155,7 @@ function NodeTable({ tree }: { tree: GameTree }) {
             <td className="pr-2">{n.id}</td>
             <td className="pr-2">{n.parentId ?? 'root'}</td>
             <td className="pr-2">{n.moveNumber}{n.color === 'black' ? '...' : '.'}</td>
-            <td className="pr-2">{n.san}</td>
+            <td className="pr-2">{n.san}{n.correctedFrom ? ` (was ${n.correctedFrom})` : ''}</td>
             <td className="pr-2">{n.rawSan ?? ''}</td>
             <td className="pr-2">{n.charStart !== undefined ? `${n.charStart}–${n.charEnd}` : ''}</td>
             <td>{n.invalid ? 'invalid' : main.has(n.id) ? 'main' : 'var'}</td>

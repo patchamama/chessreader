@@ -25,6 +25,8 @@ const TWO_GAMES_HTML = `
 <p>Blancas: X — Negras: Y</p>
 <p>1. e4 c5 2. ♘f3 d6 3. d4 cxd4 4. ♘xd4 ♘f6 5. ♘c3 a6 6. ♗g5 e6 7. f4 ♗e7 8. ♕f3 ♕c7</p>
 <p>9. e5 dxe5 10. fxe5 ♘fd7</p>
+<p>Blancas: Morphy — Negras: Aficionados</p>
+<p>1. e4 e5 2. ♘f3 d6 3. d4 ♗g4 4. dxe5 ♗xf3 5. ♕xf3 dxe5 6. ♗c5 ♘f6 7. ♕b3 ♕e7 8. ♘c3 c6</p>
 `
 
 vi.mock('../../api/libraryApi', () => ({
@@ -142,5 +144,21 @@ describe('BookReader algorithm 1: prose-only variation move is NOT painted', () 
       (s.textContent ?? '').includes('e5'),
     )
     expect(e5MoveSpans.length).toBe(0)
+  })
+})
+
+describe('BookReader marks a wrong move and plays its correction', () => {
+  it('the misprinted "6. ♗c5" span carries the proposed move', async () => {
+    useStudyBoardStore.getState().reset()
+    useSettingsStore.getState().set({ recognitionAlgorithm: 2 })
+    const { container } = render(<BookReader />, { wrapper })
+    await waitFor(() => {
+      expect(container.querySelector('span[data-corrected-to]')).not.toBeNull()
+    })
+    const span = container.querySelector('span[data-corrected-to]') as HTMLElement
+    expect(span.textContent).toBe('6. ♗c5')
+    expect(span.getAttribute('data-corrected-to')).toBe('Bc4')
+    expect(span.getAttribute('data-san')).toBe('Bc4')
+    expect(span.title).toContain('Bc5')
   })
 })

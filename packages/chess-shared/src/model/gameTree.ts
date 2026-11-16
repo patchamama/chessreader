@@ -29,6 +29,11 @@ export interface GameNode {
   charEnd?: number;
   /** true when the move was rejected by the chess engine as illegal */
   invalid?: boolean;
+  /**
+   * Set when the source carried a WRONG move here and `san` is the proposed
+   * correction: the move as written (normalised SAN), e.g. "Bc5" for san "Bc4".
+   */
+  correctedFrom?: string;
 }
 
 /**
@@ -63,8 +68,11 @@ export interface IsolatedMove {
  *                        of each run is reported).
  *  - 'wrong-number'    : a move whose written number does not match the position
  *                        it would occupy in any candidate line.
+ *  - 'wrong-move'      : the written move is wrong (illegal, or legal but it makes
+ *                        a later move illegal); `suggestion` is the proposed
+ *                        correction, backed by the moves that follow.
  */
-export type RecognitionErrorKind = 'missing-move' | 'unreferenced' | 'wrong-number';
+export type RecognitionErrorKind = 'missing-move' | 'unreferenced' | 'wrong-number' | 'wrong-move';
 
 export interface RecognitionError {
   kind: RecognitionErrorKind;
@@ -77,6 +85,11 @@ export interface RecognitionError {
   color?: Color;
   /** Human-readable explanation (Spanish, user-facing). */
   message: string;
+  /** 'wrong-move' only: the proposed move (SAN) and how sure the proposal is. */
+  suggestion?: string;
+  confidence?: 'high' | 'low';
+  /** 'wrong-move' only: other repairs the continuation backs equally ("2... d6"). */
+  alternatives?: string[];
   /** Source character offsets (into the normalised recognition text). */
   charStart?: number;
   charEnd?: number;

@@ -11,16 +11,21 @@ Delivery: one commit per task, pushed to main after its checks. Runner: Vitest (
 - S6 "Ten en cuenta que la idea es que ese simulador con el tablero digital, en el futuro se pueda reproducir en un tablero físico que tiene luces y que se interactuará con el directamente a modo de enseñanza."
 - S7 "También pon un buscador en lichess y chess.com (si este último lo tiene) en que se puedan buscar partidas anotadas, instructivas o que tengan para aprender diferentes temas como aperturas, tácticas, conceptos, partidas clásicas, ..."
 
+- S8 (added 2026-11-16) "revisa también que puede haber varias partidas en un texto, y a veces he visto que da error cuando vuelve a empezar otra partida, tratando de seguirse la última jugada de la partida anterior, cuando debe de reiniciarse el tablero y eso se detecta cuando de pronto empieza con una jugada 1. algo de las blancas, o si hay un diagrama y un inicio de una partida en una determinada jugada."
+
 Assumptions (not user statements): narration audio uses the browser Web Speech API (no key, works on the static demo, gives per-utterance events to sync the board); board cues are a device-independent data model (squares + colour role + effect) so an LED board can consume the same stream (S6).
 
 ## Tasks
 - T1 [S1] inline — annotated complete demo games + deploy. Status: done (v0.36.0); 6 chapters in 2 books, each verified: full mainline with algorithms 1-3, every written move legal and painted, ends in mate; browser smoke in demo mode OK.
-- T2 [S2] inline — wrong-move detection and repair proposals. Status: pending.
+- T2 [S2] inline — wrong-move detection and repair proposals. Status: done (v0.37.0); packages/chess-shared/src/pgn/moveRepair.ts + mainline builder (algorithms 1-2), red wavy span + error panel proposal, demo book 3 with three planted misprints.
 - T3 [S4,S5,S6] inline — board cue model + commentary analyser + board rendering. Status: pending.
 - T4 [S3] inline — narration player (auto / wait-for-move modes). Status: pending.
 - T5 [S7] inline — annotated game search (Lichess; chess.com if its API allows). Status: pending.
+- T6 [S8] inline — several games in one text: restart on a new game, fragments after a diagram. Status: pending.
 
 ## Log
 - L1 (2026-11-16) user request, verbatim in S1–S7, preceded by "COMMIT + push origin main." (done: e2bfcac v0.34.0, c17bd52 v0.35.0 pushed with tags).
 - L2 Route: all inline, no writer trigger (tasks depend on each other: T4 needs T3's cue model). CI was already red since v0.27.0 from 4 lint errors; fixed in a separate commit.
 - L3 T1: replaced the old demo chapters (wrong attributions, single chapter per book) with apps/web/src/demo/demoGames.ts; the handler now serves chapters by order. Known limit: algorithm 3 takes a numbered threat in prose ("Amenaza 15. Bxf4") as a mainline move; the demo text avoids it.
+- L4 T2 evidence: fuzz on 40 real Lichess games (temporary harness, not committed): 0 repairs proposed on clean games; 216 injected one-square typos → 203 detected, 187 (87%) restored to the exact original line; 14 of the 29 misses had the true move among the low-confidence alternatives. Undetected typos are ones that stay legal and never contradict a later move. Algorithm 3 (legacy) has no repair.
+- L5 (2026-11-16) user added S8 verbatim while T2 was in progress → T6.

@@ -16,12 +16,14 @@ const KIND_LABEL: Record<RecognitionError['kind'], string> = {
   'missing-move': 'Jugada faltante',
   unreferenced: 'Sin referencia',
   'wrong-number': 'Número incorrecto',
+  'wrong-move': 'Jugada errónea',
 }
 
 const KIND_COLOR: Record<RecognitionError['kind'], string> = {
   'missing-move': 'bg-amber-100 text-amber-800 border-amber-300',
   unreferenced: 'bg-rose-100 text-rose-800 border-rose-300',
   'wrong-number': 'bg-violet-100 text-violet-800 border-violet-300',
+  'wrong-move': 'bg-red-100 text-red-800 border-red-300',
 }
 
 /**
@@ -57,7 +59,18 @@ export function RecognitionErrorPanel({ errors, onClose, onNavigate }: Recogniti
                     {err.moveNumber}
                     {err.color === 'black' ? '...' : '.'} {err.rawSan ?? err.san}
                   </span>
+                  {err.suggestion && (
+                    <span className="ml-2 text-xs font-mono font-semibold text-emerald-700">
+                      → {err.suggestion}
+                      {err.confidence === 'low' ? ' ?' : ''}
+                    </span>
+                  )}
                   <p className="mt-1 text-xs text-slate-700 leading-snug">{err.message}</p>
+                  {err.alternatives && err.alternatives.length > 0 && (
+                    <p className="mt-1 text-xs text-slate-500 leading-snug">
+                      También encaja: {err.alternatives.join(', ')}
+                    </p>
+                  )}
                 </button>
               </li>
             ))}

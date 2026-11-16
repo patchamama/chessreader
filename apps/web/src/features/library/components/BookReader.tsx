@@ -309,6 +309,12 @@ export default function BookReader() {
             if (t.node.to) span.setAttribute('data-to', t.node.to)
             // Inactive base styling; the active highlight is applied separately.
             span.className = hasAlt ? `${baseClass} underline decoration-dotted decoration-2` : baseClass
+            if (t.node.correctedFrom) {
+              // The source has a wrong move here; the board plays the correction.
+              span.setAttribute('data-corrected-to', t.node.san)
+              span.className = `${baseClass} underline decoration-wavy decoration-red-500 decoration-2`
+              span.title = `Jugada errónea en el texto: ${t.node.correctedFrom}. Corrección propuesta: ${t.node.san}`
+            }
           }
           frag.appendChild(span)
           cursor = piece.end

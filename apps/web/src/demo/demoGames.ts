@@ -12,6 +12,8 @@ export interface DemoChapter {
   title: string
   /** Half-moves of the complete game (the expected mainline length). */
   plies: number
+  /** Misprints planted on purpose: [written, correction] in text order. */
+  misprints?: [string, string][]
   html: string
 }
 
@@ -186,6 +188,24 @@ const LEGAL_EN: DemoChapter = {
 <p>Mate with three minor pieces: the bishop on f7 gives check, the knights on d5 and e5 cover every escape square.</p>`,
 }
 
+/** The Opera Game with three misprints, to show wrong-move detection. */
+const OPERA_WITH_ERRORS: DemoChapter = {
+  title: 'La partida de la Ópera (con erratas)',
+  plies: 33,
+  misprints: [['Bf5', 'Bg4'], ['Bc5', 'Bc4'], ['Bg4', 'Bg5']],
+  html: `
+<h2>La partida de la Ópera, con erratas</h2>
+<p><em>Paul Morphy — Duque de Brunswick y Conde Isouard, París 1858</em></p>
+<p>Este texto tiene tres jugadas mal impresas. El lector las detecta porque dejan de ser legales —o hacen ilegal una jugada posterior— y propone la corrección con la que el resto de la partida vuelve a encajar. Aparecen subrayadas en rojo; el botón de errores las lista.</p>
+<p>1. e4 e5 2. ♘f3 d6 3. d4 ♗f5</p>
+<p>Primera errata: el texto dice ♗f5, que es legal. El error solo se descubre una jugada después, cuando el alfil «captura en f3».</p>
+<p>4. dxe5 ♗xf3 5. ♕xf3 dxe5 6. ♗c5</p>
+<p>Segunda errata: el alfil de f1 no puede llegar a c5.</p>
+<p>6... ♘f6 7. ♕b3 ♕e7 8. ♘c3 c6 9. ♗g4 b5</p>
+<p>Tercera errata: el alfil de c1 no llega a g4.</p>
+<p>10. ♘xb5 cxb5 11. ♗xb5+ ♘bd7 12. O-O-O ♖d8 13. ♖xd7 ♖xd7 14. ♖d1 ♕e6 15. ♗xd7+ ♘xd7 16. ♕b8+ ♘xb8 17. ♖d8#</p>`,
+}
+
 export const DEMO_BOOKS: DemoBook[] = [
   {
     book: {
@@ -206,5 +226,15 @@ export const DEMO_BOOKS: DemoBook[] = [
       description: 'Complete annotated games in English, book style and PGN style.',
     },
     chapters: [OPERA_EN, LEGAL_EN],
+  },
+  {
+    book: {
+      id: 3,
+      title: 'Detección de jugadas erróneas',
+      author: 'Demo ChessReader',
+      createdAt: '2026-11-16T10:00:00Z',
+      description: 'Una partida con erratas: el lector las detecta y propone la corrección.',
+    },
+    chapters: [OPERA_WITH_ERRORS],
   },
 ]

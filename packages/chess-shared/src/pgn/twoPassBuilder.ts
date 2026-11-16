@@ -29,6 +29,7 @@ import {
   type RecognitionError,
 } from '../model/gameTree.js';
 import { resetNodeCounter } from './pgnToTree.js';
+import { findMoveRepair } from './moveRepair.js';
 
 /** Parse a bare (isolated) SAN token into a square + piece for board highlight. */
 function parseIsolatedMove(token: SanToken): IsolatedMove | null {
@@ -77,9 +78,11 @@ function makeNode(
   parentId: string | null,
   moveNumber: number,
   color: 'white' | 'black',
+  /** Play this SAN instead of the token's (a repaired wrong move). */
+  sanOverride?: string,
 ): GameNode {
   const fenBefore = chess.fen();
-  const res = chess.move(token.san!);
+  const res = chess.move(sanOverride ?? token.san!);
   return {
     id: nextId(),
     san: res?.san ?? token.san!,
@@ -94,7 +97,43 @@ function makeNode(
       ? { charStart: token.charStart, charEnd: token.charEnd }
       : {}),
     ...(fenBefore === chess.fen() ? { invalid: true } : {}),
+    ...(sanOverride ? { correctedFrom: token.san!.replace(/[!?]+$/, '') } : {}),
   };
+}
+
+/**
+ * The mainline moves the source writes AFTER token `from`, read by numbering
+ * alone (no legality): top-level, chained moves whose written number is the
+ * contiguous next ply, in paragraphs that open with such a move. This is the
+ * continuation a repair must make legal.
+ */
+function upcomingMainline(
+  tokens: SanToken[],
+  from: number,
+  number: number,
+  color: 'white' | 'black',
+): string[] {
+  const out: string[] = [];
+  let expNumber = color === 'white' ? number : number + 1;
+  let expColor: 'white' | 'black' = color === 'white' ? 'black' : 'white';
+  let depth = 0;
+  let inParagraph = true;
+  let decided = true;
+  for (let i = from + 1; i < tokens.length && out.length < 40; i++) {
+    const t = tokens[i];
+    if (t.type === 'paragraph-break') { if (depth === 0) { decided = false; inParagraph = false; } continue; }
+    if (t.type === 'variation-open') { depth++; continue; }
+    if (t.type === 'variation-close') { if (depth > 0) depth--; continue; }
+    if (depth > 0 || t.type !== 'move' || t.isolated || t.moveNumber === undefined || !t.color) continue;
+    const fits = t.moveNumber === expNumber && t.color === expColor;
+    if (!decided) { decided = true; inParagraph = !!t.atParagraphStart && fits; }
+    if (!inParagraph) continue;
+    if (!fits) { inParagraph = false; continue; }
+    out.push(t.san!);
+    if (expColor === 'white') expColor = 'black';
+    else { expColor = 'white'; expNumber++; }
+  }
+  return out;
 }
 
 export function buildGameTreeTwoPass(
@@ -117,6 +156,8 @@ export function buildGameTreeTwoPass(
   const usedByMainline = new Set<number>();
   // Map "moveNumber:color" → mainline node id (anchor lookup for pass 2).
   const mainlineByPly = new Map<number, string>();
+  // Token index of each mainline ply (to rebuild from an earlier wrong move).
+  const mainTokenIndex: number[] = [];
 
   // The mainline only grows from paragraphs that START with the contiguous next
   // mainline ply (the user's rule). At each paragraph boundary we re-decide:
@@ -146,21 +187,31 @@ export function buildGameTreeTwoPass(
 
     // First move of this paragraph decides whether it feeds the mainline. It
     // qualifies only if the move LEADS the paragraph (no prose before it on the
-    // line) AND is the contiguous next ply AND legal. A paragraph that opens
-    // with prose ("Aquí las negras podían jugar 3...Nf6") is analysis, not the
-    // mainline — its first move has atParagraphStart=false.
+    // line) AND is the contiguous next ply. A paragraph that opens with prose
+    // ("Aquí las negras podían jugar 3...Nf6") is analysis, not the mainline —
+    // its first move has atParagraphStart=false. Legality is checked below, so
+    // a WRONG move at the head of a mainline paragraph can still be repaired.
     if (!paragraphDecided) {
       paragraphDecided = true;
       // The very first move of the text leads the game even without a preceding
       // newline; afterwards a paragraph qualifies only if its first move leads it.
       const leads = t.atParagraphStart || tree.mainline.length === 0;
-      inMainlineParagraph =
-        leads &&
-        t.moveNumber === expNumber &&
-        t.color === expColor &&
-        isLegalFrom(chess.fen(), t.san!);
+      inMainlineParagraph = leads && t.moveNumber === expNumber && t.color === expColor;
     }
     if (!inMainlineParagraph) continue;
+
+    const place = (tokenIndex: number, sanOverride?: string) => {
+      const node = makeNode(tokens[tokenIndex], chess, parentId, expNumber, expColor, sanOverride);
+      tree.nodes.set(node.id, node);
+      tree.mainline.push(node.id);
+      mainlineByPly.set(plyIndex(expNumber, expColor), node.id);
+      usedByMainline.add(tokenIndex);
+      mainTokenIndex.push(tokenIndex);
+      parentId = node.id;
+      if (expColor === 'white') { expColor = 'black'; }
+      else { expColor = 'white'; expNumber++; }
+      return node;
+    };
 
     // Accept as the next mainline ply when it is legal there AND the written
     // number does not CONTRADICT the expected ply. The number is authoritative,
@@ -171,34 +222,81 @@ export function buildGameTreeTwoPass(
       t.moveNumber === expNumber ||           // exact ply match, or
       plyIndex(t.moveNumber!, t.color!) >= plyIndex(expNumber, expColor); // not a regression
     if (numberFits && isLegalFrom(chess.fen(), t.san!)) {
-      const node = makeNode(t, chess, parentId, expNumber, expColor); // stamp EXPECTED ply
-      tree.nodes.set(node.id, node);
-      tree.mainline.push(node.id);
-      mainlineByPly.set(plyIndex(expNumber, expColor), node.id);
-      usedByMainline.add(i);
-      parentId = node.id;
-      if (expColor === 'white') { expColor = 'black'; }
-      else { expColor = 'white'; expNumber++; }
-    } else {
-      // The move did not extend the mainline. If its written number SKIPS past
-      // the expected ply (a forward gap) it means an earlier ply is missing in
-      // the source — flag it. Then end the mainline paragraph.
-      if (
-        t.moveNumber !== undefined && t.color &&
-        plyIndex(t.moveNumber, t.color) > plyIndex(expNumber, expColor)
-      ) {
-        errors.push({
-          kind: 'missing-move',
-          san: t.san!,
-          ...(t.rawSan ? { rawSan: t.rawSan } : {}),
-          moveNumber: t.moveNumber,
-          color: t.color,
-          message: `Falta una jugada antes de ${t.moveNumber}${t.color === 'black' ? '...' : '.'} ${t.san} (la línea principal esperaba ${expNumber}${expColor === 'black' ? '...' : '.'}).`,
-          ...(t.charStart !== undefined ? { charStart: t.charStart, charEnd: t.charEnd } : {}),
-        });
-      }
-      inMainlineParagraph = false;
+      place(i);
+      continue;
     }
+
+    // The move sits exactly where the next mainline ply belongs but is illegal:
+    // the source has a wrong move, here or a few plies back. Let the moves that
+    // follow decide the correction.
+    if (t.moveNumber === expNumber && t.color === expColor) {
+      const repair = findMoveRepair({
+        startFen,
+        played: tree.mainline.map((id) => tree.nodes.get(id)!.san),
+        written: t.san!,
+        upcoming: upcomingMainline(tokens, i, expNumber, expColor),
+      });
+      if (repair) {
+        const label = (ply: number) => `${Math.floor(ply / 2) + 1}${ply % 2 === 0 ? '.' : '...'}`;
+        const wrongToken = repair.index === tree.mainline.length ? t : tokens[mainTokenIndex[repair.index]];
+        if (repair.index < tree.mainline.length) {
+          // An earlier mainline move was the wrong one: rebuild from it.
+          const redo = mainTokenIndex.splice(repair.index);
+          for (const id of tree.mainline.splice(repair.index)) {
+            const n = tree.nodes.get(id)!;
+            mainlineByPly.delete(plyIndex(n.moveNumber, n.color));
+            tree.nodes.delete(id);
+          }
+          const prev = repair.index > 0 ? tree.nodes.get(tree.mainline[repair.index - 1])! : null;
+          chess.load(prev ? prev.fen : startFen);
+          parentId = prev ? prev.id : null;
+          expNumber = Math.floor(repair.index / 2) + 1;
+          expColor = repair.index % 2 === 0 ? 'white' : 'black';
+          redo.forEach((tokenIndex, k) => place(tokenIndex, k === 0 ? repair.san : undefined));
+          place(i);
+        } else {
+          place(i, repair.san);
+        }
+        errors.push({
+          kind: 'wrong-move',
+          san: wrongToken.san!.replace(/[!?]+$/, ''),
+          ...(wrongToken.rawSan ? { rawSan: wrongToken.rawSan } : {}),
+          moveNumber: Math.floor(repair.index / 2) + 1,
+          color: repair.index % 2 === 0 ? 'white' : 'black',
+          suggestion: repair.san,
+          confidence: repair.confidence,
+          ...(repair.alternatives.length > 0
+            ? { alternatives: repair.alternatives.map((a) => `${label(a.index)} ${a.san}`) }
+            : {}),
+          message:
+            `Jugada errónea ${label(repair.index)} ${wrongToken.rawSan ?? wrongToken.san}: ` +
+            `probablemente es ${label(repair.index)} ${repair.san} ` +
+            `(las ${repair.verifiedPlies} jugadas siguientes son legales con la corrección).`,
+          ...(wrongToken.charStart !== undefined ? { charStart: wrongToken.charStart, charEnd: wrongToken.charEnd } : {}),
+        });
+        errors.sort((a, b) => (a.charStart ?? 0) - (b.charStart ?? 0));
+        continue;
+      }
+    }
+
+    // The move did not extend the mainline. If its written number SKIPS past
+    // the expected ply (a forward gap) it means an earlier ply is missing in
+    // the source — flag it. Then end the mainline paragraph.
+    if (
+      t.moveNumber !== undefined && t.color &&
+      plyIndex(t.moveNumber, t.color) > plyIndex(expNumber, expColor)
+    ) {
+      errors.push({
+        kind: 'missing-move',
+        san: t.san!,
+        ...(t.rawSan ? { rawSan: t.rawSan } : {}),
+        moveNumber: t.moveNumber,
+        color: t.color,
+        message: `Falta una jugada antes de ${t.moveNumber}${t.color === 'black' ? '...' : '.'} ${t.san} (la línea principal esperaba ${expNumber}${expColor === 'black' ? '...' : '.'}).`,
+        ...(t.charStart !== undefined ? { charStart: t.charStart, charEnd: t.charEnd } : {}),
+      });
+    }
+    inMainlineParagraph = false;
   }
 
   // ── PASS 2: insert variations, anchored by NUMBER onto the mainline ───────

@@ -8,7 +8,7 @@ describe('demo library: complete annotated games', () => {
     for (const chapter of chapters) {
       const text = htmlToProseText(chapter.html)
 
-      for (const algorithm of [1, 2, 3] as const) {
+      for (const algorithm of chapter.misprints ? ([1, 2] as const) : ([1, 2, 3] as const)) {
         it(`${book.title} / ${chapter.title}: algorithm ${algorithm} reads the whole game`, () => {
           const games = recognizeGames(text, { algorithm })
           expect(games).toHaveLength(1)
@@ -18,7 +18,10 @@ describe('demo library: complete annotated games', () => {
 
       it(`${book.title} / ${chapter.title}: every written move is legal and painted (algorithm 2)`, () => {
         const [game] = recognizeGames(text, { algorithm: 2 })
-        expect(game.tree.errors).toEqual([])
+        // Only the misprints planted on purpose are reported, each with its fix.
+        expect(game.tree.errors.map((e) => [e.kind, e.san, e.suggestion])).toEqual(
+          (chapter.misprints ?? []).map(([written, fix]) => ['wrong-move', written, fix]),
+        )
         const written = tokenize(figurineToAscii(text)).filter((t) => t.type === 'move' && !t.isolated)
         const valid = [...game.tree.nodes.values()].filter((n) => n.fen && !n.invalid)
         expect(valid).toHaveLength(written.length)
