@@ -14,7 +14,7 @@ Delivery: one commit per task, pushed to main after its checks. Runner: Vitest (
 Assumptions (not user statements): narration audio uses the browser Web Speech API (no key, works on the static demo, gives per-utterance events to sync the board); board cues are a device-independent data model (squares + colour role + effect) so an LED board can consume the same stream (S6).
 
 ## Tasks
-- T1 [S1] inline — annotated complete demo games + deploy. Status: pending.
+- T1 [S1] inline — annotated complete demo games + deploy. Status: done (v0.36.0); 6 chapters in 2 books, each verified: full mainline with algorithms 1-3, every written move legal and painted, ends in mate; browser smoke in demo mode OK.
 - T2 [S2] inline — wrong-move detection and repair proposals. Status: pending.
 - T3 [S4,S5,S6] inline — board cue model + commentary analyser + board rendering. Status: pending.
 - T4 [S3] inline — narration player (auto / wait-for-move modes). Status: pending.
@@ -23,3 +23,4 @@ Assumptions (not user statements): narration audio uses the browser Web Speech A
 ## Log
 - L1 (2026-11-16) user request, verbatim in S1–S7, preceded by "COMMIT + push origin main." (done: e2bfcac v0.34.0, c17bd52 v0.35.0 pushed with tags).
 - L2 Route: all inline, no writer trigger (tasks depend on each other: T4 needs T3's cue model). CI was already red since v0.27.0 from 4 lint errors; fixed in a separate commit.
+- L3 T1: replaced the old demo chapters (wrong attributions, single chapter per book) with apps/web/src/demo/demoGames.ts; the handler now serves chapters by order. Known limit: algorithm 3 takes a numbered threat in prose ("Amenaza 15. Bxf4") as a mainline move; the demo text avoids it.

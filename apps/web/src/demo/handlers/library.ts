@@ -10,7 +10,7 @@ export const libraryHandlers = [
   http.get('/api/library/books/:bookId/chapters/:chapterOrder', async ({ params }) => {
     await delay(400)
     const id = Number(params.bookId)
-    const chapter = MOCK_CHAPTERS[id]
+    const chapter = MOCK_CHAPTERS[id]?.[Number(params.chapterOrder) - 1]
     if (!chapter) {
       return HttpResponse.json({ error: 'Chapter not found' }, { status: 404 })
     }

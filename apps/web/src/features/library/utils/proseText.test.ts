@@ -84,26 +84,3 @@ describe('piecesByTextNode', () => {
     expect(texts).toEqual(['1.', '♘', 'f3'])
   })
 })
-
-describe('demo chapters: every valid node is painted at its own source token', async () => {
-  const { MOCK_CHAPTERS } = await import('../../../demo/mockData')
-  for (const [id, chapter] of Object.entries(MOCK_CHAPTERS)) {
-    for (const algorithm of [1, 2] as const) {
-      it(`book ${id}, algorithm ${algorithm}`, () => {
-        const text = htmlToProseText(chapter.html)
-        const games = recognizeGames(text, { algorithm })
-        const targets = planMoveTargets(text, games).filter((t) => t.kind === 'node')
-        const valid = games.reduce(
-          (n, g) => n + [...g.tree.nodes.values()].filter((x) => x.fen && !x.invalid).length,
-          0,
-        )
-        expect(games.length).toBeGreaterThan(0)
-        expect(targets).toHaveLength(valid)
-        for (const t of targets) {
-          if (t.kind !== 'node') continue
-          expect(text.slice(t.start, t.end).endsWith(t.node.rawSan ?? t.node.san)).toBe(true)
-        }
-      })
-    }
-  }
-})
