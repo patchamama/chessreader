@@ -10,6 +10,8 @@
  */
 
 import { tokenize, type SanToken } from '../notation/sanTokenizer.js';
+
+export { DIAGRAM_MARK } from '../notation/sanTokenizer.js';
 import { figurineToAscii } from '../notation/figurineToAscii.js';
 import { spanishToEnglish } from '../notation/spanishToEnglish.js';
 import { buildGameTree } from '../pgn/pgnToTree.js';
@@ -76,28 +78,98 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
   // variation or a comment of the CURRENT game: a "1." in there (e.g. the
   // alternative first move "(1. c4 e5 2. g3)") never starts a new game.
   let depth = 0;
+  // Has a bracket been opened in the current paragraph? A "1." that LEADS a
+  // paragraph while only a bracket of an EARLIER paragraph is still open is a
+  // new game: that bracket was simply never closed in the source.
+  let openedInParagraph = false;
+
+  // Number-only reading of the current game's mainline: the ply of the last
+  // top-level move in a paragraph that opened with the contiguous next ply.
+  // It tells whether a paragraph continues the game (next ply), analyses it
+  // (an earlier ply) or cannot belong to it (a later ply: a gap).
+  let lastMainPly = 0;
+  let inMainParagraph = false;
+  let paragraphDecided = false;
+  const ply = (t: SanToken) => (t.moveNumber! - 1) * 2 + (t.color === 'black' ? 2 : 1);
+
+  // A FRAGMENT: after a diagram the text may start at a later move ("23. Rxe5")
+  // from the position the diagram shows — another game, or a part of this one
+  // the text skipped. Its start position is not known here, so its moves cannot
+  // be replayed; what matters is that they are NOT played on, nor hung from,
+  // the game before the diagram. They are set apart until the game resumes at
+  // its own next ply, or a new game starts.
+  let afterDiagram = false;
+  let inFragment = false;
+  let fragmentLastPly = 0;
+
+  const startNewGame = () => {
+    if (current.some(t => t.type === 'move')) gameSequences.push(current);
+    current = [];
+    depth = 0;
+    lastMainPly = 0;
+    inFragment = false;
+  };
 
   for (const token of tokens) {
-    if (token.type === 'variation-open') depth++;
-    else if (token.type === 'variation-close') depth = Math.max(0, depth - 1);
-    // A result ends the game text; forgive any unbalanced bracket before it.
-    else if (token.type === 'result') depth = 0;
+    if (token.type === 'paragraph-break') {
+      openedInParagraph = false;
+      if (depth === 0) { paragraphDecided = false; inMainParagraph = false; }
+    } else if (token.type === 'variation-open') {
+      depth++;
+      openedInParagraph = true;
+    } else if (token.type === 'variation-close') {
+      depth = Math.max(0, depth - 1);
+    } else if (token.type === 'result') {
+      // A result ends the game text; forgive any unbalanced bracket before it.
+      depth = 0;
+    } else if (token.type === 'diagram') {
+      afterDiagram = true;
+      continue;
+    }
 
     // A fresh "1." (white) when the current sequence already has a move 1 and
-    // some moves → the start of a NEW game (back-to-back PGN dump). Post-result
-    // analysis uses higher move numbers (19., 20., …) and stays in this game.
-    if (
-      token.type === 'move-number' &&
-      token.moveNumber === 1 &&
-      !token.isEllipsis
-    ) {
-      if (depth === 0 && sawMove1 && current.some(t => t.type === 'move')) {
-        gameSequences.push(current);
-        current = [];
+    // some moves → the start of a NEW game: the board restarts from the initial
+    // position. Post-result analysis uses higher move numbers (19., 20., …) and
+    // stays in this game.
+    if (token.type === 'move-number' && token.moveNumber === 1 && !token.isEllipsis) {
+      const topLevel = depth === 0 || (!!token.atParagraphStart && !openedInParagraph);
+      if (topLevel && (sawMove1 || inFragment) && (inFragment || current.some(t => t.type === 'move'))) {
+        startNewGame();
       }
-      if (depth === 0) sawMove1 = true;
+      if (topLevel) { sawMove1 = true; afterDiagram = false; }
       current.push(token);
       continue;
+    }
+
+    // A paragraph that opens with a numbered move, at top level.
+    if (token.type === 'move-number' && depth === 0 && token.atParagraphStart) {
+      const p = ply(token);
+      if (inFragment) {
+        // Back to the game at its own next ply (unless the fragment itself
+        // continues there); anything else stays with the fragment.
+        if (p === lastMainPly + 1 && p !== fragmentLastPly + 1) inFragment = false;
+      } else if (afterDiagram && lastMainPly > 0 && p > lastMainPly + 1) {
+        inFragment = true;
+        fragmentLastPly = p - 1;
+      }
+      afterDiagram = false;
+    }
+
+    if (inFragment) {
+      if (token.type === 'move' && !token.isolated && depth === 0) fragmentLastPly = Math.max(fragmentLastPly, ply(token));
+      continue; // set apart: not part of the current game
+    }
+
+    if (token.type === 'move' && depth === 0 && !token.isolated && token.moveNumber !== undefined) {
+      const fits = ply(token) === lastMainPly + 1;
+      if (!paragraphDecided) {
+        paragraphDecided = true;
+        inMainParagraph = fits && (!!token.atParagraphStart || lastMainPly === 0);
+      }
+      if (inMainParagraph) {
+        if (fits) lastMainPly++;
+        else inMainParagraph = false;
+      }
     }
 
     // Result tokens stay in the sequence (analysis prose may follow).

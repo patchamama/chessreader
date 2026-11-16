@@ -84,3 +84,36 @@ describe('piecesByTextNode', () => {
     expect(texts).toEqual(['1.', '♘', 'f3'])
   })
 })
+
+describe('diagrams in the prose text', () => {
+  it('an image alone in its block becomes a diagram mark on its own line', () => {
+    const { text } = extractProseText(dom('<p>1. e4 e5</p><p><img src="d.png"></p><p>23. Rxe5</p>'))
+    expect(text).toBe('1. e4 e5\n￼\n23. Rxe5')
+  })
+
+  it('an image inside a line of text (a figurine) stays a plain space', () => {
+    const { text } = extractProseText(dom('<p>1. <img src="n.png">f3 e5</p>'))
+    expect(text).toBe('1. f3 e5')
+  })
+
+  it('a mounted diagram overlay reads the same as the original image', () => {
+    const html = '<p>1. e4 e5</p><div><img src="d.png"></div><p>2. Nf3</p>'
+    const live = dom(html)
+    const overlay = document.createElement('span')
+    overlay.setAttribute('data-diagram-overlay', '1')
+    overlay.textContent = 'Eval +0.3 depth 12'
+    live.querySelector('img')!.replaceWith(overlay)
+    expect(extractProseText(live).text).toBe(htmlToProseText(html))
+  })
+
+  it('a fragment after a diagram is not painted as moves of the previous game', () => {
+    const html = '<p>1. e4 e5 2. Nf3 Nc6</p><p><img src="d.png"></p><p>23. Rxe5 Qxe5 24. Bb2</p><p>1. d4 d5 2. c4</p>'
+    const text = htmlToProseText(html)
+    for (const algorithm of [1, 2, 3] as const) {
+      const games = recognizeGames(text, { algorithm })
+      const painted = planMoveTargets(text, games).map((t) => text.slice(t.start, t.end))
+      expect(games).toHaveLength(2)
+      expect(painted).toEqual(['1. e4', 'e5', '2. Nf3', 'Nc6', '1. d4', 'd5', '2. c4'])
+    }
+  })
+})

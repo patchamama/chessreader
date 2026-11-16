@@ -19,7 +19,8 @@ export type TokenType =
   | 'variation-close' // )
   | 'annotation'     // !, ?, etc. standalone
   | 'paragraph-break' // a newline / paragraph boundary in the source
-  | 'result';        // 1-0, 0-1, 1/2-1/2, *
+  | 'result'
+  | 'diagram';        // 1-0, 0-1, 1/2-1/2, *
 
 export interface SanToken {
   type: TokenType;
@@ -59,6 +60,13 @@ export interface SanToken {
  */
 const MAX_CHAIN_GAP = 3;
 
+/**
+ * Character that stands for a board diagram in recognition text (U+FFFC, the
+ * "object replacement character"). The text extractor writes it, on its own
+ * line, where the source shows a diagram image.
+ */
+export const DIAGRAM_MARK = '\uFFFC';
+
 // SAN move pattern (English notation only — caller should normalise Spanish first)
 // Note: no trailing \b because check (+) and mate (#) symbols are non-word chars
 const SAN_MOVE_RE =
@@ -87,6 +95,14 @@ export function tokenize(text: string): SanToken[] {
         end: m.index + m[0].length,
         token: { type: 'paragraph-break', raw: m[0], charStart: m.index, charEnd: m.index + m[0].length },
       });
+    }
+  }
+
+  // Collect diagram marks: the place of a board diagram in the source. A game
+  // fragment may start right after one, from the position the diagram shows.
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === DIAGRAM_MARK) {
+      matches.push({ start: i, end: i + 1, token: { type: 'diagram', raw: DIAGRAM_MARK, charStart: i, charEnd: i + 1 } });
     }
   }
 

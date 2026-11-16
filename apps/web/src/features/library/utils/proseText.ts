@@ -1,3 +1,4 @@
+import { DIAGRAM_MARK } from '@chess-ebook/chess-shared'
 import type { GameNode, GameTree, IsolatedMove, RecognizedGame } from '@chess-ebook/chess-shared'
 
 /**
@@ -29,11 +30,35 @@ export interface ProseText {
   map: (TextPos | null)[]
 }
 
+const isImage = (el: Element) => el.tagName.toUpperCase() === 'IMG' || el.hasAttribute('data-diagram-overlay')
+
+/** Does this subtree hold any text of its own (outside images/diagram overlays)? */
+function hasOwnText(n: Node): boolean {
+  if (n.nodeType === 3) return /\S/.test(n.nodeValue ?? '')
+  if (n.nodeType !== 1) return false
+  const el = n as Element
+  if (isImage(el) || SKIP_TAGS.has(el.tagName.toUpperCase())) return false
+  for (let c = el.firstChild; c; c = c.nextSibling) if (hasOwnText(c)) return true
+  return false
+}
+
+/** The nearest block-level ancestor of `el` (or `root`). */
+function blockOf(el: Element, root: Node): Node {
+  for (let p = el.parentNode; p && p !== root; p = p.parentNode) {
+    if (p.nodeType === 1 && BLOCK_TAGS.has((p as Element).tagName.toUpperCase())) return p
+  }
+  return root
+}
+
 /**
  * Flatten a DOM subtree to recognition text: block boundaries become a newline
- * (the recogniser's paragraph signal), images become a space, whitespace runs
- * collapse like the browser renders them, inline tags join without a gap (so
- * `<span>♘</span>f3` reads "♘f3"). Diagram overlays are treated as images.
+ * (the recogniser's paragraph signal), whitespace runs collapse like the browser
+ * renders them, inline tags join without a gap (so `<span>♘</span>f3` reads
+ * "♘f3"). An image that stands alone in its block is a board DIAGRAM: it becomes
+ * a diagram mark on its own line, so the recogniser can tell that a fragment
+ * may start there from the diagram's position. An image inside a line of text
+ * (a figurine) is a space. Diagram overlays are treated as the image they
+ * replaced.
  */
 export function extractProseText(root: Node): ProseText {
   const out: string[] = []
@@ -67,7 +92,18 @@ export function extractProseText(root: Node): ProseText {
     const el = n as Element
     const tag = el.tagName.toUpperCase()
     if (SKIP_TAGS.has(tag)) return
-    if (tag === 'IMG' || el.hasAttribute('data-diagram-overlay')) { want('space'); return }
+    if (isImage(el)) {
+      if (!hasOwnText(blockOf(el, root))) {
+        want('newline')
+        flush()
+        out.push(DIAGRAM_MARK)
+        map.push(null)
+        want('newline')
+      } else {
+        want('space')
+      }
+      return
+    }
     const block = BLOCK_TAGS.has(tag)
     if (block) want('newline')
     for (let c = el.firstChild; c; c = c.nextSibling) walk(c)

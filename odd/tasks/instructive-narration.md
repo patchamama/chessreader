@@ -21,7 +21,7 @@ Assumptions (not user statements): narration audio uses the browser Web Speech A
 - T3 [S4,S5,S6] inline — board cue model + commentary analyser + board rendering. Status: pending.
 - T4 [S3] inline — narration player (auto / wait-for-move modes). Status: pending.
 - T5 [S7] inline — annotated game search (Lichess; chess.com if its API allows). Status: pending.
-- T6 [S8] inline — several games in one text: restart on a new game, fragments after a diagram. Status: pending.
+- T6 [S8] inline — several games in one text: restart on a new game, fragments after a diagram. Status: done (v0.38.0).
 
 ## Log
 - L1 (2026-11-16) user request, verbatim in S1–S7, preceded by "COMMIT + push origin main." (done: e2bfcac v0.34.0, c17bd52 v0.35.0 pushed with tags).
@@ -29,3 +29,4 @@ Assumptions (not user statements): narration audio uses the browser Web Speech A
 - L3 T1: replaced the old demo chapters (wrong attributions, single chapter per book) with apps/web/src/demo/demoGames.ts; the handler now serves chapters by order. Known limit: algorithm 3 takes a numbered threat in prose ("Amenaza 15. Bxf4") as a mainline move; the demo text avoids it.
 - L4 T2 evidence: fuzz on 40 real Lichess games (temporary harness, not committed): 0 repairs proposed on clean games; 216 injected one-square typos → 203 detected, 187 (87%) restored to the exact original line; 14 of the 29 misses had the true move among the low-confidence alternatives. Undetected typos are ones that stay legal and never contradict a later move. Algorithm 3 (legacy) has no repair.
 - L5 (2026-11-16) user added S8 verbatim while T2 was in progress → T6.
+- L6 T6: a "1." that leads a paragraph starts a new game even if an earlier bracket was never closed; the text extractor writes a diagram mark (U+FFFC) for an image alone in its block; after a mark, a paragraph that jumps PAST the game's next ply is a fragment and is set apart (not played on the previous game) until the game resumes at its next ply or a new game starts. Limit: the fragment itself is not replayed — its start position is only in the diagram image, which is not read. Algorithm 3 still re-anchors on a paragraph restating an earlier ply (legacy behaviour, test skipped for it).
