@@ -115,15 +115,18 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
 
         {/* Commentary by a language model */}
         <label className={labelClass} htmlFor="ai-provider">Commentary by a language model (after an engine review)</label>
-        <select id="ai-provider" className={inputClass} value={s.aiProvider} onChange={(e) => s.set({ aiProvider: e.target.value as 'none' | 'openai' })}>
+        <select id="ai-provider" className={inputClass} value={s.aiProvider} onChange={(e) => s.set({ aiProvider: e.target.value as 'none' | 'anthropic' | 'openai', aiModel: '' })}>
           <option value="none">Off — rule-based commentary only</option>
+          <option value="anthropic">Claude — Anthropic (your own API key)</option>
           <option value="openai">OpenAI (your own API key)</option>
         </select>
         {s.aiProvider !== 'none' && (
           <>
             <label className={labelClass} htmlFor="ai-key">API key (kept in this browser, sent only to the provider)</label>
             <input id="ai-key" type="password" autoComplete="off" className={inputClass} value={s.aiKey} onChange={(e) => s.set({ aiKey: e.target.value })} />
-            <label className={labelClass} htmlFor="ai-model">Model id</label>
+            <label className={labelClass} htmlFor="ai-model">
+              {s.aiProvider === 'anthropic' ? 'Model id (empty = claude-opus-5-5)' : 'Model id'}
+            </label>
             <input id="ai-model" className={inputClass} value={s.aiModel} onChange={(e) => s.set({ aiModel: e.target.value })} />
             <p className="mt-1 text-[11px] text-gray-400">
               The model receives the moves, the engine verdicts and the board facts of the game being commented. Nothing else is sent.

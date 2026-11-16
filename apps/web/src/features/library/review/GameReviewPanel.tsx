@@ -80,7 +80,7 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
   const [database, setDatabase] = useState<{ tree: unknown; eco: string; name: string } | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
-  const aiReady = useSettingsStore((s) => s.aiProvider !== 'none' && !!s.aiKey.trim() && !!s.aiModel.trim())
+  const aiReady = useSettingsStore((s) => s.aiProvider !== 'none' && !!s.aiKey.trim() && (s.aiProvider === 'anthropic' || !!s.aiModel.trim()))
   const abort = useRef<AbortController | null>(null)
   useEffect(() => () => abort.current?.abort(), [])
 

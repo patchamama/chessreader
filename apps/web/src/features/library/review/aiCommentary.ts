@@ -1,6 +1,7 @@
 import { annotateGame, buildCommentaryRequest, parseCommentaryResponse } from '@chess-ebook/chess-shared'
 import type { GameReview, Lang, PlyInput } from '@chess-ebook/chess-shared'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
+import { claudeModel } from './claudeModel'
 
 /**
  * Commentary written by a language model the user brings (their own key).
@@ -40,6 +41,8 @@ export function openAiModel(apiKey: string, model: string): CommentaryModel {
 /** The model chosen in Settings, or null when none is set up. */
 export function configuredModel(): CommentaryModel | null {
   const s = useSettingsStore.getState()
+  // Claude has a default model; an id typed in Settings replaces it.
+  if (s.aiProvider === 'anthropic' && s.aiKey.trim()) return claudeModel(s.aiKey.trim(), s.aiModel.trim() || undefined)
   if (s.aiProvider === 'openai' && s.aiKey.trim() && s.aiModel.trim()) return openAiModel(s.aiKey.trim(), s.aiModel.trim())
   return null
 }

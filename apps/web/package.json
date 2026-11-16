@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@chess-ebook/chess-shared": "workspace:*",
     "@tanstack/react-query": "^5.101.0",
     "chess.js": "^1.4.0",

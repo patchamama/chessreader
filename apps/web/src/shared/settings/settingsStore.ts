@@ -137,7 +137,7 @@ export interface AppSettings {
   openaiKey: string
   elevenlabsKey: string
   /** Language model that writes commentary from the engine review ('none' = rule-based only). */
-  aiProvider: 'none' | 'openai'
+  aiProvider: 'none' | 'anthropic' | 'openai'
   /** Its API key (kept in this browser, sent only to that provider) and model id. */
   aiKey: string
   aiModel: string
