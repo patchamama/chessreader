@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import React from 'react'
+import { MemoryRouter } from 'react-router-dom'
 
 vi.mock('../api/libraryApi', () => ({
   useBooks: vi.fn(),
@@ -16,7 +17,7 @@ const mockUseUploadBook = vi.mocked(useUploadBook)
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return React.createElement(QueryClientProvider, { client: qc }, children)
+  return React.createElement(MemoryRouter, null, React.createElement(QueryClientProvider, { client: qc }, children))
 }
 
 describe('UploadBookForm', () => {
