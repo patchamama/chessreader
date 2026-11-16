@@ -29,7 +29,8 @@ final class RoutingSpeechSynthesizer implements SpeechSynthesizer
 
     public function synthesize(string $text, string $lang, VoiceOptions $voice, string $wavPath): void
     {
-        $raw = $wavPath . '.raw';
+        $raw  = $wavPath . '.raw';
+        $text = self::plainText($text);
         try {
             match ($voice->provider) {
                 'system'     => $this->system($text, $lang, $voice, $raw),
@@ -67,21 +68,24 @@ final class RoutingSpeechSynthesizer implements SpeechSynthesizer
             return;
         }
         if ($os === 'Windows') {
-            $name   = $voice->voice !== '' ? "\$s.SelectVoice('" . str_replace("'", "''", $voice->voice) . "');" : '';
-            $script = "Add-Type -AssemblyName System.Speech; \$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; {$name}"
-                . ' $s.Rate = ' . (int) round(($voice->rate - 1) * 10) . '; $s.SetOutputToWaveFile($args[0]); $s.Speak([Console]::In.ReadToEnd()); $s.Dispose()';
-            Shell::run(['powershell', '-NoProfile', '-Command', $script, $out], $text);
+            [$command, $env] = self::windowsCommand($voice, $out);
+            Shell::run($command, $text, 120, $env);
             return;
         }
         $espeak = Shell::find('espeak-ng') ?? Shell::find('espeak');
         if ($espeak === null) {
             throw new \RuntimeException('no system voice on the server: install espeak-ng, or choose another provider');
         }
-        Shell::run([$espeak, '-v', $voice->voice !== '' ? $voice->voice : $lang, '-s', (string) (int) round(165 * $voice->rate), '-w', $out, '--stdin'], $text);
+        // A voice name can never be read as an option.
+        $name = preg_match('/^[A-Za-z][A-Za-z0-9+_-]{0,40}$/', $voice->voice) ? $voice->voice : $lang;
+        Shell::run([$espeak, '-v', $name, '-s', (string) (int) round(165 * $voice->rate), '-w', $out, '--stdin'], $text);
     }
 
     private function piper(string $text, string $lang, VoiceOptions $voice, string $out): void
     {
+        if ($voice->voice !== '' && !preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/', $voice->voice)) {
+            throw new \RuntimeException('the piper voice must be the name of a model in the models folder');
+        }
         $bin = ($this->config['piper_bin'] ?? '') ?: Shell::find('piper');
         if ($bin === null || $bin === '') {
             throw new \RuntimeException('piper is not installed on the server (set PIPER_BIN, or install it from github.com/rhasspy/piper)');
@@ -94,8 +98,12 @@ final class RoutingSpeechSynthesizer implements SpeechSynthesizer
                 throw new \RuntimeException('no piper voice for "' . $lang . '": put a .onnx model in PIPER_MODELS_DIR or give its path as the voice');
             }
             $model = $found[0];
-        } elseif (!str_contains($model, '/') && $dir !== '') {
-            $model = $dir . '/' . basename($model) . (str_ends_with($model, '.onnx') ? '' : '.onnx');
+        } else {
+            // Only the NAME of a model in the configured folder: never a path.
+            if ($dir === '' || !preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/', $model)) {
+                throw new \RuntimeException('the piper voice must be the name of a model in the models folder');
+            }
+            $model = $dir . '/' . $model . (str_ends_with($model, '.onnx') ? '' : '.onnx');
         }
         if (!is_file($model)) {
             throw new \RuntimeException('piper voice not found: ' . basename($model));
@@ -156,6 +164,37 @@ final class RoutingSpeechSynthesizer implements SpeechSynthesizer
             throw new \RuntimeException($name . ' refused the request (' . ($status ?: 'no answer') . ')' . ($detail !== '' ? ': ' . substr((string) $detail, 0, 200) : ''));
         }
         file_put_contents($out, $data);
+    }
+
+    /**
+     * The Windows speech command. The voice name, the output path and the rate
+     * travel as environment variables and the text on standard input: nothing
+     * the user typed is ever part of the script PowerShell parses.
+     *
+     * @return array{0: list<string>, 1: array<string,string>}
+     */
+    public static function windowsCommand(VoiceOptions $voice, string $out): array
+    {
+        $script = 'Add-Type -AssemblyName System.Speech; '
+            . '$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; '
+            . 'if ($env:CHESSREADER_VOICE) { $s.SelectVoice($env:CHESSREADER_VOICE) }; '
+            . '$s.Rate = [int]$env:CHESSREADER_RATE; '
+            . '$s.SetOutputToWaveFile($env:CHESSREADER_OUT); '
+            . '$s.Speak([Console]::In.ReadToEnd()); $s.Dispose()';
+        return [
+            ['powershell', '-NoProfile', '-NonInteractive', '-Command', $script],
+            [
+                'CHESSREADER_VOICE' => $voice->voice,
+                'CHESSREADER_OUT'   => $out,
+                'CHESSREADER_RATE'  => (string) max(-10, min(10, (int) round(($voice->rate - 1) * 10))),
+            ],
+        ];
+    }
+
+    /** The text as plain words: speech engines read "[[…]]" as commands (macOS `say`). */
+    public static function plainText(string $text): string
+    {
+        return trim((string) preg_replace('/\s+/', ' ', str_replace(['[[', ']]'], ' ', $text)));
     }
 
     /** Voices of the server's operating system, for the settings screen. */

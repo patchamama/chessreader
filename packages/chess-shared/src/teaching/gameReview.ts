@@ -12,6 +12,7 @@
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor } from 'chess.js';
 import { attacksFrom, type MoveQuality } from './commentCues.js';
 import type { Lang } from './concepts.js';
+import { positionIdeas } from './positionIdeas.js';
 
 /** Engine evaluation from White's point of view. */
 export interface Score {
@@ -52,7 +53,9 @@ export function moveAccuracy(loss: number): number {
 export type MotifKind =
   | 'capture' | 'check' | 'mate' | 'castle' | 'promotion' | 'en-passant'
   | 'fork' | 'pin' | 'skewer' | 'sacrifice' | 'exchange-sacrifice'
-  | 'discovered-check' | 'double-check' | 'joint-attack' | 'mate-threat' | 'late-value';
+  | 'discovered-check' | 'double-check' | 'joint-attack' | 'mate-threat' | 'late-value'
+  | 'attack-undefended' | 'wins-material' | 'discovered-attack' | 'outpost' | 'open-file'
+  | 'passed-pawn' | 'battery' | 'x-ray' | 'leaves-hanging';
 
 export interface Motif {
   kind: MotifKind;
@@ -133,10 +136,65 @@ export function moveMotifs(fenBefore: string, san: string): Motif[] {
       }
       if (seen.length < 2) continue;
       const [front, behind] = seen.map((s) => at(s)!);
+      // Battery: an own queen/rook/bishop that moves along this line stands right behind or in front.
+      const along = (t: PieceSymbol) => t === 'q' || (df === 0 || dr === 0 ? t === 'r' : t === 'b');
+      if (front.color === me && along(front.type) && !out.some((x) => x.kind === 'battery')) add('battery', [seen[0]], { piece: front.type });
       if (front.color !== foe || behind.color !== foe) continue;
+      // X-ray: the piece in front moves along this very line, so the slider acts through it.
+      if (along(front.type) && front.type !== 'k') add('x-ray', seen, { piece: front.type, behind: behind.type });
       if (VALUE[behind.type] > VALUE[front.type] && front.type !== 'p') add('pin', seen, { piece: front.type, behind: behind.type });
       else if (VALUE[front.type] > VALUE[behind.type] && VALUE[front.type] > VALUE[moved.type]) add('skewer', seen, { piece: front.type, behind: behind.type });
     }
+  }
+
+  // ── ideas read from the position before and after ────────────────────────
+  const before = new Chess(fenBefore);
+  const ideasAfter = positionIdeas(chess.fen());
+  const ideasBefore = positionIdeas(fenBefore);
+  if (moved && !chess.isCheckmate()) {
+    const safe = chess.attackers(m.to as Square, foe).length === 0 || chess.attackers(m.to as Square, me).length > 0;
+    // A threat: the moved piece now attacks a piece nothing defends.
+    const targets = reach.filter((s) => {
+      const p = at(s);
+      return p && p.color === foe && p.type !== 'k' && p.type !== 'p' && chess.attackers(s as Square, foe).length === 0
+        && !attacksFrom(before, m.from).includes(s);
+    });
+    if (targets.length > 0 && safe) add('attack-undefended', targets.sort());
+    // Material won on the spot: an undefended piece taken, or a more valuable one.
+    if (m.captured && m.captured !== 'p' && (chess.attackers(m.to as Square, foe).length === 0 || VALUE[m.captured] > VALUE[moved.type])) {
+      add('wins-material', [], { piece: m.captured });
+    }
+    // Discovered attack: a slider behind the moved piece now hits something worth taking.
+    for (const row of chess.board()) {
+      for (const p of row) {
+        if (!p || p.color !== me || !'bqr'.includes(p.type) || p.square === m.to) continue;
+        const was = attacksFrom(before, p.square);
+        for (const s of attacksFrom(chess, p.square)) {
+          const t = at(s);
+          if (!t || t.color !== foe || t.type === 'k' || was.includes(s)) continue;
+          if (VALUE[t.type] > VALUE[p.type] || chess.attackers(s as Square, foe).length === 0) add('discovered-attack', [p.square, s], { piece: t.type });
+        }
+      }
+    }
+    if (ideasAfter.outposts.some((o) => o.square === m.to) && !ideasBefore.outposts.some((o) => o.square === m.from)) add('outpost');
+    if (moved.type === 'r' && m.from[0] !== m.to[0]
+      && (ideasAfter.openFiles.includes(m.to[0]) || ideasAfter.halfOpenFiles.some((h) => h.file === m.to[0] && h.for === (me === 'w' ? 'white' : 'black')))) {
+      add('open-file', [], { file: m.to[0] });
+    }
+    if (moved.type === 'p') {
+      const isPassed = ideasAfter.passedPawns.some((p) => p.square === m.to);
+      const wasPassed = ideasBefore.passedPawns.some((p) => p.square === m.from);
+      const far = me === 'w' ? Number(m.to[1]) >= 6 : Number(m.to[1]) <= 3;
+      if (isPassed && (!wasPassed || far)) add('passed-pawn');
+    }
+    // The move leaves another own piece hanging that was safe before.
+    const mine = me === 'w' ? 'white' : 'black';
+    const newly = ideasAfter.hanging.filter((h) => h.color === mine && h.square !== m.to && h.piece !== 'p'
+      && (!ideasBefore.hanging.some((b) => b.square === h.square)
+        // …or it was only "attacked by something cheaper" and has now lost its last defender.
+        || ((ideasBefore.pieces.find((b) => b.square === h.square)?.defenders.length ?? 0) > 0
+          && (ideasAfter.pieces.find((b) => b.square === h.square)?.defenders.length ?? 0) === 0)));
+    if (newly.length > 0) add('leaves-hanging', newly.map((h) => h.square));
   }
 
   // Pieces attacking one point together: the moved piece plus others, outnumbering the defence.

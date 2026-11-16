@@ -105,3 +105,26 @@ describe('verifier regressions (v0.38.0)', () => {
     expect(sans(text, 2)[0]).toEqual(['e4', 'e5', 'Nf3', 'Nc6'])
   })
 })
+
+describe('verifier regressions (v0.47.0)', () => {
+  const run = (text: string, algorithm: 1 | 2) => recognizeGames(text, { algorithm })
+  it.each([1, 2] as const)('a "1." quoted in a comment that wraps onto another line does not split the game (alg %i)', (algorithm) => {
+    const text = '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 { The Ruy Lopez.\nPlayers who dislike theory choose 1. d4 or 1. c4 here. } 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O 9. h3 Nb8 1/2-1/2'
+    const games = run(text, algorithm)
+    expect(games).toHaveLength(1)
+    expect(games[0].tree.mainline).toHaveLength(18)
+    expect(games[0].tree.errors).toEqual([])
+  })
+  it.each([1, 2] as const)('the same inside a parenthesis in Spanish (alg %i)', (algorithm) => {
+    const text = '1. e4 e5 2. Cf3 Cc6 3. Ab5 a6 4. Aa4 Cf6 5. 0-0 Ae7 (La variante cerrada.\nQuien abre con 1. e4 debe conocerla bien.) 6. Te1 b5 7. Ab3 d6'
+    const games = run(text, algorithm)
+    expect(games).toHaveLength(1)
+    expect(games[0].tree.mainline).toHaveLength(14)
+  })
+  it('a fragment after a diagram stays set apart although an analysis paragraph went further than the game', () => {
+    const text = '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7\n\nIf 5... Nxe4 6. d4 b5 7. Bb3 d5 8. dxe5 Be6 9. c3 Bc5 10. Nbd2 O-O 11. Bc2 with complex play.\n\n\uFFFC\n\nWhite to play.\n\n9. Rxe5 Qxe5 10. Qd8+ Kg7\n\n6. Re1 b5 7. Bb3 d6 8. c3 O-O'
+    const [game] = run(text, 2)
+    expect(game.tree.errors).toEqual([])
+    expect(game.tree.mainline).toHaveLength(16)
+  })
+})

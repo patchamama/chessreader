@@ -116,13 +116,31 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
     inFragment = false;
     maxTopPly = 0;
     prevTopPly = 0;
+    mainParagraph = false;
   };
+
+  // Tokens written inside a bracket that IS closed further on. Such a bracket is
+  // a real comment or variation, however many lines it wraps over: a "1." in it
+  // is quoted, not a new game. Only a bracket that is never closed is forgiven.
+  const inClosedBracket = new Set<SanToken>();
+  {
+    const open: number[] = [];
+    tokens.forEach((t, i) => {
+      if (t.type === 'variation-open') open.push(i);
+      else if (t.type === 'variation-close' && open.length > 0) {
+        for (let j = open.pop()! + 1; j < i; j++) inClosedBracket.add(tokens[j]);
+      } else if (t.type === 'result') open.length = 0;
+    });
+  }
+  // Did the current paragraph open as a continuation of the game? Only such
+  // paragraphs say how far the game has got (analysis paragraphs do not).
+  let mainParagraph = false;
 
   for (const token of tokens) {
     if (token.type === 'paragraph-break') {
       openedInParagraph = false;
       prevTopPly = 0;
-      if (depth === 0) { paragraphDecided = false; inMainParagraph = false; }
+      if (depth === 0) { paragraphDecided = false; inMainParagraph = false; mainParagraph = false; }
     } else if (token.type === 'variation-open') {
       depth++;
       openedInParagraph = true;
@@ -143,7 +161,7 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
     if (token.type === 'move-number' && token.moveNumber === 1 && !token.isEllipsis) {
       // Inside a bracket opened in an EARLIER paragraph and never closed, a "1."
       // of a later paragraph is a new game ("Smith – Jones, London 1900 1. d4").
-      const topLevel = depth === 0 || !openedInParagraph;
+      const topLevel = depth === 0 || (!openedInParagraph && !inClosedBracket.has(token));
       if (topLevel && (sawMove1 || inFragment) && (inFragment || current.some(t => t.type === 'move'))) {
         startNewGame();
       }
@@ -174,7 +192,10 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
     if (token.type === 'move' && depth === 0 && !token.isolated) {
       const here = token.moveNumber !== undefined ? ply(token) : prevTopPly > 0 ? prevTopPly + 1 : 0;
       prevTopPly = here;
-      maxTopPly = Math.max(maxTopPly, here);
+      const opensMain = !paragraphDecided && token.moveNumber !== undefined
+        && here === lastMainPly + 1 && (!!token.atParagraphStart || lastMainPly === 0);
+      if (opensMain) mainParagraph = true;
+      if (mainParagraph) maxTopPly = Math.max(maxTopPly, here);
     }
 
     if (token.type === 'move' && depth === 0 && !token.isolated && token.moveNumber !== undefined) {

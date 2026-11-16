@@ -15,6 +15,7 @@ use App\Application\Narration\Port\SpeechSynthesizer;
 final class RenderNarrationHandler
 {
     public const MAX_SEGMENTS = 2000;
+    public const MAX_SEGMENT_CHARS = 2000;
 
     public function __construct(
         private readonly SpeechSynthesizer $synthesizer,
@@ -31,6 +32,11 @@ final class RenderNarrationHandler
         }
         if (count($segments) > self::MAX_SEGMENTS) {
             throw new \InvalidArgumentException('too many segments (max ' . self::MAX_SEGMENTS . ')');
+        }
+        foreach ($segments as $text) {
+            if (mb_strlen($text) > self::MAX_SEGMENT_CHARS) {
+                throw new \InvalidArgumentException('a segment is too long (max ' . self::MAX_SEGMENT_CHARS . ' characters)');
+            }
         }
         if (!is_dir($this->outputDir) && !mkdir($this->outputDir, 0775, true) && !is_dir($this->outputDir)) {
             throw new \RuntimeException('cannot create the audio folder');

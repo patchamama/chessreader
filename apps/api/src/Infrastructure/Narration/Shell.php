@@ -9,11 +9,14 @@ final class Shell
 {
     /**
      * @param list<string> $command
+     * @param array<string,string> $env extra environment variables for the program
      * @return string standard output
      */
-    public static function run(array $command, ?string $stdin = null, int $timeoutSeconds = 120): string
+    public static function run(array $command, ?string $stdin = null, int $timeoutSeconds = 120, array $env = []): string
     {
-        $proc = proc_open($command, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        // Extra variables are ADDED to the server's environment (null = inherit as is).
+        $environment = $env === [] ? null : array_merge(getenv(), $env);
+        $proc = proc_open($command, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, $environment);
         if (!is_resource($proc)) {
             throw new \RuntimeException('cannot run ' . $command[0]);
         }
