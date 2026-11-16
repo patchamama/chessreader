@@ -9,6 +9,7 @@ import LibraryGrid from '../features/library/components/LibraryGrid'
 import ResetPasswordPage from '../features/auth/components/ResetPasswordPage'
 import BookReader from '../features/library/components/BookReader'
 import WebparserView from '../features/webparser/components/WebparserView'
+import GameSearchPage from '../features/gamesearch/GameSearchPage'
 import { isDemoHost } from '../shared/env/devMode'
 import PendingPage from '../features/auth/components/PendingPage'
 
@@ -34,6 +35,14 @@ const routes = [
         element: (
           <RequireApproved>
             <BookReader />
+          </RequireApproved>
+        ),
+      },
+      {
+        path: '/search',
+        element: (
+          <RequireApproved>
+            <GameSearchPage />
           </RequireApproved>
         ),
       },

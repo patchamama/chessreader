@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
 import { httpClient } from '../../../shared/api/httpClient'
 
 export interface Book {
@@ -28,9 +29,16 @@ export function useBooks() {
 }
 
 export function useChapter(bookId: number, chapterOrder: number) {
+  // The external book (games opened from the game search) is served from
+  // memory; every other book comes from the API.
+  const external = useExternalBookStore((s) => (bookId === EXTERNAL_BOOK_ID ? s : null))
   return useQuery<Chapter>({
-    queryKey: ['library', 'chapter', bookId, chapterOrder],
-    queryFn: () => httpClient<Chapter>(`/api/library/books/${bookId}/chapters/${chapterOrder}`),
+    queryKey: ['library', 'chapter', bookId, chapterOrder, external?.version ?? 0],
+    queryFn: () => {
+      if (!external) return httpClient<Chapter>(`/api/library/books/${bookId}/chapters/${chapterOrder}`)
+      const chapter = external.chapters[chapterOrder - 1]
+      return chapter ? Promise.resolve(chapter) : Promise.reject(new Error('Chapter not found'))
+    },
   })
 }
 

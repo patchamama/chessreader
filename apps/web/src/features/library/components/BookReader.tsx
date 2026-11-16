@@ -101,7 +101,7 @@ export default function BookReader() {
   const maxChapter = toc.length > 0 ? Math.max(...toc.map((e) => e.order)) : 1
 
   useEffect(() => {
-    if (id) touchBook.mutate(id)
+    if (id > 0) touchBook.mutate(id) // the in-memory external book has nothing to touch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
