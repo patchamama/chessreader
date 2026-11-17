@@ -187,4 +187,20 @@ final class EvalControllerTest extends TestCase
         self::assertSame(30, $body['scoreCp']);
         self::assertSame([['e2e4', 'e7e5'], ['d2d4']], array_column($body['lines'], 'pv'));
     }
+
+    public function test_eval_position_refuses_a_fen_with_a_new_line_and_caps_the_depth(): void
+    {
+        $engine = $this->createMock(ChessEngine::class);
+        $depths = [];
+        $engine->method('evaluate')->willReturnCallback(function (Fen $fen, int $depth) use (&$depths) { $depths[] = $depth; return Evaluation::fromCp(0, 'e2e4', $depth); });
+        [, $token] = $this->seedAndToken('eval_guard@test.com', $engine);
+        $app = $this->createAppWithOverrides([ChessEngine::class => fn() => $engine]);
+        $bad = (new ServerRequestFactory())->createServerRequest('POST', '/api/eval/position')
+            ->withParsedBody(['fen' => self::STARTPOS_FEN . "\ngo infinite"])->withHeader('Authorization', "Bearer {$token}");
+        self::assertSame(400, $app->handle($bad)->getStatusCode());
+        $deep = (new ServerRequestFactory())->createServerRequest('POST', '/api/eval/position')
+            ->withParsedBody(['fen' => self::STARTPOS_FEN, 'depth' => 99999])->withHeader('Authorization', "Bearer {$token}");
+        self::assertSame(200, $app->handle($deep)->getStatusCode());
+        self::assertSame([30], $depths);
+    }
 }

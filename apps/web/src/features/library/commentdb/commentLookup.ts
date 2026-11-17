@@ -32,8 +32,11 @@ function getJson<T>(path: string): Promise<T> {
   const { commentDbUrl, commentDbToken } = useSettingsStore.getState()
   const url = `${commentDbUrl.replace(/\/+$/, '')}/${path}`
   const headers: Record<string, string> = {}
-  if (/^https:\/\/api\.github\.com\//.test(url)) headers.Accept = 'application/vnd.github.raw+json'
-  if (commentDbToken) headers.Authorization = `Bearer ${commentDbToken}`
+  let host = ''
+  try { const u = new URL(url); host = u.protocol === 'https:' ? u.hostname : '' } catch { /* not a URL */ }
+  if (host === 'api.github.com') headers.Accept = 'application/vnd.github.raw+json'
+  // The token is for GitHub: it never goes to any other host.
+  if (commentDbToken && (host === 'api.github.com' || host === 'raw.githubusercontent.com')) headers.Authorization = `Bearer ${commentDbToken}`
   return fetch(url, Object.keys(headers).length ? { headers } : undefined).then((r) => (r.ok ? (r.json() as Promise<T>) : Promise.reject(new Error(String(r.status)))))
 }
 

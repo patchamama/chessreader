@@ -30,7 +30,7 @@ final class FilesystemStockfishInstallation implements StockfishInstallation
 
     public function install(string $tag, string $url, string $assetName): void
     {
-        if (!preg_match('/^[A-Za-z0-9._-]+$/', $tag) || !str_starts_with($url, 'https://github.com/official-stockfish/')) {
+        if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]*$/', $tag) || !str_starts_with($url, 'https://github.com/official-stockfish/')) {
             throw new \InvalidArgumentException('Not a Stockfish release download.');
         }
         $target = rtrim($this->dir, '/') . "/{$tag}";
@@ -72,7 +72,7 @@ final class FilesystemStockfishInstallation implements StockfishInstallation
     public function binaryFor(string $tag): ?string
     {
         $bin = rtrim($this->dir, '/') . "/{$tag}/stockfish";
-        return preg_match('/^[A-Za-z0-9._-]+$/', $tag) && is_file($bin) && is_executable($bin) ? $bin : null;
+        return preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]*$/', $tag) && is_file($bin) && is_executable($bin) ? $bin : null;
     }
 
     /** The engine program in an unpacked release: an executable file named stockfish… (not sources or docs). */
@@ -81,7 +81,8 @@ final class FilesystemStockfishInstallation implements StockfishInstallation
         $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS));
         foreach ($it as $file) {
             $name = $file->getFilename();
-            if ($file->isFile() && preg_match('/^stockfish[^.\/]*(\.exe)?$/i', $name) && $file->getSize() > 1_000_000) {
+            // A link in the archive is never taken for the engine.
+            if (!$file->isLink() && $file->isFile() && preg_match('/^stockfish[^.\/]*(\.exe)?$/i', $name) && $file->getSize() > 1_000_000) {
                 return $file->getPathname();
             }
         }

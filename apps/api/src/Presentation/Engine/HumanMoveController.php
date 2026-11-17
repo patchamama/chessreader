@@ -20,8 +20,8 @@ final class HumanMoveController
     {
         $q = $request->getQueryParams();
         $fen = trim((string) ($q['fen'] ?? ''));
-        if ($fen === '') {
-            return $this->json($response, ['error' => 'fen is required'], 400);
+        if ($fen === '' || !Fen::isWellFormed($fen)) {
+            return $this->json($response, ['error' => 'fen must be a valid FEN'], 400);
         }
         if ($this->model->ratings() === []) {
             return $this->json($response, ['error' => 'Maia is not installed on this server.', 'ratings' => []], 503);

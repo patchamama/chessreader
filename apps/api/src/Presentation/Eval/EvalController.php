@@ -16,6 +16,8 @@ use Psr\Http\Message\ServerRequestInterface;
 
 final class EvalController
 {
+    private const MAX_DEPTH = 30;
+
     public function __construct(
         private readonly EvaluatePositionHandler $positionHandler,
         private readonly EvaluateGameHandler $gameHandler,
@@ -33,7 +35,13 @@ final class EvalController
             return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
         }
 
-        $depth = isset($body['depth']) ? (int) $body['depth'] : 0;
+        if (!Fen::isWellFormed((string) $fenStr)) {
+            $response->getBody()->write(json_encode(['error' => 'fen is not a valid FEN']));
+            return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+        }
+
+        // Deep searches tie up the engine: the depth is capped.
+        $depth = isset($body['depth']) ? min(self::MAX_DEPTH, max(0, (int) $body['depth'])) : 0;
 
         $eval = $this->positionHandler->handle(
             new EvaluatePositionCommand(Fen::fromString((string) $fenStr), $depth)
@@ -60,7 +68,13 @@ final class EvalController
             return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
         }
 
-        $depth = isset($body['depth']) ? (int) $body['depth'] : 0;
+        foreach ($fenStrs as $f) {
+            if (!is_string($f) || !Fen::isWellFormed($f)) {
+                $response->getBody()->write(json_encode(['error' => 'fens must be valid FENs']));
+                return $response->withStatus(400)->withHeader('Content-Type', 'application/json');
+            }
+        }
+        $depth = isset($body['depth']) ? min(self::MAX_DEPTH, max(0, (int) $body['depth'])) : 0;
         $fens  = array_map(fn(string $f) => Fen::fromString($f), $fenStrs);
 
         $evals = $this->gameHandler->handle(new EvaluateGameCommand($fens, $depth));

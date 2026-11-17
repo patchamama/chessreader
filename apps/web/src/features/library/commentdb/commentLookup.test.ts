@@ -33,6 +33,14 @@ describe('lookupPositionComments (S5–S6)', () => {
       { headers: { Accept: 'application/vnd.github.raw+json', Authorization: 'Bearer ghp_x' } })
   })
 
+  it('the GitHub token is never sent to another host', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://evil.example/db', commentDbToken: 'ghp_x' })
+    const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('index.json') ? INDEX : SHARD), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await lookupPositionComments(FEN)
+    for (const call of fetchMock.mock.calls as unknown as [string, RequestInit?][]) expect(JSON.stringify(call[1] ?? {})).not.toContain('ghp_x')
+  })
+
   it('without a database configured there are no comments and nothing is asked', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)

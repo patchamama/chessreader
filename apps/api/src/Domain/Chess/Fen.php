@@ -15,9 +15,35 @@ final class Fen
     {
     }
 
+    /**
+     * A FEN as given. Control characters (new lines above all) become spaces:
+     * a FEN is written to an engine's input, where a new line would start
+     * another engine command.
+     */
     public static function fromString(string $fen): self
     {
-        return new self(trim($fen));
+        return new self(trim((string) preg_replace('/[\x00-\x1F\x7F]+/', ' ', $fen)));
+    }
+
+    /** Whether text from outside looks like a FEN: eight ranks of eight squares, side, castling, en passant, counters. */
+    public static function isWellFormed(string $fen): bool
+    {
+        if (preg_match('/[\x00-\x1F\x7F]/', $fen)) {
+            return false;
+        }
+        if (!preg_match('/^([pnbrqkPNBRQK1-8]+(?:\/[pnbrqkPNBRQK1-8]+){7}) [wb] (-|K?Q?k?q?) (-|[a-h][36])(?: \d{1,3} \d{1,4})?$/', trim($fen), $m)) {
+            return false;
+        }
+        foreach (explode('/', $m[1]) as $rank) {
+            $squares = 0;
+            foreach (str_split($rank) as $ch) {
+                $squares += ctype_digit($ch) ? (int) $ch : 1;
+            }
+            if ($squares !== 8) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static function start(): self

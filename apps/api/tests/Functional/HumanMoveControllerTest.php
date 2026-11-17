@@ -56,4 +56,16 @@ final class HumanMoveControllerTest extends TestCase
         self::assertSame(503, $status);
         self::assertSame('Maia is not installed on this server.', $body['error']);
     }
+
+    public function test_a_fen_with_a_new_line_never_reaches_the_engine(): void
+    {
+        $model = new class implements HumanMoveModel {
+            public array $asked = [];
+            public function ratings(): array { return [1500]; }
+            public function predict(Fen $fen, int $rating, int $limit): array { $this->asked[] = $fen->value(); return ['rating' => 1500, 'moves' => []]; }
+        };
+        [$status] = $this->get($model, '/api/engine/human?fen=' . rawurlencode("8/8/8/8/8/8/8/K6k w - - 0 1\nsetoption name LogFile value /tmp/x"));
+        self::assertSame(400, $status);
+        self::assertSame([], $model->asked);
+    }
 }
