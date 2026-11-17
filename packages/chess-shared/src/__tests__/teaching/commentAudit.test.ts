@@ -35,3 +35,14 @@ describe('commentary audit (S26)', () => {
     expect(auditGame(g, reviewGame(g))).toEqual([])
   })
 })
+
+describe('audit of the opponent overload', () => {
+  it('accepts an overload of the opponent piece', async () => {
+    const { moveMotifs } = await import('../../index.js')
+    const fen = '1r2k3/8/8/6b1/3Q4/8/1N3N2/7K b - - 0 1'
+    const c = new Chess(fen); const mv = c.move('Bh4')
+    const p = [{ nodeId: 'a', san: 'Bh4', from: mv.from, to: mv.to, fenBefore: fen, fenAfter: c.fen(), color: 'black', moveNumber: 1, before: { cp: 0 }, after: { cp: 0 } } as PlyInput]
+    const o = moveMotifs(fen, 'Bh4').find((x) => x.kind === 'overloaded')!
+    expect(auditMotif(o, p, 0)).toBeNull()
+  })
+})

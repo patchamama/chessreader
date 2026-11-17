@@ -107,9 +107,12 @@ export function auditMotif(m: Motif, plies: PlyInput[], i: number): string | nul
     }
     case 'overloaded': {
       const [def, ...held] = m.squares;
+      // The overloaded piece may be the mover's or the opponent's.
+      const side: ChessColor = m.data?.side === 'foe' ? foe : me;
+      const other: ChessColor = side === 'w' ? 'b' : 'w';
       const ok = held.filter((s) => {
-        const d = chess.attackers(s as Square, me);
-        return chess.attackers(s as Square, foe).length > 0 && d.length === 1 && d[0] === def;
+        const d = chess.attackers(s as Square, side);
+        return chess.attackers(s as Square, other).length > 0 && d.length === 1 && d[0] === def;
       });
       return ok.length >= 2 ? null : 'it is not the only defender of two attacked pieces';
     }
