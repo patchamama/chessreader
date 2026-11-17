@@ -447,6 +447,19 @@ function insertVariations(
       cur = { chess: c, parentId: anchor.parentId, line, anchorKey: anchor.parentId ?? 'root' };
     }
 
+    // A numbered move that does not continue the line ("…4.0-0 Cxe4, o 4.d3"):
+    // a sibling branch from the same point of this line (or of what it grew from).
+    if (tokens[i - 1]?.type === 'move-number') {
+      const [, side, , , , full] = cur.chess.fen().split(' ');
+      const here: 'white' | 'black' = side === 'w' ? 'white' : 'black';
+      if (parseInt(full, 10) !== t.moveNumber || here !== t.color) {
+        const sibling: { parentId: string | null; fen: string } | null = anchorInLine(t, cur.parentId);
+        if (sibling) {
+          cur = { chess: new Chess(sibling.fen), parentId: sibling.parentId, line: openLine(sibling.parentId), anchorKey: sibling.parentId ?? 'root' };
+        }
+      }
+    }
+
     // Place the move in the current variation line if legal; else drop it.
     if (!isLegalFrom(cur.chess.fen(), t.san!)) {
       // Illegal continuation of this variation → stop the run here.
