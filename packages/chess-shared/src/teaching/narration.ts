@@ -295,3 +295,19 @@ export function buildNarrationScript(
 
   return steps;
 }
+
+const INTROS: Record<Lang, string[]> = {
+  es: ['Analicemos la siguiente variante.', 'Hay una variante interesante que se podría analizar.', 'Veamos qué pasaría en esta variante.'],
+  en: ["Let's analyse the following variation.", 'There is an interesting variation worth a look.', "Let's see what would happen in this line."],
+  de: ['Sehen wir uns die folgende Variante an.', 'Es gibt eine interessante Variante, die sich anzusehen lohnt.', 'Schauen wir, was in dieser Variante passieren würde.'],
+};
+/** Said before a variation is played on the board (the wording varies with `n`). */
+export const variationIntro = (lang: Lang, n: number) => INTROS[lang][n % INTROS[lang].length];
+/** Said after it: which game move the board goes back to (`move` already in words). */
+export function backToGame(lang: Lang, color: 'white' | 'black', move: string): string {
+  return lang === 'es' ? `Volvamos a la partida: la última jugada de las ${color === 'white' ? 'blancas' : 'negras'} fue ${move}.`
+    : lang === 'en' ? `Back to the game: ${color === 'white' ? "White's" : "Black's"} last move was ${move}.`
+    : `Zurück zur Partie: der letzte Zug von ${color === 'white' ? 'Weiß' : 'Schwarz'} war ${move}.`;
+}
+/** Seconds of silence after "back to the game", before the board goes back. */
+export const RETURN_PAUSE = 2;

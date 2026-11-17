@@ -13,14 +13,15 @@
 import type { GameTree } from '../model/gameTree.js';
 import type { BoardCue, MoveQuality } from './commentCues.js';
 import { moveCue } from './commentCues.js';
-import type { Lang } from './concepts.js';
+import { detectLang, type Lang } from './concepts.js';
 import type { NarrationStep } from './narration.js';
+import { backToGame, RETURN_PAUSE, sanToSpeech, variationIntro } from './narration.js';
 
 export const TRACK_FORMAT = 'chessreader.narration-track/v1';
 
 export interface NarrationSegment {
   /** 'move': a move of the game · 'variation': a quoted move, shown and taken back · 'comment': words only. */
-  kind: 'move' | 'variation' | 'comment';
+  kind: 'move' | 'variation' | 'comment' | 'pause';
   /** What is said (sent to the voice). */
   speech: string;
   /** What to show as text. */
@@ -47,7 +48,8 @@ export interface NarrationSegment {
 }
 
 /** The script as a flat list of things said, one per audio segment. */
-export function narrationSegments(script: NarrationStep[], tree: GameTree): NarrationSegment[] {
+export function narrationSegments(script: NarrationStep[], tree: GameTree, lang?: Lang): NarrationSegment[] {
+  let intros = 0;
   const fenOf = (id: string | null) => (id ? tree.nodes.get(id)?.fen ?? tree.startFen : tree.startFen);
   const out: NarrationSegment[] = [];
   script.forEach((step, index) => {
@@ -67,8 +69,15 @@ export function narrationSegments(script: NarrationStep[], tree: GameTree): Narr
         out.push({ kind: 'comment', speech: sentence.speech, text: sentence.text, nodeId: step.nodeId, fen: fenOf(step.nodeId), cues: sentence.cues, step: index });
         continue;
       }
+      // A line off the game is announced first, and closed by naming the last
+      // game move, followed by a silence before the board goes back (S19).
+      const offGame = sentence.parts.some((p) => p.moveId && !tree.mainline.includes(p.moveId));
+      const say = lang ?? detectLang(sentence.text);
+      if (offGame) out.push({ kind: 'comment', speech: variationIntro(say, intros++), text: sentence.text, nodeId: step.nodeId, fen: fenOf(step.nodeId), cues: [], step: index });
+      let lastFen = fenOf(step.nodeId);
       for (const part of sentence.parts) {
         const v = part.moveId ? tree.nodes.get(part.moveId) : undefined;
+        if (v) lastFen = v.fen;
         if (!v) {
           out.push({ kind: 'comment', speech: part.speech, text: sentence.text, nodeId: step.nodeId, fen: fenOf(step.nodeId), cues: sentence.cues, step: index });
         } else {
@@ -78,6 +87,11 @@ export function narrationSegments(script: NarrationStep[], tree: GameTree): Narr
             cues: [moveCue({ san: v.san, from: v.from, to: v.to, fen: v.fen })], step: index,
           });
         }
+      }
+      const last = step.nodeId ? tree.nodes.get(step.nodeId) : undefined;
+      if (offGame && last) {
+        out.push({ kind: 'comment', speech: backToGame(say, last.color, sanToSpeech(last.san, say)), text: sentence.text, nodeId: step.nodeId, fen: lastFen, cues: [], step: index });
+        out.push({ kind: 'pause', speech: `[pause ${RETURN_PAUSE}]`, text: '', nodeId: step.nodeId, fen: lastFen, cues: [], step: index });
       }
     }
   });

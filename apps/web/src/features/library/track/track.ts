@@ -58,7 +58,7 @@ export async function renderTrack(input: RenderInput): Promise<{ track: Narratio
   if (s.voiceProvider === 'browser') {
     throw new Error('The browser voice cannot be saved to a file. Choose a server voice (system, Piper, OpenAI or ElevenLabs) in Settings.')
   }
-  const segments = narrationSegments(input.script, input.tree)
+  const segments = narrationSegments(input.script, input.tree, input.lang)
   const apiKey = s.voiceProvider === 'openai' ? s.openaiKey : s.voiceProvider === 'elevenlabs' ? s.elevenlabsKey : ''
   const rendered = await httpClient<{ id: string; audioUrl: string; durations: number[]; total: number }>('/api/narration/render', {
     method: 'POST',

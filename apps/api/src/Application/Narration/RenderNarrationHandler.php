@@ -58,7 +58,12 @@ final class RenderNarrationHandler
             foreach ($segments as $i => $text) {
                 $wav    = sprintf('%s/%s-%04d.wav', $this->outputDir, $id, $i);
                 $wavs[] = $wav;
-                $this->synthesizer->synthesize($text, $command->lang, $command->voice, $wav);
+                // "[pause 2]": that many seconds of silence (at most 10), nothing is said.
+                if (preg_match('/^\[pause (\d+(?:\.\d+)?)\]$/', $text, $pause)) {
+                    WavFile::writeSilence($wav, min(10.0, (float) $pause[1]));
+                } else {
+                    $this->synthesizer->synthesize($text, $command->lang, $command->voice, $wav);
+                }
                 $durations[] = round(WavFile::duration($wav), 3);
             }
             $this->assembler->assemble($wavs, $gap, $this->outputDir . '/' . $id . '.mp3');

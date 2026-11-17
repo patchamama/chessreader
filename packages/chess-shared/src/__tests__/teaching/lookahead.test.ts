@@ -76,3 +76,30 @@ describe('looking ahead in the game', () => {
     expect(motifText(c, p[11].fenAfter, 'es')).toBe('Empieza una combinación que gana material.')
   })
 })
+
+describe('patterns from the Bronstein book (S2, S7)', () => {
+  it('a pawn given and never taken back over the next moves is a positional sacrifice (a gambit)', () => {
+    // Queen's Gambit Accepted-like: 1. d4 d5 2. c4 dxc4 3. e4 b5 4. a4 c6 5. axb5 cxb5 6. b3 cxb3 ... simpler: King's Gambit
+    const p = plies('e4 e5 f4 exf4 Nf3 g5 Bc4 Bg7 O-O d6 d4 h6 c3 Nc6')
+    const r = reviewGame(p)
+    const f4 = r.moves[2].motifs.find((m) => m.kind === 'positional-sacrifice')!
+    expect(f4).toBeTruthy()
+    expect(motifText(f4, p[2].fenAfter, 'es')).toBe('Sacrificio posicional: entrega un peón a cambio de juego (no lo recupera en las jugadas siguientes).')
+  })
+
+  it('a piece of the opponent that alone guards two attacked pieces is overloaded too', () => {
+    // ...Bh4 hits the knight on f2; the rook already hits the one on b2; the queen on d4 alone guards both.
+    const o = moveMotifs('1r2k3/8/8/6b1/3Q4/8/1N3N2/7K b - - 0 1', 'Bh4').find((x) => x.kind === 'overloaded')
+    expect(o?.squares).toEqual(['d4', 'b2', 'f2'])
+    expect(motifText(o!, after('1r2k3/8/8/6b1/3Q4/8/1N3N2/7K b - - 0 1', 'Bh4'), 'es')).toBe('La dama de d4 queda sobrecargada: es la única defensa del caballo de b2 y del caballo de f2.')
+  })
+
+  it('the better line says what its first move does', async () => {
+    const { annotateGame } = await import('../../teaching/gameReview.js')
+    const game = plies('e4 e5 Qh5 Nc6 Bc4 Nf6 Qxf7#', { 0: { cp: 20 }, 3: { cp: -40 }, 6: { mate: 1 } })
+    game[5].best = { san: 'g6', line: ['g6', 'Qf3', 'Nf6'] }
+    const text = annotateGame(game, reviewGame(game), { level: 3, lang: 'en' })
+    expect(text).toMatch(/Better was: \} \(3\.\.\. g6[^)]*\)/)
+    expect(text).toMatch(/g6[^{]*\{ [^}]*queen/i)
+  })
+})

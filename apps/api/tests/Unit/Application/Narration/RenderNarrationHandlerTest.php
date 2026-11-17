@@ -136,4 +136,14 @@ final class RenderNarrationHandlerTest extends TestCase
         $this->expectException(\OverflowException::class);
         $handler->handle(new RenderNarrationCommand(['a'], 'es', VoiceOptions::fromArray([]), 0.0, owner: '7'));
     }
+
+    public function test_a_pause_segment_is_silence_of_that_length_not_speech(): void
+    {
+        $said = [];
+        $calls = [];
+        $handler = new RenderNarrationHandler($this->synthesizer($said), $this->assembler($calls), $this->dir);
+        $result = $handler->handle(new RenderNarrationCommand(['Volvamos a la partida', '[pause 2]', 'peón e 4'], 'es', VoiceOptions::fromArray([]), 0.0));
+        $this->assertSame(['Volvamos a la partida', 'peón e 4'], array_column($said, 0));
+        $this->assertEqualsWithDelta(2.0, $result->durations[1], 0.001);
+    }
 }

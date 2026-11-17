@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { moveCue, detectLang, sanToSpeech } from '@chess-ebook/chess-shared'
+import { moveCue, detectLang, sanToSpeech, variationIntro, backToGame, RETURN_PAUSE } from '@chess-ebook/chess-shared'
 import type { BoardCue, GameTree, Lang, NarrationStep } from '@chess-ebook/chess-shared'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { browserSpeaker, type Speaker } from './speaker'
@@ -66,20 +66,7 @@ interface NarrationState {
   setOption: (o: Partial<Pick<NarrationState, 'mode' | 'simulate' | 'rate' | 'repeatAfter'>>) => void
 }
 
-const INTROS: Record<Lang, string[]> = {
-  es: ['Analicemos la siguiente variante.', 'Hay una variante interesante que se podría analizar.', 'Veamos qué pasaría en esta variante.'],
-  en: ["Let's analyse the following variation.", 'There is an interesting variation worth a look.', "Let's see what would happen in this line."],
-  de: ['Sehen wir uns die folgende Variante an.', 'Es gibt eine interessante Variante, die sich anzusehen lohnt.', 'Schauen wir, was in dieser Variante passieren würde.'],
-}
 let introCount = 0
-/** Said before a variation is played on the board (the wording varies). */
-export const variationIntro = (lang: Lang, n: number) => INTROS[lang][n % INTROS[lang].length]
-/** Said after it: which game move the board goes back to. */
-export function backToGame(lang: Lang, color: 'white' | 'black', move: string): string {
-  return lang === 'es' ? `Volvamos a la partida: la última jugada de las ${color === 'white' ? 'blancas' : 'negras'} fue ${move}.`
-    : lang === 'en' ? `Back to the game: ${color === 'white' ? "White's" : "Black's"} last move was ${move}.`
-    : `Zurück zur Partie: der letzte Zug von ${color === 'white' ? 'Weiß' : 'Schwarz'} war ${move}.`
-}
 
 /** Bumped to cancel the running loop (pause, stop, jump, reload). */
 let runToken = 0
@@ -153,13 +140,11 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
           // off the game (a variation) is announced first and closed by naming
           // the last move of the game, 2 s before the board goes back to it.
           const offGame = sentence.parts.some((p) => p.moveId && !tree.mainline.includes(p.moveId))
-          let announced = !offGame
+          if (offGame) {
+            await runtime.speaker.speak(variationIntro(lang, introCount++), lang, rate)
+            if (!alive()) return
+          }
           for (const part of sentence.parts) {
-            if (!announced && part.moveId) {
-              announced = true
-              await runtime.speaker.speak(variationIntro(lang, introCount++), lang, rate)
-              if (!alive()) return
-            }
             const v = part.moveId ? tree.nodes.get(part.moveId) : undefined
             if (v) {
               show(tree, v.id)
@@ -174,7 +159,7 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
               await runtime.speaker.speak(backToGame(lang, last.color, sanToSpeech(last.san, lang)), lang, rate)
               if (!alive()) return
             }
-            await runtime.delay(2000)
+            await runtime.delay(RETURN_PAUSE * 1000)
           } else {
             await runtime.delay(600 / rate)
           }

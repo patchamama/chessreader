@@ -12,7 +12,7 @@ describe('narrationSegments', () => {
   it('gives one segment per thing said, in order, each with the position on the board', () => {
     expect(segments.map((s) => s.kind)).toEqual([
       'comment', 'move', 'move', 'move', 'move', 'move', 'move',
-      'comment', 'variation', 'variation', 'comment', 'move',
+      'comment', 'comment', 'variation', 'variation', 'comment', 'pause', 'comment', 'move',
     ])
     const e4 = segments[1]
     expect(e4).toMatchObject({ kind: 'move', side: 'white', moveNumber: 1, san: 'e4', from: 'e2', to: 'e4', pause: true })
@@ -21,14 +21,24 @@ describe('narrationSegments', () => {
   })
   it('a move carries its quality; a variation move says where to come back to', () => {
     expect(segments[6]).toMatchObject({ san: 'Bg4', side: 'black', quality: 'dubious' })
-    const exd4 = segments[8]
+    const exd4 = segments[9]
     expect(exd4).toMatchObject({ kind: 'variation', san: 'exd4', returnTo: game.tree.mainline[5] })
-    expect(exd4.fen).not.toBe(segments[7].fen)
+    expect(exd4.fen).not.toBe(segments[8].fen)
   })
   it('keeps the board cues of what is said (a diagonal with its first and last square)', () => {
-    const line = segments[10].cues.find((c) => c.kind === 'line')!
+    const line = segments[13].cues.find((c) => c.kind === 'line')!
     expect(line.squares[0].square).toBe('d1')
     expect(line.squares[line.squares.length - 1].square).toBe('h5')
+  })
+})
+
+describe('variations announced and closed in the audio track (S19)', () => {
+  it('an intro before the line, the last game move after it, then 2 s of silence on the variation position', () => {
+    expect(segments[7].speech).toMatch(/^(Analicemos la siguiente variante|Hay una variante interesante|Veamos qué pasaría)/)
+    expect(segments[11].speech).toBe('Volvamos a la partida: la última jugada de las negras fue alfil ge 4.')
+    expect(segments[11].fen).toBe(segments[10].fen)
+    expect(segments[12]).toMatchObject({ kind: 'pause', speech: '[pause 2]', fen: segments[10].fen })
+    expect(segments[13].fen).toBe(game.tree.nodes.get(game.tree.mainline[5])!.fen)
   })
 })
 

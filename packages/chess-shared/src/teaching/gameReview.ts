@@ -57,7 +57,7 @@ export type MotifKind =
   | 'attack-undefended' | 'wins-material' | 'discovered-attack' | 'outpost' | 'open-file'
   | 'passed-pawn' | 'battery' | 'x-ray' | 'leaves-hanging'
   | 'threat' | 'pawn-sacrifice' | 'prepares-castling'
-  | 'aims-at' | 'overloaded' | 'traps' | 'combination';
+  | 'aims-at' | 'overloaded' | 'traps' | 'combination' | 'positional-sacrifice';
 
 export interface Motif {
   kind: MotifKind;
@@ -304,6 +304,19 @@ export function moveMotifs(fenBefore: string, san: string, context: MotifContext
       if (defenders.length === 1 && defenders[0] === m.to) held.push(p.square);
     }
     if (held.length >= 2) add('overloaded', [m.to, ...held.sort()], { piece: moved.type });
+    // The opponent: one of its pieces is now the only guard of two attacked pieces.
+    const guards = new Map<string, string[]>();
+    for (const row of chess.board()) for (const q of row) {
+      if (!q || q.color !== foe || q.type === 'k' || chess.attackers(q.square, me).length === 0) continue;
+      const d = chess.attackers(q.square, foe);
+      if (d.length === 1 && chess.get(d[0])!.type !== 'k') guards.set(d[0], [...(guards.get(d[0]) ?? []), q.square]);
+    }
+    for (const [guard, pieces] of guards) {
+      if (pieces.length < 2) continue;
+      const was = pieces.filter((s2) => before.attackers(s2 as Square, me).length > 0 && before.attackers(s2 as Square, foe).length === 1).length;
+      if (was >= 2) continue;
+      add('overloaded', [guard, ...pieces.sort()], { piece: chess.get(guard as Square)!.type, side: 'foe' });
+    }
   }
 
   // Trapped: an enemy piece is now threatened and none of its moves leads to safety.
@@ -650,6 +663,23 @@ function lookAhead(plies: PlyInput[], moves: ReviewedMove[]) {
         marked++;
       }
     }
+    // A positional sacrifice: material given on this move (taken by the reply)
+    // and still missing several moves later, without the engine objecting.
+    {
+      const me: ChessColor = p.color === 'white' ? 'w' : 'b';
+      const reply = plies[j + 1];
+      const late = plies[j + 8];
+      if (reply && late && reply.san.includes('x') && !p.san.includes('x') && moves[j].loss < 10
+        && !moves[j].motifs.some((m) => m.kind === 'sacrifice' || m.kind === 'exchange-sacrifice')) {
+        const b0 = balance(new Chess(p.fenBefore), me);
+        const given = b0 - balance(new Chess(reply.fenAfter), me);
+        const still = b0 - balance(new Chess(late.fenAfter), me);
+        if (given >= 1 && still >= 1) {
+          moves[j].motifs = moves[j].motifs.filter((m) => m.kind !== 'pawn-sacrifice');
+          add(j, { kind: 'positional-sacrifice', square: p.to, squares: [reply.to], data: { amount: Math.min(given, still) } });
+        }
+      }
+    }
     // A combination: the move keeps (or makes) a big jump in the mover's chances and the
     // game shows the material coming in within a few moves.
     const prev = plies[j - 1];
@@ -865,6 +895,11 @@ export function motifText(m: Motif, fenAfter: string, lang: Lang): string {
     case 'overloaded': {
       const [def, ...held] = m.squares;
       const items = held.map(who);
+      if (m.data?.side === 'foe') {
+        return lang === 'es' ? `${cap(who(def))} queda sobrecargada: es la única defensa ${list(items.map((x) => `de ${x}`), lang).replace(/de el /g, 'del ')}.`
+          : lang === 'en' ? `${cap(who(def))} is overloaded: it is the only defender of ${list(items, lang)}.`
+          : `${cap(who(def))} ist überlastet: einziger Verteidiger von ${list(items, lang)}.`;
+      }
       return lang === 'es' ? `Cuidado: ${who(def)} es la única defensa ${list(items.map((x) => `de ${x}`), lang).replace(/de el /g, 'del ')}; está sobrecargada.`
         : lang === 'en' ? `Careful: ${who(def)} is the only defender of ${list(items, lang)}; it is overloaded.`
         : `Vorsicht: ${who(def)} ist der einzige Verteidiger von ${list(items, lang)}; überlastet.`;
@@ -873,6 +908,12 @@ export function motifText(m: Motif, fenAfter: string, lang: Lang): string {
       return lang === 'es' ? `${cap(who(m.squares[0]))} queda atrapado: no tiene ninguna casilla segura.`
         : lang === 'en' ? `${cap(who(m.squares[0]))} is trapped: it has no safe square.`
         : `${cap(who(m.squares[0]))} ist gefangen: kein sicheres Feld.`;
+    case 'positional-sacrifice': {
+      const pawn = m.data?.amount === 1;
+      return lang === 'es' ? `Sacrificio posicional: entrega ${pawn ? 'un peón' : 'material'} a cambio de juego (no lo recupera en las jugadas siguientes).`
+        : lang === 'en' ? `A positional sacrifice: it gives ${pawn ? 'a pawn' : 'material'} for play (not won back in the next moves).`
+        : `Positionelles Opfer: gibt ${pawn ? 'einen Bauern' : 'Material'} für Spiel (in den nächsten Zügen nicht zurückgewonnen).`;
+    }
     case 'combination':
       return m.data?.mate
         ? (lang === 'es' ? 'Empieza una combinación que lleva al mate.' : lang === 'en' ? 'Starts a combination that leads to mate.' : 'Leitet eine Kombination ein, die zum Matt führt.')
@@ -1042,6 +1083,18 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
     const variation = better
       ? `(${numberLine(m.best!.line.slice(0, 6).length ? m.best!.line.slice(0, 6) : [m.best!.san], p.moveNumber, p.color).split(' ').map(local).join(' ')})`
       : '';
+    // What the better move does (its own ideas on the board).
+    let betterIdea = '';
+    if (variation && level >= 3) {
+      const ideas = moveMotifs(p.fenBefore, m.best!.san).filter((x) => x.kind !== 'capture' && x.kind !== 'check');
+      if (ideas.length) {
+        const c = new Chess(p.fenBefore);
+        try {
+          c.move(stripMarks(m.best!.san));
+          betterIdea = ideas.slice(0, 2).map((x) => motifText(x, c.fen(), lang)).filter(Boolean).join(' ');
+        } catch { /* not a legal move here */ }
+      }
+    }
     const d = options.diagrams;
     const diagram = d && ((d.key && keyMoment(i)) || d.at?.includes(p.nodeId))
       ? `[Diagram fen="${p.fenAfter}"${d.eval ? ` eval="${evalText(p.after, lang)}"` : ''}]`
@@ -1051,6 +1104,7 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
       let chunk = move;
       if (remarks.length) chunk += ` { ${remarks.join(' ')} }`;
       if (variation) chunk += ` ${variation}`;
+      if (betterIdea) chunk += ` { ${betterIdea} }`;
       if (remarks.length || variation) needNumber = true;
       out.push(chunk);
       if (diagram) { out.push(`\n${diagram}\n`); needNumber = true; }
@@ -1062,6 +1116,7 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
         flush();
         if (remarks.length) out.push(remarks.join(' '));
         if (variation) out.push(variation);
+        if (betterIdea) out.push(betterIdea);
         if (diagram) out.push(diagram);
         needNumber = true;
       }
@@ -1073,6 +1128,7 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
     if (variation || diagram || line.length >= 10) {
       flush();
       if (variation) out.push(variation);
+      if (betterIdea) out.push(betterIdea);
       if (diagram) out.push(diagram);
       needNumber = true;
     }
