@@ -3,12 +3,12 @@ import { Chess, type Square } from 'chess.js'
 import ChessBoard from '../../shared/chess/ChessBoard'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { usePlayStore, type PlayMode } from './playStore'
-import { LICHESS_PLAY_TOKEN_URL } from './lichessBoard'
+import { LICHESS_CLOCKS, LICHESS_PLAY_TOKEN_URL } from './lichessBoard'
 
 const TEXT = {
-  en: { title: 'Play with a tutor', mode: 'Opponent', engine: 'The engine', human: 'A person at this board', lichess: 'Someone on Lichess (casual)', color: 'I play', white: 'White', black: 'Black', strength: 'Engine strength', start: 'New game', tutor: 'Tutor', token: 'Lichess token with board:play', create: 'Create a token for playing ↗', thinking: 'The engine is thinking…', you: 'You', opp: 'Opponent' },
-  es: { title: 'Jugar con un tutor', mode: 'Rival', engine: 'El motor', human: 'Una persona en este tablero', lichess: 'Alguien en Lichess (amistosa)', color: 'Juego con', white: 'Blancas', black: 'Negras', strength: 'Fuerza del motor', start: 'Nueva partida', tutor: 'Tutor', token: 'Token de Lichess con board:play', create: 'Crear un token para jugar ↗', thinking: 'El motor está pensando…', you: 'Tú', opp: 'Rival' },
-  de: { title: 'Spielen mit Trainer', mode: 'Gegner', engine: 'Die Engine', human: 'Eine Person an diesem Brett', lichess: 'Jemand auf Lichess (ungewertet)', color: 'Ich spiele', white: 'Weiß', black: 'Schwarz', strength: 'Engine-Stärke', start: 'Neue Partie', tutor: 'Trainer', token: 'Lichess-Token mit board:play', create: 'Token zum Spielen erstellen ↗', thinking: 'Die Engine denkt…', you: 'Du', opp: 'Gegner' },
+  en: { title: 'Play with a tutor', mode: 'Opponent', engine: 'The engine', human: 'A person at this board', lichess: 'Someone on Lichess (casual)', lichessAi: 'The Lichess AI (Stockfish)', clock: 'Clock', level: 'Lichess AI level', color: 'I play', white: 'White', black: 'Black', strength: 'Engine strength', start: 'New game', tutor: 'Tutor', token: 'Lichess token (board:play, challenge:write)', create: 'Create a token for playing ↗', thinking: 'The engine is thinking…', you: 'You', opp: 'Opponent' },
+  es: { title: 'Jugar con un tutor', mode: 'Rival', engine: 'El motor', human: 'Una persona en este tablero', lichess: 'Alguien en Lichess (amistosa)', lichessAi: 'La IA de Lichess (Stockfish)', clock: 'Ritmo', level: 'Nivel de la IA de Lichess', color: 'Juego con', white: 'Blancas', black: 'Negras', strength: 'Fuerza del motor', start: 'Nueva partida', tutor: 'Tutor', token: 'Token de Lichess (board:play, challenge:write)', create: 'Crear un token para jugar ↗', thinking: 'El motor está pensando…', you: 'Tú', opp: 'Rival' },
+  de: { title: 'Spielen mit Trainer', mode: 'Gegner', engine: 'Die Engine', human: 'Eine Person an diesem Brett', lichess: 'Jemand auf Lichess (ungewertet)', lichessAi: 'Die Lichess-KI (Stockfish)', clock: 'Bedenkzeit', level: 'Stufe der Lichess-KI', color: 'Ich spiele', white: 'Weiß', black: 'Schwarz', strength: 'Engine-Stärke', start: 'Neue Partie', tutor: 'Trainer', token: 'Lichess-Token (board:play, challenge:write)', create: 'Token zum Spielen erstellen ↗', thinking: 'Die Engine denkt…', you: 'Du', opp: 'Gegner' },
 }
 
 /** Play against the engine, a person or a Lichess opponent while a tutor comments every move (S27). */
@@ -19,7 +19,9 @@ export default function PlayPage() {
   const [mode, setMode] = useState<PlayMode>('engine')
   const [color, setColor] = useState<'white' | 'black'>('white')
   const [strength, setStrength] = useState(3)
-  const [token, setToken] = useState(useSettingsStore.getState().lichessPlayToken)
+  const [token, setToken] = useState(() => { const s = useSettingsStore.getState(); return s.lichessPlayToken || s.lichessToken })
+  const [clock, setClock] = useState(`${LICHESS_CLOCKS[0].minutes}+${LICHESS_CLOCKS[0].increment}`)
+  const online = mode === 'lichess' || mode === 'lichess-ai'
   const [selected, setSelected] = useState<string | null>(null)
   const targets = selected ? new Chess(p.fen).moves({ square: selected as Square, verbose: true }).map((m) => m.to) : []
   const click = (square: string) => {
@@ -58,9 +60,10 @@ export default function PlayPage() {
               <option value="engine">{t.engine}</option>
               <option value="human">{t.human}</option>
               <option value="lichess">{t.lichess}</option>
+              <option value="lichess-ai">{t.lichessAi}</option>
             </select>
           </label>
-          {mode === 'engine' && (
+          {(mode === 'engine' || mode === 'lichess-ai') && (
             <>
               <label className="flex flex-col text-xs text-slate-600">{t.color}
                 <select aria-label={t.color} className={field} value={color} onChange={(e) => setColor(e.target.value as 'white' | 'black')}>
@@ -73,7 +76,14 @@ export default function PlayPage() {
               </label>
             </>
           )}
-          {mode === 'lichess' && (
+          {online && (
+            <label className="flex flex-col text-xs text-slate-600">{t.clock}
+              <select aria-label={t.clock} className={field} value={clock} onChange={(e) => setClock(e.target.value)}>
+                {LICHESS_CLOCKS.map((c) => <option key={`${c.minutes}+${c.increment}`} value={`${c.minutes}+${c.increment}`}>{c.minutes}+{c.increment}</option>)}
+              </select>
+            </label>
+          )}
+          {online && (
             <label className="flex flex-col text-xs text-slate-600">{t.token}
               <input aria-label={t.token} type="password" autoComplete="off" className={field} value={token} onChange={(e) => setToken(e.target.value)} />
               <a className="text-blue-700 underline" href={LICHESS_PLAY_TOKEN_URL} target="_blank" rel="noreferrer">{t.create}</a>
@@ -81,10 +91,11 @@ export default function PlayPage() {
           )}
           <button
             className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            disabled={mode === 'lichess' && !token.trim()}
+            disabled={online && !token.trim()}
             onClick={() => {
-              if (mode === 'lichess') useSettingsStore.getState().set({ lichessPlayToken: token.trim() })
-              p.start({ mode, color, strength, lang, token: token.trim() })
+              if (online) useSettingsStore.getState().set({ lichessPlayToken: token.trim() })
+              const [minutes, increment] = clock.split('+').map(Number)
+              p.start({ mode, color, strength, lang, token: token.trim(), ...(online ? { clock: { minutes, increment } } : {}) })
             }}
           >
             {t.start}

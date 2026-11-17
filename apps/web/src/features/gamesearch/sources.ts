@@ -13,8 +13,10 @@
  *    player's games by month (plain PGN, no comments).
  */
 
-/** Where a Lichess user creates a personal token (no scope is needed to read). */
-export const LICHESS_TOKEN_URL = 'https://lichess.org/account/oauth/token/create?description=Chess%20reader'
+/** Where a Lichess user creates the personal token, its permissions already ticked (one token for reading and playing). */
+export const LICHESS_TOKEN_URL = lichessTokenUrl(LICHESS_ALL_SCOPES, 'Chess reader')
+
+import { LICHESS_ALL_SCOPES, lichessTokenUrl } from '../../shared/lichess/tokenUrl'
 
 /** Lichess refused the request: it needs a personal token, or the one given is wrong. */
 export class LichessAuthError extends Error {
@@ -226,4 +228,24 @@ export async function lichessOpening(uciMoves: string[], token?: string): Promis
     }
   }
   return null
+}
+
+export interface MyLichessGame { id: string; white: string; black: string; result: string; opening: string; date: string; pgn: string }
+
+const lichessName = (p?: { user?: { name: string }; aiLevel?: number }) => p?.user?.name ?? (p?.aiLevel ? `Lichess AI level ${p.aiLevel}` : '?')
+
+/** The games of the token's owner on Lichess, newest first, as PGN (to replay, review and comment). */
+export async function lichessMyGames(token: string, max = 20): Promise<{ username: string; games: MyLichessGame[] }> {
+  const { username } = (await (await get('https://lichess.org/api/account', undefined, token)).json()) as { username: string }
+  const url = `https://lichess.org/api/games/user/${encodeURIComponent(username)}?max=${max}&pgnInJson=true&opening=true&clocks=false&evals=false`
+  const text = await (await get(url, 'application/x-ndjson', token)).text()
+  const games = text.split('\n').filter((l) => l.trim()).map((l) => {
+    const g = JSON.parse(l) as { id: string; createdAt: number; winner?: string; status: string; opening?: { name: string }; pgn: string; players: { white: { user?: { name: string }; aiLevel?: number }; black: { user?: { name: string }; aiLevel?: number } } }
+    return {
+      id: g.id, white: lichessName(g.players.white), black: lichessName(g.players.black),
+      result: g.winner === 'white' ? '1-0' : g.winner === 'black' ? '0-1' : g.status === 'draw' || g.status === 'stalemate' ? '½-½' : '*',
+      opening: g.opening?.name ?? '', date: new Date(g.createdAt).toISOString().slice(0, 10), pgn: g.pgn,
+    }
+  })
+  return { username, games }
 }

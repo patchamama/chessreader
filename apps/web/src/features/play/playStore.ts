@@ -3,7 +3,7 @@ import { Chess } from 'chess.js'
 import { explainMove, opponentIntent, opportunities, type Lang } from '@chess-ebook/chess-shared'
 import { createEngineAnalyser, type AnalysePosition } from '../library/review/reviewEngine'
 import { engineMove } from './enginePlayer'
-import { lichessEvents, lichessGameStream, lichessMakeMove, lichessSeek } from './lichessBoard'
+import { lichessChallengeAi, lichessEvents, lichessGameStream, lichessMakeMove, lichessSeek, LICHESS_CLOCKS } from './lichessBoard'
 
 /**
  * A game played on this board — against the engine (chosen strength), against
@@ -12,7 +12,8 @@ import { lichessEvents, lichessGameStream, lichessMakeMove, lichessSeek } from '
  * opponent is up to, what the move leaves to the opponent and the chances the
  * side to move has.
  */
-export type PlayMode = 'engine' | 'human' | 'lichess'
+export type PlayMode = 'engine' | 'human' | 'lichess' | 'lichess-ai'
+export type Clock = { minutes: number; increment: number }
 export interface TutorNote { ply: number; who: 'you' | 'opponent' | 'tutor'; text: string }
 
 interface Runtime { analyse: AnalysePosition }
@@ -33,7 +34,7 @@ interface PlayState {
   result: string
   error: string | null
   lichess: { token: string; gameId: string | null } | null
-  start: (o: { mode: PlayMode; color: 'white' | 'black'; strength: number; lang: Lang; token?: string }) => void
+  start: (o: { mode: PlayMode; color: 'white' | 'black'; strength: number; lang: Lang; token?: string; clock?: Clock }) => void
   /** The user's move on the board; false when it is not theirs or not legal. */
   move: (from: string, to: string, promotion?: string) => boolean
   reset: () => void
@@ -84,24 +85,41 @@ export const usePlayStore = create<PlayState>((set, get) => {
     if (get().status === 'thinking') set({ status: 'playing' })
   }
 
-  async function lichessGame(token: string) {
+  /** Follow a started Lichess game: its moves come by the stream, the result ends it. */
+  function followLichess(token: string, gameId: string, color: 'white' | 'black', signal: AbortSignal) {
+    chess = new Chess()
+    set({ lichess: { token, gameId }, color, status: 'playing', fen: START, sans: [] })
+    void lichessGameStream(token, gameId, (s) => {
+      const uci = s.moves ? s.moves.split(' ') : []
+      // Moves arrive as the whole list: play the ones not on the board yet.
+      for (const m of uci.slice(chess.history().length)) apply(m.slice(0, 2), m.slice(2, 4), m[4], false)
+      if (s.status !== 'started' && s.status !== 'created') set({ status: 'over', result: s.winner ? `${s.winner} wins` : s.status })
+    }, signal).catch((err) => { if (!signal.aborted) set({ error: String(err.message ?? err) }) })
+  }
+
+  async function lichessGame(token: string, clock: Clock) {
     abort = new AbortController()
     const signal = abort.signal
     set({ status: 'seeking' })
     note('tutor', T[get().lang].seeking)
     void lichessEvents(token, (e) => {
       if (e.type !== 'gameStart' || !e.game) return
-      const { gameId, color } = e.game
-      chess = new Chess()
-      set({ lichess: { token, gameId }, color, status: 'playing', fen: START, sans: [] })
-      void lichessGameStream(token, gameId, (s) => {
-        const uci = s.moves ? s.moves.split(' ') : []
-        // Moves arrive as the whole list: play the ones not on the board yet.
-        for (const m of uci.slice(chess.history().length)) apply(m.slice(0, 2), m.slice(2, 4), m[4], false)
-        if (s.status !== 'started' && s.status !== 'created') set({ status: 'over', result: s.winner ? `${s.winner} wins` : s.status })
-      }, signal).catch((err) => set({ error: String(err.message ?? err) }))
+      followLichess(token, e.game.gameId, e.game.color, signal)
     }, signal).catch((err) => { if (!signal.aborted) set({ error: String(err.message ?? err), status: 'idle' }) })
-    lichessSeek(token, { minutes: 10, increment: 5 }, signal).catch((err) => { if (!signal.aborted) set({ error: String(err.message ?? err), status: 'idle' }) })
+    lichessSeek(token, clock, signal).catch((err) => { if (!signal.aborted) set({ error: String(err.message ?? err), status: 'idle' }) })
+  }
+
+  async function lichessAi(token: string, clock: Clock) {
+    abort = new AbortController()
+    const signal = abort.signal
+    const { color, strength } = get()
+    set({ status: 'seeking' })
+    try {
+      const gameId = await lichessChallengeAi(token, { level: strength, clock, color })
+      if (!signal.aborted) followLichess(token, gameId, color, signal)
+    } catch (err) {
+      if (!signal.aborted) set({ error: String((err as Error).message ?? err), status: 'idle' })
+    }
   }
 
   return {
@@ -111,7 +129,8 @@ export const usePlayStore = create<PlayState>((set, get) => {
       abort?.abort()
       chess = new Chess()
       set({ mode: o.mode, color: o.color, strength: o.strength, lang: o.lang, fen: START, sans: [], lastMove: null, log: [], status: 'playing', result: '', error: null, lichess: null })
-      if (o.mode === 'lichess') { void lichessGame(o.token ?? ''); return }
+      if (o.mode === 'lichess') { void lichessGame(o.token ?? '', o.clock ?? LICHESS_CLOCKS[0]); return }
+      if (o.mode === 'lichess-ai') { void lichessAi(o.token ?? '', o.clock ?? LICHESS_CLOCKS[0]); return }
       if (o.mode === 'engine' && o.color === 'black') void engineTurn()
     },
     move: (from, to, promotion) => {
@@ -122,7 +141,7 @@ export const usePlayStore = create<PlayState>((set, get) => {
       const before = chess.history().length
       if (!apply(from, to, promotion, true)) return false
       if (s.mode === 'engine' && get().status === 'playing') void engineTurn()
-      if (s.mode === 'lichess' && s.lichess?.gameId) {
+      if ((s.mode === 'lichess' || s.mode === 'lichess-ai') && s.lichess?.gameId) {
         const m = chess.history({ verbose: true })[before]
         lichessMakeMove(s.lichess.token, s.lichess.gameId, `${m.from}${m.to}${m.promotion ?? ''}`).catch((err) => set({ error: String(err.message ?? err) }))
       }

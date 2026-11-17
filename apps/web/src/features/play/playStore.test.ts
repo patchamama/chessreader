@@ -35,4 +35,26 @@ describe('playing with a tutor (S27)', () => {
     const log = usePlayStore.getState().log.map((l) => l.text).join(' | ')
     expect(log).toMatch(/A free piece: Qxg5 wins the knight on g5/)
   })
+  it('against the Lichess AI: the challenge starts the game, its moves arrive by the stream, mine are sent', async () => {
+    const calls: string[] = []
+    const enc = new TextEncoder()
+    let push: (line: string) => void = () => {}
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      if (url.endsWith('/challenge/ai')) return { ok: true, status: 201, json: async () => ({ id: 'g1' }) }
+      if (url.includes('/board/game/stream/')) {
+        return { ok: true, status: 200, body: new ReadableStream({ start(c) { c.enqueue(enc.encode('{"type":"gameFull","state":{"moves":"","status":"started"}}\n')); push = (l) => c.enqueue(enc.encode(l)) } }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ ok: true }) }
+    }))
+    const s = usePlayStore.getState()
+    s.start({ mode: 'lichess-ai', color: 'white', strength: 2, lang: 'en', token: 'tok', clock: { minutes: 10, increment: 5 } })
+    await settle(() => usePlayStore.getState().lichess?.gameId === 'g1')
+    expect(usePlayStore.getState().move('e2', 'e4')).toBe(true)
+    push('{"type":"gameState","moves":"e2e4 c7c5","status":"started"}\n')
+    await settle(() => usePlayStore.getState().sans.length === 2)
+    expect(usePlayStore.getState().sans).toEqual(['e4', 'c5'])
+    expect(calls).toContain('POST https://lichess.org/api/board/game/g1/move/e2e4')
+    vi.unstubAllGlobals()
+  })
 })

@@ -16,6 +16,7 @@ vi.mock('./sources', async (orig) => ({
   chessComArchives: vi.fn(),
   chessComGames: vi.fn(),
   cachedLichessEntries: vi.fn(() => []),
+  lichessMyGames: vi.fn(),
 }))
 const s = vi.mocked(sources)
 
@@ -177,5 +178,25 @@ describe('Lichess token and offline copies', () => {
     expect(await screen.findByText(/cannot be reached/i)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Open Kept study' }))
     expect(await screen.findByText('reader open')).toBeTruthy()
+  })
+})
+
+describe('my Lichess games', () => {
+  it('lists the games of the token owner and opens one in the reader (to review and comment it)', async () => {
+    useSettingsStore.setState({ lichessToken: 'tok' })
+    s.lichessMyGames.mockResolvedValue({ username: 'me', games: [{ id: 'g1', white: 'me', black: 'Lichess AI level 1', result: '0-1', opening: 'Sicilian Defense', date: '2026-11-17', pgn: '[White "me"]\n[Black "AI"]\n\n1. e4 c5 0-1\n' }] })
+    renderPage()
+    fireEvent.click(screen.getByRole('tab', { name: 'My Lichess games' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Load my games' }))
+    await waitFor(() => expect(screen.getByText(/me — Lichess AI level 1/)).toBeTruthy())
+    expect(s.lichessMyGames).toHaveBeenCalledWith('tok')
+    fireEvent.click(screen.getByRole('button', { name: 'Open me — Lichess AI level 1' }))
+    await waitFor(() => expect(screen.getByText('reader open')).toBeTruthy())
+  })
+  it('without a token it asks for one, with the link that ticks the permissions', () => {
+    useSettingsStore.setState({ lichessToken: '' })
+    renderPage()
+    fireEvent.click(screen.getByRole('tab', { name: 'My Lichess games' }))
+    expect(screen.getByRole('link', { name: /Create a Lichess token/ }).getAttribute('href')).toContain('scopes[]=board:play')
   })
 })

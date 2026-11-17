@@ -3,7 +3,17 @@
  * Lichess Board API. Needs a personal token with the `board:play` permission;
  * every call goes straight from the browser to lichess.org.
  */
-export const LICHESS_PLAY_TOKEN_URL = 'https://lichess.org/account/oauth/token/create?scopes[]=board:play&description=Chess%20reader%20play'
+/** Playing: a seek (board:play) and a challenge to the Lichess AI (challenge:write). */
+export const LICHESS_PLAY_TOKEN_URL = lichessTokenUrl(['board:play', 'challenge:write'], 'Chess reader play')
+
+/** Clocks offered for a Lichess game (minutes + increment in seconds); the first is the default. */
+export const LICHESS_CLOCKS: { minutes: number; increment: number }[] = [
+  { minutes: 10, increment: 5 }, { minutes: 5, increment: 3 }, { minutes: 10, increment: 0 },
+  { minutes: 15, increment: 10 }, { minutes: 30, increment: 0 }, { minutes: 30, increment: 20 },
+]
+import { lichessTokenUrl } from '../../shared/lichess/tokenUrl'
+
+export { lichessTokenUrl }
 const API = 'https://lichess.org/api'
 
 function check(res: { ok: boolean; status: number }) {
@@ -39,6 +49,18 @@ export async function lichessSeek(token: string, clock: { minutes: number; incre
   })
   check(res)
   if (res.body) await readNdjson(res.body, () => {})
+}
+
+/** Challenge the Lichess AI (Stockfish, level 1–8): the game starts at once; its id. */
+export async function lichessChallengeAi(token: string, o: { level: number; clock: { minutes: number; increment: number }; color: 'white' | 'black' }): Promise<string> {
+  const res = await fetch(`${API}/challenge/ai`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `level=${o.level}&clock.limit=${o.clock.minutes * 60}&clock.increment=${o.clock.increment}&color=${o.color}`,
+  })
+  if (res.status === 401 || res.status === 403) throw new Error('Lichess rejected the token: it needs the board:play and challenge:write permissions.')
+  check(res)
+  return ((await res.json()) as { id: string }).id
 }
 
 /** The account's events (a game starting…), until `signal` aborts. */
