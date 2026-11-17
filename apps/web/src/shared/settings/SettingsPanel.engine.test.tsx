@@ -8,6 +8,13 @@ describe('SettingsPanel — Engine section', () => {
     useSettingsStore.getState().reset()
   })
 
+  it('chooses the Lichess cloud as the engine source (S1)', () => {
+    render(<SettingsPanel onClose={vi.fn()} />)
+    expect(useSettingsStore.getState().engineSource).toBe('local')
+    fireEvent.change(screen.getByLabelText('Engine source'), { target: { value: 'lichess-cloud' } })
+    expect(useSettingsStore.getState().engineSource).toBe('lichess-cloud')
+  })
+
   it('toggles Show evaluation', () => {
     render(<SettingsPanel onClose={vi.fn()} />)
     expect(useSettingsStore.getState().showEval).toBe(true)

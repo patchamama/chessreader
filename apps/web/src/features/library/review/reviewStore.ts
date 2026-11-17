@@ -1,3 +1,5 @@
+import { withCloudEval } from '../../../shared/lichess/cloudEval'
+import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { GameReview, GameTree, PlyInput } from '@chess-ebook/chess-shared'
@@ -70,7 +72,11 @@ let override: AnalysePosition | null = null
 export function reviewEngine(sfUrl?: string): AnalysePosition {
   if (override) return override
   if (!analyser) analyser = createEngineAnalyser(sfUrl)
-  return analyser.analyse
+  const local = analyser.analyse
+  return (fen, depth, count) => {
+    const { engineSource, lichessToken } = useSettingsStore.getState()
+    return engineSource === 'lichess-cloud' ? withCloudEval(local, lichessToken || undefined)(fen, depth, count) : local(fen, depth, count)
+  }
 }
 /** Swap the engine (tests). */
 export function setReviewEngine(fn: AnalysePosition | null) {

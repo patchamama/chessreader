@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Chess } from 'chess.js'
-import { annotateGame, coachGame, extractPlayers, numberLine, openingName, reviewGame } from '@chess-ebook/chess-shared'
+import { annotateGame, coachGame, extractPlayers, numberLine, openingName, reviewGame, treeToPgn } from '@chess-ebook/chess-shared'
 import type { KeyMoment, Lang, MoveQuality, RecognizedGame } from '@chess-ebook/chess-shared'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { useSettingsStore, STOCKFISH_VERSIONS } from '../../../shared/settings/settingsStore'
@@ -12,6 +12,7 @@ import { commentWithModel, configuredModel } from './aiCommentary'
 import { lichessOpening } from '../../gamesearch/sources'
 import { reviewEngine, summarise, useReviewStore } from './reviewStore'
 import { downloadAnnotated, type ExportFormat } from './export/annotatedExport'
+import { lichessImportGame } from '../../../shared/lichess/lichessImport'
 
 interface GameReviewPanelProps {
   games: RecognizedGame[]
@@ -22,7 +23,7 @@ interface GameReviewPanelProps {
 
 const T: Record<Lang, Record<string, string>> = {
   en: {
-    title: 'Engine review', run: 'Review and comment the game', all: 'Review and comment every game of the chapter', cancel: 'Cancel',
+    title: 'Engine review', run: 'Review and comment the game', all: 'Review and comment every game of the chapter', cancel: 'Cancel', lichess: 'Analyse on Lichess',
     analysing: 'Analysing position', accuracy: 'accuracy', white: 'White', black: 'Black', opening: 'Opening',
     moments: 'Key moments', none: 'No turning points: a steady game.', go: 'Go to', line: 'Play the line',
     better: 'Better was', follow: 'There followed', level: 'Commentary level', l1: '1 · marks only', l2: '2 · remarks and better lines',
@@ -34,7 +35,7 @@ const T: Record<Lang, Record<string, string>> = {
     players: 'Players are read from PGN tags, from lines "White: … / Black: …" or from a heading "White – Black".',
   },
   es: {
-    title: 'Revisión con el motor', run: 'Revisar y comentar la partida', all: 'Revisar y comentar todas las partidas del capítulo', cancel: 'Cancelar',
+    title: 'Revisión con el motor', run: 'Revisar y comentar la partida', all: 'Revisar y comentar todas las partidas del capítulo', cancel: 'Cancelar', lichess: 'Analizar en Lichess',
     analysing: 'Analizando posición', accuracy: 'de precisión', white: 'Blancas', black: 'Negras', opening: 'Apertura',
     moments: 'Momentos clave', none: 'Sin puntos de inflexión: una partida pareja.', go: 'Ir a', line: 'Reproducir la línea',
     better: 'Era mejor', follow: 'Siguió', level: 'Nivel de comentario', l1: '1 · solo signos', l2: '2 · comentarios y líneas mejores',
@@ -46,7 +47,7 @@ const T: Record<Lang, Record<string, string>> = {
     players: 'Los jugadores se leen de las etiquetas PGN, de líneas "Blancas: … / Negras: …" o de un encabezado "Blancas – Negras".',
   },
   de: {
-    title: 'Engine-Analyse', run: 'Partie prüfen und kommentieren', all: 'Alle Partien des Kapitels prüfen und kommentieren', cancel: 'Abbrechen',
+    title: 'Engine-Analyse', run: 'Partie prüfen und kommentieren', all: 'Alle Partien des Kapitels prüfen und kommentieren', cancel: 'Abbrechen', lichess: 'Auf Lichess analysieren',
     analysing: 'Analysiere Stellung', accuracy: 'Genauigkeit', white: 'Weiß', black: 'Schwarz', opening: 'Eröffnung',
     moments: 'Schlüsselmomente', none: 'Keine Wendepunkte: eine ausgeglichene Partie.', go: 'Gehe zu', line: 'Variante abspielen',
     better: 'Besser war', follow: 'Es folgte', level: 'Kommentarstufe', l1: '1 · nur Zeichen', l2: '2 · Anmerkungen und bessere Varianten',
@@ -96,6 +97,8 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
   const [database, setDatabase] = useState<{ tree: unknown; eco: string; name: string } | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
+  const [lichessBusy, setLichessBusy] = useState(false)
+  const [lichessError, setLichessError] = useState<string | null>(null)
   const aiReady = useSettingsStore((s) => s.aiProvider !== 'none' && !!s.aiKey.trim() && (s.aiProvider === 'anthropic' || !!s.aiModel.trim()))
   const abort = useRef<AbortController | null>(null)
   useEffect(() => () => abort.current?.abort(), [])
@@ -133,6 +136,21 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
       // aborted: keep what was finished
     } finally {
       if (abort.current === ctrl) { abort.current = null; setProgress(null) }
+    }
+  }
+
+  /** Import the game into Lichess and open its analysis board (server analysis, explorer, sharing). */
+  const analyseOnLichess = async () => {
+    setLichessBusy(true)
+    setLichessError(null)
+    try {
+      const { lichessToken, lichessPlayToken } = useSettingsStore.getState()
+      const url = await lichessImportGame(treeToPgn(game.tree), lichessToken || lichessPlayToken || undefined)
+      window.open(url, '_blank', 'noopener')
+    } catch (e) {
+      setLichessError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLichessBusy(false)
     }
   }
 
@@ -277,10 +295,12 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
             {games.length > 1 && (
               <button className={button} onClick={() => void run(games.map((_, i) => i))}>{t.all}</button>
             )}
+            <button className={button} disabled={lichessBusy} onClick={() => void analyseOnLichess()}>{t.lichess}<span aria-hidden="true"> ↗</span></button>
           </>
         )}
       </div>
 
+      {lichessError && <p role="alert" className="mt-1 rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-800">{lichessError}</p>}
       {progress && (
         <div className="mt-2" role="status">
           <p className="text-[11px] text-slate-600">

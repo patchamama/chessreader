@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createStockfishWorker } from './stockfishWorker'
 import { useSettingsStore, STOCKFISH_VERSIONS } from '../settings/settingsStore'
+import { lichessCloudEval } from '../lichess/cloudEval'
 
 export interface EngineLine {
   idx: number
@@ -51,6 +52,7 @@ export function useEngineLines(fen: string): EngineLinesState {
   const showEval = useSettingsStore((s) => s.showEval)
   const depth = useSettingsStore((s) => s.engineDepth)
   const count = useSettingsStore((s) => s.engineVariations)
+  const source = useSettingsStore((s) => s.engineSource)
   const sfUrl = STOCKFISH_VERSIONS[stockfishVersion].url
 
   const [state, setState] = useState<EngineLinesState>(EMPTY)
@@ -71,23 +73,40 @@ export function useEngineLines(fen: string): EngineLinesState {
       return
     }
 
-    const worker = createStockfishWorker(sfUrl)
-    worker.onmessage = (e: MessageEvent) => {
-      const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
-      if (data.type !== 'lines') return
-      if (data.fen !== fenRef.current) return
-      setState(deriveState(data.lines, !data.final))
+    let cancelled = false
+    const startLocal = () => {
+      if (cancelled) return
+      const worker = createStockfishWorker(sfUrl)
+      worker.onmessage = (e: MessageEvent) => {
+        const data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data
+        if (data.type !== 'lines') return
+        if (data.fen !== fenRef.current) return
+        setState(deriveState(data.lines, !data.final))
+      }
+      workerRef.current = worker
+      worker.postMessage({ type: 'lines', fen, depth, count })
     }
-    workerRef.current = worker
 
     setState({ ...EMPTY, loading: true })
-    worker.postMessage({ type: 'lines', fen, depth, count })
+    if (source === 'lichess-cloud') {
+      // The cloud answers at once with a deep search when it knows the position.
+      lichessCloudEval(fen, count, useSettingsStore.getState().lichessToken || undefined)
+        .catch(() => null)
+        .then((lines) => {
+          if (cancelled) return
+          if (lines && lines.length > 0) setState(deriveState(lines, false))
+          else startLocal()
+        })
+    } else {
+      startLocal()
+    }
 
     return () => {
-      worker.terminate()
+      cancelled = true
+      workerRef.current?.terminate()
       workerRef.current = null
     }
-  }, [fen, sfUrl, showEval, depth, count])
+  }, [fen, sfUrl, showEval, depth, count, source])
 
   return state
 }

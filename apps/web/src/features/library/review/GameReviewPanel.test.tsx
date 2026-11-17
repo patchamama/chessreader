@@ -126,4 +126,17 @@ describe('GameReviewPanel', () => {
     expect(screen.getByTestId('book-summary')).toHaveTextContent('Tutor')
     expect(summarise([record, { ...record, gameIndex: 1, accuracyWhite: 50 }]).find((p) => p.name === 'Tutor')!.games).toBe(2)
   })
+
+  it('opens the game on the Lichess analysis board (S1)', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const fetchMock = vi.fn(async () => new Response('{"id":"abc","url":"https://lichess.org/abc"}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Analyse on Lichess' }))
+    await waitFor(() => expect(open).toHaveBeenCalledWith('https://lichess.org/abc', '_blank', 'noopener'))
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('https://lichess.org/api/import')
+    expect(decodeURIComponent(String(init.body)).replace(/\+/g, ' ')).toContain('1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#')
+    open.mockRestore()
+  })
 })

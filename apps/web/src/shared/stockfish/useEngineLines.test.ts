@@ -70,4 +70,24 @@ describe('useEngineLines', () => {
     expect(result.current.time).toBe(109)
     expect(result.current.bestMove).toBe('e2e4')
   })
+
+  it('with the Lichess cloud as source, shows the cloud lines and starts no local engine (S1)', async () => {
+    useSettingsStore.getState().set({ engineSource: 'lichess-cloud' })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ depth: 40, knodes: 5, pvs: [{ moves: 'e2e4 e7e5', cp: 25 }] }), { status: 200 })))
+    const { result } = renderHook(() => useEngineLines(FEN))
+    await waitFor(() => expect(result.current.lines[0]?.pv).toEqual(['e2e4', 'e7e5']))
+    expect(result.current.depth).toBe(40)
+    expect(result.current.loading).toBe(false)
+    expect(lastWorker).toBeNull()
+    vi.unstubAllGlobals()
+  })
+
+  it('falls back to the local engine when the cloud does not know the position', async () => {
+    useSettingsStore.getState().set({ engineSource: 'lichess-cloud' })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 404 })))
+    renderHook(() => useEngineLines(FEN))
+    await waitFor(() => expect(lastWorker).not.toBeNull())
+    expect(lastWorker!.postMessage).toHaveBeenCalledWith({ type: 'lines', fen: FEN, depth: 19, count: 1 })
+    vi.unstubAllGlobals()
+  })
 })

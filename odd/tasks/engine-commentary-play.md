@@ -1,0 +1,36 @@
+# Lichess extras, engine versions, diagram evals, human commentary DB, Maia and Play tutor
+Objective: integrate more Lichess (puzzles, cloud eval, analysis import), manage Stockfish versions, evaluate diagrams, build a position→human-comment database from the books, study Maia, and turn Play into a tutor. Plan: ~/.claude/plans/flickering-knitting-stearns.md.
+Delivery: one commit + tag per phase on main, pushed to origin main (user's standing instruction). Runner: Vitest (apps/web, packages/chess-shared), PHPUnit (apps/api), tsc, ESLint. Book texts and book-derived comments are never committed.
+
+## Specs
+- S1 "implementa las ideas para más adelante: problemas de Lichess (incluido el del día), la evaluación en la nube de Lichess (sin Stockfish local) y exportar una partida a Lichess para analizarla allá."
+- S2 "Implementa que el backend siempre chequee la última versión de stockfish y que la descargue si se pide, que muestre también las versiones existentes y que se pueda elegir una"
+- S3 "que el backend así como el frontend sean capaces de generar evaluaciones de stockfish en diagramas y sustituir los existentes (sustituir todos o poner botón de refresh que permita sustituir uno ya existente en un libro que se ponga en el pie de página de algún diagrama) o agregar en todos los diagramas la evaluación para esa posición usando la estructura existente en los libros pero también mostrando otras posibles opciones a usar y si se pone también una barra de evaluación."
+- S4 "Revisa esas 450 errores de los tomos de kasparov y revisa por qué esos errores y si no es un problema de reconocimiento."
+- S5 "crees una base de datos sqlite que grabe las posiciones de todas las partidas comentadas en los libros y si en una jugada aparece una de esas posiciones, que extraiga ese comentario de ahi y ponga la referencia de la partida y libro sin anunciarla pero que se vea de donde se sacó y que inserte ese comentario para esa posición en partidas existentes, así como las partidas extraidas de lichess, creando una base de datos de comentarios de alta calidad con preferencia en las partidas de los libros aquí puestas."
+- S6 "Esa base de datos puede usarse también en el navegador ... que el navegador extraiga los datos de un json que esté en gh que a su vez hace referencia a otros json que contienen los comentarios separando como un índice ... y si se desea también esa partida completa ... y si hay un backend, que estén estos contenidos en una base de datos sqlite con comentarios de alta calidad, generando también las traducciones a diferentes idiomas en el futuro". Decision (2026-11-17, user): book comments are published only to a PRIVATE GitHub repo/release ("Release privado"), never to this repo or gh-pages.
+- S7 "has la prueba de búsqueda de patrones o ideas usando la ia comentada aquí: https://www.maiachess.com/ y mira a ver si se puede integrar esta IA en el frontend y el backend y su comportamiento al compararla con los comentarios de los libros."
+- S8 "dada cualquier partida que se muestre en el frontend, que se muestra una opción de "Reanalizar y regenerar todos los comentarios" que elimine todos los comentarios existentes y diagramas y haga el análisis y regenere todos los comentarios de nuevo."
+- S9 "Al generarse los diagramas en una partida comentaa pon unos diagramas mejores con figuras como las mostradas en las miniaturas y usando esos colores y centra las imágenes de los diagramas y en la evaluación pon las próximas jugadas segun el motor y la version de stockfish que se usó, parecido a como aparece en los libros comentando también que color de piezas está mejor"
+- S10 "además de mostrarse la miniatura de la jugada en el hint de cada jugada, pon también la evaluación del motor ahí y además cuánto cambio la jugada hecha en relación a la evaluación del motor para saber cuánto se desvió y si es posible mostrar como un ghost o línea discontinua la jugada que debería de haberse hecho o con una flecha"
+- S11 "En el caso del play, deseo que aparezca una opción que me permita elegir si se muestra en el tablero las opciones de mostrar al seleccionar una pieza, para las posibles jugadas en colores las casillas que muestren las jugadas buenas, regulares y malas y en ese momento que se muestre en algún lugar en las primeras 5 jugadas la leyenda de lo que significan los colores"
+- S12 "que en ese caso se muestre al hacerse una jugada si es una jugada de libro en un status, si es una jugada buena, si es un error grabe, una mala jugada o la mejor jugada, teniendo en cuenta lo que dice el motor de evaluación y lo que dicen los libros (sería bueno descargar libros de apertura en internet e integrarlo con el juego así como de finales"
+- S13 "en esta parte del play también ponme los jugadores y si se juega con lichess que aparezcan los tiempos que quedan, nombre del jugador de lichess y mi nombre que aparece ahí, los elo y otros datos interesantes que puedan aparecer ahí, y pon la posible opción de que se ponga la barra de evaluación, así aquí deben de haber varios toggles o checkbox que me permitan activar/desactivar muchas opciones, igual agrega opción de que se digan con voces la jugada del oponente solamente o de ambos o ninguna"
+- S14 "hay algo aquí más que me puedas recomendar para el tutor?" (answer in the final report)
+- S15 "Te he agregado otros libros que me gustaría que analices también y agregues a los análisis."
+
+## Tasks
+- [x] T1 S1 Lichess puzzles (+daily), cloud eval engine source, "Analyse on Lichess" — inline — v0.70.0
+- [ ] T2 S11–S13 Play tutor: toggles, quality squares + legend, move status (book/tablebase/engine), Lichess players/clocks/ratings, eval bar, voice, engine version, Maia bots — inline — v0.71.0
+- [ ] T3 S8–S10 hint eval + deviation + dashed best-move arrow; book-like annotated diagrams; "Reanalizar y regenerar todos los comentarios" — inline — v0.72.0
+- [ ] T4 S2 backend Stockfish catalog/install/select + multipv; web admin panel, SF17/18 builds — inline — v0.73.0
+- [ ] T5 S3 diagram evals: per-diagram refresh, evaluate all (add/replace), alternatives, eval bar — inline — v0.74.0
+- [ ] T6 S4, S15 Kasparov error classification + new books analysis + recognition fixes — inline — v0.75.0
+- [ ] T7 S5–S6 commentary DB (positionKey, extractor, build script, SQLite + shards, lookup, insertion) — inline — v0.76.0–v0.77.0
+- [ ] T8 S7 Maia experiment + integration decision — inline — v0.78.0
+- [ ] T9 S14 close: docs, report — inline — v0.79.0
+
+## Log
+- L1 2026-11-17 user request (verbatim, abridged only by the interrupted duplicate): see S1–S15; full text in session transcript 59547ab6.
+- L2 2026-11-17 Decision: book-derived comments go to a private GitHub repo/release only ("Release privado").
+- L3 2026-11-17 Route: all tasks inline (no Writer trigger: sequential, dependent deliveries).

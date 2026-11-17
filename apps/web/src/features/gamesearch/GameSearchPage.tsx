@@ -27,8 +27,9 @@ import { pgnToChapters } from './pgnChapters'
 import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../shared/externalBook/externalBookStore'
 import { saveProgress } from '../library/store/readingStore'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
+import { PuzzlePanel } from './PuzzlePanel'
 
-type Tab = 'recommended' | 'studies' | 'masters' | 'broadcasts' | 'chesscom' | 'mine'
+type Tab = 'recommended' | 'studies' | 'masters' | 'broadcasts' | 'chesscom' | 'mine' | 'puzzles'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'recommended', label: 'Recommended' },
@@ -37,6 +38,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'broadcasts', label: 'Tournaments' },
   { id: 'chesscom', label: 'Chess.com player' },
   { id: 'mine', label: 'My Lichess games' },
+  { id: 'puzzles', label: 'Lichess puzzles' },
 ]
 
 /** Topic filters over study titles (Lichess has no topic search API). */
@@ -430,6 +432,8 @@ export default function GameSearchPage() {
             load={() => { const tk = useSettingsStore.getState().lichessToken; void run(() => lichessMyGames(tk), () => {}).then((r) => r && setMine(r)) }}
             open={read} />
         )}
+
+        {tab === 'puzzles' && <PuzzlePanel />}
 
         {tab === 'chesscom' && (
           <>

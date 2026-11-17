@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { VoiceSettings } from './VoiceSettings'
 import { LICHESS_TOKEN_URL } from '../lichess/tokenUrl'
 import { APP_LANGUAGES, type AppLanguage } from './settingsStore'
-import { useSettingsStore, BOARD_THEMES, FONT_FAMILIES, STOCKFISH_VERSIONS, APP_THEME_PRESETS, PIECE_THEMES, type BoardTheme, type FontFamily, type EvalBarDirection, type StockfishVersion, type ImageAlign, type HeadingStyle, type EngineVariations, type AppTheme, type PieceTheme } from './settingsStore'
+import { useSettingsStore, BOARD_THEMES, FONT_FAMILIES, STOCKFISH_VERSIONS, APP_THEME_PRESETS, PIECE_THEMES, type BoardTheme, type FontFamily, type EvalBarDirection, type StockfishVersion, type EngineSource,
+  type ImageAlign, type HeadingStyle, type EngineVariations, type AppTheme, type PieceTheme } from './settingsStore'
 
 interface SettingsPanelProps {
   onClose: () => void
@@ -292,6 +293,17 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           {(Object.entries(STOCKFISH_VERSIONS) as [StockfishVersion, typeof STOCKFISH_VERSIONS[StockfishVersion]][]).map(([key, v]) => (
             <option key={key} value={key}>{v.label}</option>
           ))}
+        </select>
+
+        <label className={labelClass} htmlFor="engine-source">Engine source</label>
+        <select
+          id="engine-source"
+          value={s.engineSource}
+          onChange={(e) => s.set({ engineSource: e.target.value as EngineSource })}
+          className={inputClass}
+        >
+          <option value="local">Stockfish in this browser</option>
+          <option value="lichess-cloud">Lichess cloud first (no local engine when it knows the position)</option>
         </select>
 
         {/* ── Engine ── */}

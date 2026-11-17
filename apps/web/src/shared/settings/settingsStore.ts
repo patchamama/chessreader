@@ -21,6 +21,9 @@ export const BOARD_THEMES: Record<BoardTheme, { light: string; dark: string; lab
 
 export type EvalBarDirection = 'horizontal' | 'vertical'
 
+/** Where engine lines come from: the local Stockfish, or the Lichess cloud first (local only when the cloud does not know the position). */
+export type EngineSource = 'local' | 'lichess-cloud'
+
 export type StockfishVersion = 'sf10-jsdelivr' | 'sf16-jsdelivr' | 'sf10-cdnjs' | 'sf9-cdnjs'
 
 export const STOCKFISH_VERSIONS: Record<StockfishVersion, { url: string; label: string }> = {
@@ -157,6 +160,7 @@ export interface AppSettings {
   boardTheme: BoardTheme
   evalBarDirection: EvalBarDirection
   stockfishVersion: StockfishVersion
+  engineSource: EngineSource
   /** Master switch: ON → engine runs, eval panel + best-move arrow shown. */
   showEval: boolean
   /** Target search depth (plies). Progressive analysis ramps up to this value. */
@@ -234,6 +238,7 @@ const DEFAULT: AppSettings = {
   boardTheme: 'blue',
   evalBarDirection: 'vertical',
   stockfishVersion: 'sf10-jsdelivr',
+  engineSource: 'local',
   showEval: true,
   engineDepth: 30,
   engineVariations: 1,
