@@ -107,6 +107,13 @@ function makeNode(
  * contiguous next ply, in paragraphs that open with such a move. This is the
  * continuation a repair must make legal.
  */
+/** Only closing brackets between the token at `i` and the line break before it. */
+function afterBreakIn(tokens: SanToken[], i: number): boolean {
+  let k = i - 1;
+  while (k >= 0 && tokens[k].type === 'variation-close') k--;
+  return k >= 0 && tokens[k].type === 'paragraph-break' && tokens[i].raw === '';
+}
+
 function upcomingMainline(
   tokens: SanToken[],
   from: number,
@@ -123,7 +130,11 @@ function upcomingMainline(
     const t = tokens[i];
     if (t.type === 'paragraph-break') { if (depth === 0) { decided = false; inParagraph = false; } continue; }
     if (t.type === 'variation-open') { depth++; continue; }
-    if (t.type === 'variation-close') { if (depth > 0) depth--; continue; }
+    if (t.type === 'variation-close') {
+      if (depth > 0) depth--;
+      if (depth === 0 && afterBreakIn(tokens, i)) { decided = false; inParagraph = false; }
+      continue;
+    }
     if (depth > 0 || t.type !== 'move' || t.isolated || t.moveNumber === undefined || !t.color) continue;
     const fits = t.moveNumber === expNumber && t.color === expColor;
     if (!decided) { decided = true; inParagraph = !!t.atParagraphStart && fits; }
@@ -180,7 +191,13 @@ export function buildGameTreeTwoPass(
       continue;
     }
     if (t.type === 'variation-open') { parenDepth++; continue; }
-    if (t.type === 'variation-close') { if (parenDepth > 0) parenDepth--; continue; }
+    if (t.type === 'variation-close') {
+      if (parenDepth > 0) parenDepth--;
+      // Brackets left open by an earlier paragraph, closed at the head of this
+      // one (see recognizeGames): this paragraph is decided afresh.
+      if (parenDepth === 0 && afterBreakIn(tokens, i)) { paragraphDecided = false; inMainlineParagraph = false; }
+      continue;
+    }
     if (parenDepth > 0) continue; // skip everything inside parentheses in pass 1
     if (t.type !== 'move' || t.isolated) continue;
     if (t.moveNumber === undefined || !t.color) continue;
@@ -242,6 +259,9 @@ export function buildGameTreeTwoPass(
         if (repair.index < tree.mainline.length) {
           // An earlier mainline move was the wrong one: rebuild from it.
           const redo = mainTokenIndex.splice(repair.index);
+          // Re-place them as they were placed (an earlier repair may have
+          // changed a move from what its token says).
+          const placedSans = tree.mainline.slice(repair.index).map((id) => { const n = tree.nodes.get(id)!; return n.correctedFrom ? n.san : undefined; });
           for (const id of tree.mainline.splice(repair.index)) {
             const n = tree.nodes.get(id)!;
             mainlineByPly.delete(plyIndex(n.moveNumber, n.color));
@@ -252,7 +272,7 @@ export function buildGameTreeTwoPass(
           parentId = prev ? prev.id : null;
           expNumber = Math.floor(repair.index / 2) + 1;
           expColor = repair.index % 2 === 0 ? 'white' : 'black';
-          redo.forEach((tokenIndex, k) => place(tokenIndex, k === 0 ? repair.san : undefined));
+          redo.forEach((tokenIndex, k) => place(tokenIndex, k === 0 ? repair.san : placedSans[k]));
           place(i);
         } else {
           place(i, repair.san);

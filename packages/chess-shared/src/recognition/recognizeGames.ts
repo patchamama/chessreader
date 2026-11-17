@@ -177,6 +177,18 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
       continue;
     }
 
+    // A bracket opened in an earlier paragraph and never closed (a slip of the
+    // book: "11 Qg4!? (la partida fuente …, o bien 11 Nbd2 …" with no ")"):
+    // a paragraph that opens with the game's next move is the game again. The
+    // dangling brackets are closed right before it.
+    if (token.type === 'move-number' && depth > 0 && token.atParagraphStart && !openedInParagraph
+      && !inClosedBracket.has(token) && lastMainPly > 0 && ply(token) === lastMainPly + 1) {
+      for (; depth > 0; depth--) {
+        current.push({ type: 'variation-close', raw: '', charStart: token.charStart, charEnd: token.charStart });
+      }
+      paragraphDecided = false; inMainParagraph = false; mainParagraph = false;
+    }
+
     // A paragraph that opens with a numbered move, at top level.
     if (token.type === 'move-number' && depth === 0 && token.atParagraphStart) {
       const p = ply(token);

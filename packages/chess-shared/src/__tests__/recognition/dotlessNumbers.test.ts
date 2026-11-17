@@ -65,3 +65,31 @@ describe('an engine line after a diagram belongs to the main line, not to the pr
     expect(lines).toContain('Be2 Bb7 O-O Be7 Ne4 h6 axb5 cxb5 b3 a5')
   })
 })
+
+describe('a prose variation interrupted by a quote goes on after it (same paragraph)', () => {
+  const text = [
+    '1 d4 d5 2 c4 dxc4 3 Nf3 Nf6 4 Nc3 c6 5 e4 b5 6 e5 Nd5 7 a4 e6 8 axb5 Nxc3 9 bxc3 cxb5 10 Ng5 Bb7 11 Qh5 g6',
+    'Después de 11…Qd7, “una jugada más en el espíritu de Steinitz” (Crouch), las blancas probablemente hubieran replicado no 12 Nxh7?! Nc6 13 Nxf8?, sino sencillamente 12 Be2.',
+    '12 Qg4',
+  ].join('\n')
+  const [g] = recognizeGames(text, { algorithm: 2 })
+  it('12 Nxh7 continues 11…Qd7 and 12 Be2 branches from it', () => {
+    expect(g.tree.errors).toEqual([])
+    const qd7 = [...g.tree.nodes.values()].find((n) => n.san === 'Qd7')!
+    const children = [...g.tree.nodes.values()].filter((n) => n.parentId === qd7.id).map((n) => n.san).sort()
+    expect(children).toEqual(['Be2', 'Nxh7'])
+  })
+})
+
+describe('a "(" the book never closes does not swallow the game', () => {
+  const text = [
+    '1 d4 d5 2 c4 dxc4 3 Nf3 Nf6 4 Nc3 c6 5 e4 b5 6 e5 Nd5 7 a4 e6',
+    '8 axb5',
+    'Un plan más moderno es 8 Ng5 h6 9 Nge4 b4 10 Nb1 Ba6 11 Qg4!? (la partida fuente, o bien 11 Nbd2 Nf4! (también se ha jugado 11…c3) 12 Qg4 Nd3+, las negras tienen un excelente final.',
+    '8…Nxc3 9 bxc3 cxb5 10 Ng5 Bb7 11 Qh5 g6',
+  ].join('\n')
+  const [g] = recognizeGames(text, { algorithm: 2 })
+  it('the next paragraph that goes on with the game is the main line again', () => {
+    expect(g.tree.mainline.map((id) => g.tree.nodes.get(id)!.san).slice(15)).toEqual(['Nxc3', 'bxc3', 'cxb5', 'Ng5', 'Bb7', 'Qh5', 'g6'])
+  })
+})
