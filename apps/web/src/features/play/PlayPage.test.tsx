@@ -4,6 +4,7 @@ import PlayPage from './PlayPage'
 import { usePlayStore, setPlayRuntime } from './playStore'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 
+vi.mock('./humanMoves', () => ({ humanMoves: vi.fn(async () => ({ rating: 1500, moves: [{ san: 'e4', probability: 0.41 }, { san: 'd4', probability: 0.32 }] })) }))
 vi.mock('../viewer/components/EvalBar', () => ({ default: () => <div data-testid="evalbar" /> }))
 vi.mock('../library/review/useMoveHints', () => ({ useMoveHints: () => ({}) }))
 
@@ -111,5 +112,13 @@ describe('PlayPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New game' }))
     expect(start).toHaveBeenCalledWith(expect.objectContaining({ mode: 'lichess-bot', bot: 'maia9', token: 'tok' }))
     start.mockRestore()
+  })
+
+  it('on my turn, says what a player of my rating would play (Maia, S7)', async () => {
+    useSettingsStore.setState({ playHumanHint: true, playHumanRating: 1500 })
+    render(<PlayPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'New game' }))
+    expect(await screen.findByTestId('human-moves')).toHaveTextContent('A 1500 player would play: e4 (41%), d4 (32%)')
+    useSettingsStore.setState({ playHumanHint: false })
   })
 })

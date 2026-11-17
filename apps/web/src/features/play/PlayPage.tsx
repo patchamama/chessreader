@@ -7,10 +7,12 @@ import { useMoveHints } from '../library/review/useMoveHints'
 import { usePlayStore, type Clocks, type PlayerInfo, type PlayMode } from './playStore'
 import { LICHESS_BOTS, LICHESS_CLOCKS, LICHESS_PLAY_TOKEN_URL } from './lichessBoard'
 import { MOVE_KIND_COLORS, type MoveKind } from './moveJudge'
+import { humanMoves, type HumanMoves } from './humanMoves'
 
 const TEXT = {
   en: {
     title: 'Play with a tutor', mode: 'Opponent', engine: 'The engine', human: 'A person at this board', lichess: 'Someone on Lichess (casual)', lichessAi: 'The Lichess AI (Stockfish)', lichessBot: 'A Maia bot on Lichess (plays like a person)', bot: 'Bot', clock: 'Clock', level: 'Lichess AI level', color: 'I play', white: 'White', black: 'Black', strength: 'Engine strength', start: 'New game', tutor: 'Tutor', token: 'Lichess token (board:play, challenge:write)', create: 'Create a token for playing ↗', thinking: 'The engine is thinking…', you: 'You', opp: 'Opponent',
+    humanHint: 'What a player of my rating would play (Maia, server)', humanSays: (r: number) => `A ${r} player would play:`,
     options: 'Options', hints: 'Colour the moves of the selected piece', status: 'Say how good each move is', bar: 'Evaluation bar', legend: 'Legend of the colours', voice: 'Say the moves aloud', voiceNone: 'No', voiceOpp: "Only the opponent's", voiceBoth: 'Both sides', resign: 'Resign', colours: 'Colours', rated: 'rated', casual: 'casual',
     kinds: { book: 'book move', best: 'best move', good: 'good move', inaccuracy: 'inaccuracy', mistake: 'mistake', blunder: 'blunder' },
     legendKinds: { book: 'Book', best: 'Best', good: 'Good', inaccuracy: 'Inaccuracy', mistake: 'Mistake', blunder: 'Blunder' },
@@ -18,6 +20,7 @@ const TEXT = {
   },
   es: {
     title: 'Jugar con un tutor', mode: 'Rival', engine: 'El motor', human: 'Una persona en este tablero', lichess: 'Alguien en Lichess (amistosa)', lichessAi: 'La IA de Lichess (Stockfish)', lichessBot: 'Un bot Maia en Lichess (juega como una persona)', bot: 'Bot', clock: 'Ritmo', level: 'Nivel de la IA de Lichess', color: 'Juego con', white: 'Blancas', black: 'Negras', strength: 'Fuerza del motor', start: 'Nueva partida', tutor: 'Tutor', token: 'Token de Lichess (board:play, challenge:write)', create: 'Crear un token para jugar ↗', thinking: 'El motor está pensando…', you: 'Tú', opp: 'Rival',
+    humanHint: 'Qué jugaría alguien de mi nivel (Maia, servidor)', humanSays: (r: number) => `Un jugador de ${r} jugaría:`,
     options: 'Opciones', hints: 'Colorear las jugadas de la pieza elegida', status: 'Decir qué tan buena es cada jugada', bar: 'Barra de evaluación', legend: 'Leyenda de los colores', voice: 'Decir las jugadas en voz alta', voiceNone: 'No', voiceOpp: 'Solo las del rival', voiceBoth: 'Las de ambos', resign: 'Abandonar', colours: 'Colores', rated: 'con rating', casual: 'amistosa',
     kinds: { book: 'jugada de libro', best: 'la mejor jugada', good: 'buena jugada', inaccuracy: 'imprecisión', mistake: 'error', blunder: 'error grave' },
     legendKinds: { book: 'Libro', best: 'Mejor', good: 'Buena', inaccuracy: 'Imprecisión', mistake: 'Error', blunder: 'Error grave' },
@@ -25,6 +28,7 @@ const TEXT = {
   },
   de: {
     title: 'Spielen mit Trainer', mode: 'Gegner', engine: 'Die Engine', human: 'Eine Person an diesem Brett', lichess: 'Jemand auf Lichess (ungewertet)', lichessAi: 'Die Lichess-KI (Stockfish)', lichessBot: 'Ein Maia-Bot auf Lichess (spielt wie ein Mensch)', bot: 'Bot', clock: 'Bedenkzeit', level: 'Stufe der Lichess-KI', color: 'Ich spiele', white: 'Weiß', black: 'Schwarz', strength: 'Engine-Stärke', start: 'Neue Partie', tutor: 'Trainer', token: 'Lichess-Token (board:play, challenge:write)', create: 'Token zum Spielen erstellen ↗', thinking: 'Die Engine denkt…', you: 'Du', opp: 'Gegner',
+    humanHint: 'Was ein Spieler meiner Stärke spielen würde (Maia, Server)', humanSays: (r: number) => `Ein Spieler mit ${r} würde spielen:`,
     options: 'Optionen', hints: 'Züge der gewählten Figur einfärben', status: 'Sagen, wie gut jeder Zug ist', bar: 'Bewertungsbalken', legend: 'Legende der Farben', voice: 'Züge vorlesen', voiceNone: 'Nein', voiceOpp: 'Nur die des Gegners', voiceBoth: 'Beide Seiten', resign: 'Aufgeben', colours: 'Farben', rated: 'gewertet', casual: 'ungewertet',
     kinds: { book: 'Buchzug', best: 'bester Zug', good: 'guter Zug', inaccuracy: 'Ungenauigkeit', mistake: 'Fehler', blunder: 'grober Fehler' },
     legendKinds: { book: 'Buch', best: 'Bester', good: 'Gut', inaccuracy: 'Ungenau', mistake: 'Fehler', blunder: 'Grober Fehler' },
@@ -90,6 +94,14 @@ export default function PlayPage() {
   const myTurn = p.status === 'playing' && (p.mode === 'human' || (p.fen.split(' ')[1] === 'w') === (p.color === 'white'))
   const hints = useMoveHints(p.fen, selected, settings.playMoveHints && myTurn)
   const ticking = useTicking(p.clocks)
+  const [human, setHuman] = useState<{ fen: string; value: HumanMoves | null } | null>(null)
+  useEffect(() => {
+    if (!settings.playHumanHint || !myTurn) return
+    let live = true
+    void humanMoves(p.fen, settings.playHumanRating).then((value) => { if (live) setHuman({ fen: p.fen, value }) })
+    return () => { live = false }
+  }, [p.fen, myTurn, settings.playHumanHint, settings.playHumanRating])
+  const humanHere = settings.playHumanHint && myTurn && human?.fen === p.fen ? human.value : null
   const click = (square: string) => {
     if (selected && targets.includes(square as Square)) {
       p.move(selected, square)
@@ -153,6 +165,11 @@ export default function PlayPage() {
               {j.tablebase ? ` · ${t.tb[j.tablebase as keyof typeof t.tb] ?? j.tablebase}` : ''}
               {!j.opening && !j.tablebase && j.loss >= 2 ? ` (−${j.loss}%)` : ''}
             </span>
+          </p>
+        )}
+        {humanHere && humanHere.moves.length > 0 && (
+          <p data-testid="human-moves" className="mt-1 text-sm text-slate-700">
+            🧑 {t.humanSays(humanHere.rating)} {humanHere.moves.map((m) => `${m.san} (${Math.round(m.probability * 100)}%)`).join(', ')}
           </p>
         )}
         {showLegend && (
@@ -246,6 +263,12 @@ export default function PlayPage() {
           <label className={check}><input type="checkbox" checked={settings.playLegend} onChange={(e) => settings.set({ playLegend: e.target.checked })} />{t.legend}</label>
           <label className={check}><input type="checkbox" checked={settings.playMoveStatus} onChange={(e) => settings.set({ playMoveStatus: e.target.checked })} />{t.status}</label>
           <label className={check}><input type="checkbox" checked={settings.playEvalBar} onChange={(e) => settings.set({ playEvalBar: e.target.checked })} />{t.bar}</label>
+          <label className={check}>
+            <input type="checkbox" checked={settings.playHumanHint} onChange={(e) => settings.set({ playHumanHint: e.target.checked })} />{t.humanHint}
+            <select aria-label="Maia rating" className="rounded border border-slate-300 bg-white px-1 py-0.5" value={settings.playHumanRating} onChange={(e) => settings.set({ playHumanRating: Number(e.target.value) })}>
+              {[1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900].map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </label>
           <label className={check}>{t.voice}
             <select aria-label={t.voice} className="rounded border border-slate-300 bg-white px-1 py-0.5" value={settings.playVoice} onChange={(e) => settings.set({ playVoice: e.target.value as 'none' | 'opponent' | 'both' })}>
               <option value="none">{t.voiceNone}</option>

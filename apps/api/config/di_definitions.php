@@ -372,6 +372,15 @@ return [
         );
     },
 
+    \App\Application\Engine\Port\HumanMoveModel::class => function (ContainerInterface $c) {
+        $storageDir = $c->get('settings')['storage_dir'] ?? dirname(__DIR__) . '/storage';
+        $lc0 = trim(shell_exec('which lc0 2>/dev/null') ?? '');
+        return new \App\Infrastructure\Chess\Engine\Lc0MaiaModel(
+            $lc0 !== '' && is_executable($lc0) ? $lc0 : null,
+            new \App\Infrastructure\Chess\Engine\MaiaWeights($storageDir . '/maia'),
+        );
+    },
+
     \App\Application\Comments\Port\PositionCommentStore::class => function (ContainerInterface $c) {
         $storageDir = $c->get('settings')['storage_dir'] ?? dirname(__DIR__) . '/storage';
         return new \App\Infrastructure\Comments\SqlitePositionCommentStore($storageDir . '/comments.sqlite');

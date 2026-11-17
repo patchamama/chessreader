@@ -216,6 +216,21 @@ cd packages/chess-shared && pnpm test
 
 ---
 
+## Maia: how people play
+
+[Maia](https://www.maiachess.com/) nets (trained on human games by rating) predict the move a player of a given level would choose — often the "natural" move a book refutes, not the engine's.
+
+- **Play:** the Maia bots of Lichess (maia1/5/9 ≈ 1100/1500/1900) as opponents; with the server, the option *What a player of my rating would play* shows Maia's three most likely moves on your turn.
+- **Server:** `GET /api/engine/human?fen=…&rating=1500&limit=3` answers `{rating, moves: [{uci, probability}]}` using [lc0](https://lczero.org/) and the nets in `apps/api/storage/maia/`:
+
+```bash
+brew install lc0   # or your platform's package
+mkdir -p apps/api/storage/maia && cd apps/api/storage/maia
+for r in 1100 1500 1900; do curl -LO https://github.com/CSSLab/maia-chess/releases/download/v1.0/maia-$r.pb.gz; done
+```
+
+The Maia code is GPL-3.0 and its nets carry no separate licence notice, so this repository does not ship them; each server downloads them.
+
 ## Human commentary database
 
 What book authors (and Lichess study writers) said about a position, borrowed when another game reaches it: the annotated game then shows the remark as a quote with a quiet source line ("— Kasparov, Mis geniales predecesores III, Partida 12"). Books come before studies; the reader's language first.

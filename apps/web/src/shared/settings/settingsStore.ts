@@ -191,6 +191,9 @@ export interface AppSettings {
   playLegend: boolean
   /** Play: say the moves aloud — none, only the opponent's, or both sides'. */
   playVoice: 'none' | 'opponent' | 'both'
+  /** Play: on my turn, what a player of my rating would play (Maia on the server). */
+  playHumanHint: boolean
+  playHumanRating: number
   /** Master switch: ON → engine runs, eval panel + best-move arrow shown. */
   showEval: boolean
   /** Target search depth (plies). Progressive analysis ramps up to this value. */
@@ -282,6 +285,8 @@ const DEFAULT: AppSettings = {
   playEvalBar: false,
   playLegend: true,
   playVoice: 'none',
+  playHumanHint: false,
+  playHumanRating: 1500,
   showEval: true,
   engineDepth: 30,
   engineVariations: 1,
