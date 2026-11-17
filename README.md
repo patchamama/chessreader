@@ -19,6 +19,11 @@ ChessReader parses chess content — EPUBs, public URLs, plain text — recognis
 | **Study Board** | Drag-resizable analysis panel; the board always fills its width |
 | **Stockfish Eval** | Live engine evaluation bar per move (WASM in-browser + native server-side) + progressive engine/premove arrows |
 | **Regenerable Diagrams** | Toggle any book diagram between the original image and a freshly rendered board, with a small Stockfish footer (`SF18: (1.30) 1. Nf3 …`, score from White's POV). Right-click to pick board theme, piece set and coordinate symbols, or edit the FEN |
+| **Narration** | The game read aloud (browser voice, or an MP3 + timed cue track rendered by the server: system voices, Piper, OpenAI, ElevenLabs), the board following every move and lighting what is said; variations are announced, played and closed ("back to the game…"); manual mode waits for you to make the move |
+| **Engine review & coach** | Stockfish review with accuracy per player (Lichess formula), key moments and commentary at three levels; a *coach review* of a game you played (focus on White, Black or both): errors with what they allowed, free pieces left, the better move and what it did, the opponent's threats; optional commentary by Claude or OpenAI with your own key |
+| **Book layout** | Annotated games written as a book: remarks in braces, a line per remark, or a paragraph after the moves; diagrams at the key moments (or the moves you pick) with the engine evaluation under them |
+| **Play with a tutor** | Play the engine (strength 1–8), a person at the same board, or someone on Lichess (casual, your token with `board:play`); the tutor comments every move: ideas, threats, chances, what your move leaves |
+| **Game search** | Recommended annotated games (offline), Lichess studies, master games by opening (needs a free Lichess token), tournaments, chess.com archives; games read from Lichess are kept offline |
 | **Notes** | Per-user scratch notes with explicit Save and maximize — stored server-side, cached offline |
 | **Theming** | App light/dark theme, 6 board color themes, 7 piece sprite sets, board size, move sounds, autoplay |
 | **Browser Extension** | MV3 Chrome/Edge extension — makes chess blogs interactive without the app |
@@ -170,6 +175,15 @@ Go to **Webparser**, paste a URL (e.g. a chess blog post) and ChessReader fetche
 ### Browser Extension
 Load the unpacked extension from `apps/extension/` in Chrome (`chrome://extensions → Load unpacked`). Visit any chess site — the extension detects diagrams and game notation and makes them interactive.
 
+### Commenting a game
+Open a game → **Review game with the engine** → choose the commentary level, layout and diagrams → **Open annotated game**, or pick **Focus on** and **Coach review** for a master's view of a game you played (paste it with *Paste text*).
+
+### Play
+**Play** in the menu: choose the opponent and the engine strength, click a piece and then its square (or drag it). For Lichess, create a token with the `board:play` permission (link on the page).
+
+### Measuring the commentary
+`packages/chess-shared/scripts/evaluate-commentary.mjs <annotated.pgn>` (or `--book <book.txt>`) measures how many of the ideas human annotators name the detectors find; `audit-commentary.mjs <games.pgn>` checks every remark against the board and the moves that followed; `learn-opening-squares.mjs` counts the squares annotators discuss per opening.
+
 ### Admin Panel
 Visit `/admin` to approve or reject pending user accounts.
 
@@ -178,13 +192,13 @@ Visit `/admin` to approve or reject pending user accounts.
 ## Tests
 
 ```bash
-# PHP backend (273 tests)
+# PHP backend (308 tests)
 cd apps/api && ./vendor/bin/phpunit
 
-# Frontend (284 tests)
+# Frontend (621 tests)
 cd apps/web && pnpm test
 
-# Shared chess library (86 tests)
+# Shared chess library (315 tests)
 cd packages/chess-shared && pnpm test
 ```
 

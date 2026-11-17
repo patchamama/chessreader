@@ -103,3 +103,22 @@ describe('patterns from the Bronstein book (S2, S7)', () => {
     expect(text).toMatch(/g6[^{]*\{ [^}]*queen/i)
   })
 })
+
+describe('key squares of the opening, learnt from annotated games (S10)', () => {
+  it('a move that starts fighting for a key square of its opening says so, once per square and side', () => {
+    const p = plies('e4 c5 Nf3 d6 d4 cxd4 Nxd4 Nf6 Nc3 a6 Be2 e5')
+    const r = reviewGame(p)
+    const nf3 = r.moves[2].motifs.find((m) => m.kind === 'key-square')!
+    expect(nf3.squares).toEqual(['d4'])
+    expect(motifText(nf3, p[2].fenAfter, 'es')).toBe('Lucha por d4, casilla clave en la Defensa Siciliana.')
+    // 1. e4 already eyes d5; 1... c5 is Black's first fight for d4.
+    expect(r.moves[0].motifs.find((m) => m.kind === 'key-square')!.squares).toEqual(['d5'])
+    expect(r.moves[1].motifs.find((m) => m.kind === 'key-square')!.squares).toEqual(['d4'])
+    expect(r.moves[8].motifs.some((m) => m.kind === 'key-square' && m.squares[0] === 'd5')).toBe(false)
+    expect(r.moves[4].motifs.some((m) => m.kind === 'key-square' && m.squares[0] === 'd4')).toBe(false)
+  })
+  it('nothing for an opening the corpus taught nothing about', () => {
+    const p = plies('a3 a6 b3 b6')
+    expect(reviewGame(p).moves.some((m) => m.motifs.some((x) => x.kind === 'key-square'))).toBe(false)
+  })
+})

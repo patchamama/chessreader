@@ -12,6 +12,7 @@
 import { Chess, type Square, type PieceSymbol, type Color as ChessColor } from 'chess.js';
 import { attacksFrom, type MoveQuality } from './commentCues.js';
 import type { Lang } from './concepts.js';
+import { OPENING_SQUARES } from './openingSquares.js';
 import { positionIdeas } from './positionIdeas.js';
 
 /** Engine evaluation from White's point of view. */
@@ -57,7 +58,7 @@ export type MotifKind =
   | 'attack-undefended' | 'wins-material' | 'discovered-attack' | 'outpost' | 'open-file'
   | 'passed-pawn' | 'battery' | 'x-ray' | 'leaves-hanging'
   | 'threat' | 'pawn-sacrifice' | 'prepares-castling'
-  | 'aims-at' | 'overloaded' | 'traps' | 'combination' | 'positional-sacrifice';
+  | 'aims-at' | 'overloaded' | 'traps' | 'combination' | 'positional-sacrifice' | 'key-square';
 
 export interface Motif {
   kind: MotifKind;
@@ -623,6 +624,23 @@ export function reviewGame(plies: PlyInput[]): GameReview {
  */
 function lookAhead(plies: PlyInput[], moves: ReviewedMove[]) {
   const add = (i: number, motif: Motif) => moves[i].motifs.push(motif);
+  // The squares annotators discuss in this opening: the first move fighting
+  // for each of them (per side, first 15 moves) says so.
+  const sans = plies.map((p) => stripMarks(p.san));
+  const family = openingName(sans, 'en')?.split(/[:,]/)[0].trim();
+  const keySquares = family ? OPENING_SQUARES[family] ?? [] : [];
+  const fought = new Set<string>();
+  plies.slice(0, 30).forEach((p, i) => {
+    if (!keySquares.length) return;
+    const after = new Chess(p.fenAfter);
+    const before = new Chess(p.fenBefore);
+    const now = new Set([...attacksFrom(after, p.to), p.to]);
+    const was = new Set(attacksFrom(before, p.from));
+    const sq = keySquares.find((s) => now.has(s) && !was.has(s) && !fought.has(`${p.color}:${s}`));
+    if (!sq) return;
+    fought.add(`${p.color}:${sq}`);
+    add(i, { kind: 'key-square', square: p.to, squares: [sq], data: { opening: family! } });
+  });
   plies.forEach((p, j) => {
     const san = stripMarks(p.san);
     // Castling: every earlier move of that side that emptied a square between king and rook.
@@ -914,6 +932,13 @@ export function motifText(m: Motif, fenAfter: string, lang: Lang): string {
       return lang === 'es' ? `${cap(who(m.squares[0]))} queda atrapado: no tiene ninguna casilla segura.`
         : lang === 'en' ? `${cap(who(m.squares[0]))} is trapped: it has no safe square.`
         : `${cap(who(m.squares[0]))} ist gefangen: kein sicheres Feld.`;
+    case 'key-square': {
+      const name = OPENINGS.find((o) => o[1] === m.data?.opening || o[1].startsWith(`${m.data?.opening},`) || o[1].startsWith(`${m.data?.opening}:`));
+      const local = name ? (lang === 'en' ? name[1] : lang === 'es' ? name[2] : name[3]).split(/[:,]/)[0].trim() : String(m.data?.opening);
+      return lang === 'es' ? `Lucha por ${m.squares[0]}, casilla clave en la ${local}.`
+        : lang === 'en' ? `Fights for ${m.squares[0]}, a key square in the ${local}.`
+        : `Kämpft um ${m.squares[0]}, ein Schlüsselfeld in der ${local}.`;
+    }
     case 'positional-sacrifice': {
       const pawn = m.data?.amount === 1;
       return lang === 'es' ? `Sacrificio posicional: entrega ${pawn ? 'un peón' : 'material'} a cambio de juego (no lo recupera en las jugadas siguientes).`
