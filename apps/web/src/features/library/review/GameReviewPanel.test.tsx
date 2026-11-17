@@ -158,6 +158,6 @@ describe('GameReviewPanel', () => {
     const html = useExternalBookStore.getState().chapters[0].html
     expect(html).toContain('Nf6??')
     expect(html).toMatch(/<img class="diagram"/)
-    expect(html).toMatch(/class="diagram-eval">[^<]*· Stockfish 10, depth \d+/)
+    expect(html).toMatch(/class="diagram-eval">[^<]*· Stockfish 18 lite, depth \d+/)
   })
 })

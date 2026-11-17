@@ -346,19 +346,38 @@ return [
     },
 
     // Eval
+    \App\Application\Engine\Port\StockfishReleases::class => function (ContainerInterface $c) {
+        $storageDir = $c->get('settings')['storage_dir'] ?? dirname(__DIR__) . '/storage';
+        return new \App\Infrastructure\Chess\Engine\GithubStockfishReleases($storageDir . '/stockfish/releases.json');
+    },
+
+    \App\Application\Engine\Port\StockfishInstallation::class => function (ContainerInterface $c) {
+        $storageDir = $c->get('settings')['storage_dir'] ?? dirname(__DIR__) . '/storage';
+        return new \App\Infrastructure\Chess\Engine\FilesystemStockfishInstallation($storageDir . '/stockfish');
+    },
+
+    \App\Application\Engine\StockfishVersions::class => function (ContainerInterface $c) {
+        $settings   = $c->get('settings');
+        $storageDir = $settings['storage_dir'] ?? dirname(__DIR__) . '/storage';
+        $downloader = new StockfishDownloader($storageDir, fn() => PHP_OS_FAMILY, fn() => php_uname('m'));
+        // The system binary (or the one an earlier version downloaded) until a release is chosen.
+        $systemBin = trim(shell_exec('which stockfish 2>/dev/null') ?? '');
+        $system    = ($systemBin !== '' && is_executable($systemBin)) ? $systemBin : ($downloader->isAvailable() ? $downloader->binaryPath() : null);
+        return new \App\Application\Engine\StockfishVersions(
+            $c->get(\App\Application\Engine\Port\StockfishReleases::class),
+            $c->get(\App\Application\Engine\Port\StockfishInstallation::class),
+            $system,
+            PHP_OS_FAMILY,
+            php_uname('m'),
+        );
+    },
+
+    // Eval: the Stockfish chosen by the admin, else the system one.
     ChessEngine::class => function (ContainerInterface $c) {
         $settings   = $c->get('settings');
         $storageDir = $settings['storage_dir'] ?? dirname(__DIR__) . '/storage';
-        $downloader = new StockfishDownloader(
-            $storageDir,
-            fn() => PHP_OS_FAMILY,
-            fn() => php_uname('m'),
-        );
-        // Use system stockfish if available, fallback to storage
-        $systemBin = trim(shell_exec('which stockfish 2>/dev/null') ?? '');
-        $binPath   = ($systemBin !== '' && is_executable($systemBin))
-            ? $systemBin
-            : $downloader->binaryPath();
+        $downloader = new StockfishDownloader($storageDir, fn() => PHP_OS_FAMILY, fn() => php_uname('m'));
+        $binPath = $c->get(\App\Application\Engine\StockfishVersions::class)->activeBinary() ?? $downloader->binaryPath();
         return new UciStockfishEngine($binPath);
     },
 

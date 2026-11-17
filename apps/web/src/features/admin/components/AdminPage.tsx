@@ -2,10 +2,11 @@ import { useState } from 'react'
 import PendingUsersTable from './PendingUsersTable'
 import ActiveUsersTable from './ActiveUsersTable'
 import BlockedUsersTable from './BlockedUsersTable'
+import StockfishPanel from './StockfishPanel'
 
-type Tab = 'Pending' | 'Active' | 'Blocked'
+type Tab = 'Pending' | 'Active' | 'Blocked' | 'Engine'
 
-const tabs: Tab[] = ['Pending', 'Active', 'Blocked']
+const tabs: Tab[] = ['Pending', 'Active', 'Blocked', 'Engine']
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<Tab>('Pending')
@@ -32,6 +33,7 @@ export default function AdminPage() {
       {activeTab === 'Pending' && <PendingUsersTable />}
       {activeTab === 'Active' && <ActiveUsersTable />}
       {activeTab === 'Blocked' && <BlockedUsersTable />}
+      {activeTab === 'Engine' && <StockfishPanel />}
     </div>
   )
 }

@@ -17,7 +17,7 @@ ChessReader parses chess content — EPUBs, public URLs, plain text — recognis
 | **Interactive Viewer** | Click any move in the text to jump to that position on the board |
 | **Variation Trees** | Full PGN variation support with collapsible branches |
 | **Study Board** | Drag-resizable analysis panel; the board always fills its width |
-| **Stockfish Eval** | Live engine evaluation bar per move (WASM in-browser + native server-side) + progressive engine/premove arrows |
+| **Stockfish Eval** | Live engine evaluation bar per move (WASM in-browser + native server-side) + progressive engine/premove arrows. The browser uses Stockfish 18 lite, served by the site itself (CDN builds of 10/16 remain selectable). On the server, Admin → Engine checks the latest Stockfish release on GitHub (once a day), downloads any listed release for the server's platform and chooses the version in use (the system binary until another is chosen) |
 | **Regenerable Diagrams** | Toggle any book diagram between the original image and a freshly rendered board, with a small Stockfish footer (`SF18: (1.30) 1. Nf3 …`, score from White's POV). Right-click to pick board theme, piece set and coordinate symbols, or edit the FEN |
 | **Narration** | The game read aloud (browser voice, or an MP3 + timed cue track rendered by the server: system voices, Piper, OpenAI, ElevenLabs), the board following every move and lighting what is said; variations are announced, played and closed ("back to the game…"); manual mode waits for you to make the move; a pause after each move (0–5 s, Settings) for the live voice and the MP3 |
 | **Engine review & coach** | Stockfish review with accuracy per player (Lichess formula), key moments and commentary at three levels (with "the only good move" — the engine's second choice and its refutation — and the engine's plan after a quiet move, saying whether the game carried it out); a *coach review* of a game you played (focus on White, Black or both): errors with what they allowed, free pieces left, the better move and what it did, the opponent's threats; optional commentary by Claude or OpenAI with your own key; *Re-analyse and regenerate all comments* runs the engine again over the whole game and writes every remark and diagram anew; diagrams are drawn with your board colours and piece set, centred, with the evaluation in words, the engine and depth, its next moves and an alternative; hovering a move shows the evaluation before → after, the winning chances it gave away and the engine's move as a dashed arrow; *Analyse on Lichess* imports the game to the Lichess analysis board; engine source *Lichess cloud first* (Settings) uses Lichess' deep cloud analysis when it knows the position and the local Stockfish otherwise |
@@ -60,7 +60,7 @@ The frontend and extension share the `chess-shared` package. The API is a standa
 | Framework | [Slim 4](https://www.slimframework.com/) + PHP-DI |
 | Database | SQLite via [Doctrine DBAL](https://www.doctrine-project.org/projects/dbal.html) |
 | Auth | JWT ([firebase/php-jwt](https://github.com/firebase/php-jwt)) + bcrypt |
-| Chess engine | Native [Stockfish](https://stockfishchess.org/) binary (UCI) |
+| Chess engine | Native [Stockfish](https://stockfishchess.org/) binary (UCI); releases downloaded to `storage/stockfish/<tag>/` from Admin → Engine (`GET /api/admin/engine/stockfish`, `POST …/install {tag}`, `PUT …/selected {tag}`) |
 | HTTP client | [Guzzle](https://docs.guzzlephp.org/) |
 | Content extraction | Readability algorithm |
 | Tests | PHPUnit |

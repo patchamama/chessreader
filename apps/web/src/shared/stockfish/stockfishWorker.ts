@@ -17,9 +17,19 @@
 
 export const SF_DEFAULT_URL = 'https://cdn.jsdelivr.net/npm/stockfish.js@10/stockfish.js'
 
+/** The engine script as an absolute address, and whether it is on this site. */
+export function engineScript(sfUrl: string, base: string = typeof location !== 'undefined' ? location.href : 'http://localhost/'): { url: string; sameOrigin: boolean } {
+  const url = new URL(sfUrl, base)
+  return { url: url.href, sameOrigin: url.origin === new URL(base).origin }
+}
+
 export function createStockfishWorker(sfUrl: string = SF_DEFAULT_URL): Worker {
+  const script = engineScript(sfUrl)
   const wrapperCode = `
-const SF_URL = '${sfUrl}';
+const SF_URL = '${script.url}';
+// An engine on this site runs straight from its address, so it finds its
+// WebAssembly file next to it; a CDN script is fetched into a blob instead.
+const DIRECT = ${script.sameOrigin};
 
 let sf            = null;
 let engineReady   = false;
@@ -135,7 +145,8 @@ function attachSf(worker) {
 }
 
 // Fetch SF10 and create a blob worker (avoids importScripts CORS issues)
-fetch(SF_URL)
+if (DIRECT) attachSf(new Worker(SF_URL));
+else fetch(SF_URL)
   .then(r => r.text())
   .then(code => {
     const blob = new Blob([code], { type: 'application/javascript' });

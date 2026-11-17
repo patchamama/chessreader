@@ -32,7 +32,7 @@ describe('EngineEvalPanel', () => {
 
   it('renders the engine label and the formatted info line', () => {
     render(<EngineEvalPanel fen={FEN_WHITE} onPlayUci={vi.fn()} engine={mockState} />)
-    expect(screen.getByText(/Stockfish 10:/i)).toBeInTheDocument()
+    expect(screen.getByText(/Stockfish 18 lite:/i)).toBeInTheDocument()
     // Score, depth, nodes, nps, time tokens all present.
     expect(screen.getByText(/\(12\.11\)/)).toBeInTheDocument()
     expect(screen.getByText(/d=19/)).toBeInTheDocument()
@@ -58,7 +58,7 @@ describe('EngineEvalPanel', () => {
   it('shows a loading hint and nothing else while analysing with no lines yet', () => {
     mockState = { lines: [], loading: true, depth: 0 }
     render(<EngineEvalPanel fen={FEN_WHITE} onPlayUci={vi.fn()} engine={mockState} />)
-    expect(screen.getByText(/Stockfish 10:/i)).toBeInTheDocument()
+    expect(screen.getByText(/Stockfish 18 lite:/i)).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 })

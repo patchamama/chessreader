@@ -24,9 +24,14 @@ export type EvalBarDirection = 'horizontal' | 'vertical'
 /** Where engine lines come from: the local Stockfish, or the Lichess cloud first (local only when the cloud does not know the position). */
 export type EngineSource = 'local' | 'lichess-cloud'
 
-export type StockfishVersion = 'sf10-jsdelivr' | 'sf16-jsdelivr' | 'sf10-cdnjs' | 'sf9-cdnjs'
+export type StockfishVersion = 'sf18-local' | 'sf10-jsdelivr' | 'sf16-jsdelivr' | 'sf10-cdnjs' | 'sf9-cdnjs'
 
 export const STOCKFISH_VERSIONS: Record<StockfishVersion, { url: string; label: string }> = {
+  'sf18-local': {
+    // Served by this site (see vite.config.ts): the CDNs refuse the package.
+    url: `${import.meta.env.BASE_URL ?? '/'}stockfish/stockfish-18-lite-single.js`,
+    label: 'Stockfish 18 lite (this site)',
+  },
   'sf10-jsdelivr': {
     url: 'https://cdn.jsdelivr.net/npm/stockfish.js@10/stockfish.js',
     label: 'Stockfish 10 (jsDelivr)',
@@ -249,7 +254,7 @@ const DEFAULT: AppSettings = {
   commentDiagramEval: true,
   boardTheme: 'blue',
   evalBarDirection: 'vertical',
-  stockfishVersion: 'sf10-jsdelivr',
+  stockfishVersion: 'sf18-local',
   engineSource: 'local',
   hintEval: true,
   playMoveHints: true,

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Presentation\Admin\AdminController;
+use App\Presentation\Engine\EngineController;
 use App\Presentation\Auth\AuthController;
 use App\Presentation\Diagram\DiagramController;
 use App\Presentation\Eval\EvalController;
@@ -42,6 +43,9 @@ return function (App $app): void {
         $group->post('/users/{id:[0-9]+}/reject', [AdminController::class, 'reject']);
         $group->post('/users/{id:[0-9]+}/password', [AdminController::class, 'setPassword']);
         $group->post('/users/{id:[0-9]+}/send-reset', [AdminController::class, 'sendResetLink']);
+        $group->get('/engine/stockfish', [EngineController::class, 'status']);
+        $group->post('/engine/stockfish/install', [EngineController::class, 'install']);
+        $group->put('/engine/stockfish/selected', [EngineController::class, 'select']);
     })->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
 
     // Notes routes (per-user scratch notes; require JWT + Approved)

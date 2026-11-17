@@ -108,3 +108,41 @@ export function useRejectUser() {
     },
   })
 }
+
+// ── Server engine (Stockfish versions) ────────────────────────────────────────
+
+export interface StockfishRelease { tag: string; name: string; publishedAt: string; prerelease: boolean; available: boolean }
+export interface StockfishStatus {
+  latest: StockfishRelease | null
+  latestInstalled: boolean
+  releases: StockfishRelease[]
+  installed: string[]
+  /** An installed tag, or 'system' for the binary found on the server. */
+  selected: string
+  system: string | null
+}
+
+const SF_KEY = ['admin', 'stockfish'] as const
+
+export function useStockfishStatus() {
+  return useQuery<StockfishStatus>({
+    queryKey: SF_KEY,
+    queryFn: () => httpClient<StockfishStatus>('/api/admin/engine/stockfish', { method: 'GET' }),
+  })
+}
+
+export function useInstallStockfish() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (tag: string) => httpClient<StockfishStatus>('/api/admin/engine/stockfish/install', { method: 'POST', body: JSON.stringify({ tag }) }),
+    onSuccess: (status) => qc.setQueryData(SF_KEY, status),
+  })
+}
+
+export function useSelectStockfish() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (tag: string) => httpClient<StockfishStatus>('/api/admin/engine/stockfish/selected', { method: 'PUT', body: JSON.stringify({ tag }) }),
+    onSuccess: (status) => qc.setQueryData(SF_KEY, status),
+  })
+}
