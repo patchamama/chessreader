@@ -153,4 +153,9 @@ describe('settingsStore — pause after each move in the narration (S32)', () =>
     useSettingsStore.getState().set({ narrationMovePause: 3 })
     expect(useSettingsStore.getState().narrationMovePause).toBe(3)
   })
+
+  it('version 2: the legacy recognition algorithm 3 becomes 2, and one Lichess token is kept (S2, S13)', () => {
+    expect(migrateSettings({ recognitionAlgorithm: 3, lichessPlayToken: 'play', lichessToken: '' }, 1)).toMatchObject({ recognitionAlgorithm: 2, lichessToken: 'play' })
+    expect(migrateSettings({ recognitionAlgorithm: 1, lichessPlayToken: 'play', lichessToken: 'read' }, 1)).toMatchObject({ recognitionAlgorithm: 1, lichessToken: 'read' })
+  })
 })

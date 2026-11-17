@@ -223,7 +223,8 @@ export interface AppSettings {
   /** Delay in seconds between autoplayed moves. */
   autoplayDelay: number
   /** Move-recognition algorithm: 1 = mainline only, 2 = two-pass, 3 = legacy. */
-  recognitionAlgorithm: 1 | 2 | 3
+  /** How books are read: 1 = main line only, 2 = with variations (the legacy 3 is gone). */
+  recognitionAlgorithm: 1 | 2
   /** Board color theme used when regenerating book diagram images. */
   diagramBoardTheme: BoardTheme
   /** Piece set used when regenerating book diagram images. */
@@ -337,6 +338,12 @@ export function mergeWithDefaults(
 export function migrateSettings(persisted: unknown, version: number): Partial<SettingsStore> {
   const s = { ...(persisted as Partial<SettingsStore> | undefined) }
   if (version < 1) Object.assign(s, { commentLayout: 'split', commentDiagrams: true, commentDiagramEval: true })
+  if (version < 2) {
+    // The legacy recogniser (3) is retired: read with variations instead.
+    if ((s.recognitionAlgorithm as number) === 3) s.recognitionAlgorithm = 2
+    // One Lichess token for everything: keep whichever was set.
+    if (!s.lichessToken && s.lichessPlayToken) s.lichessToken = s.lichessPlayToken
+  }
   return s
 }
 
@@ -356,7 +363,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'chessreader-settings',
-      version: 1,
+      version: 2,
       migrate: (persisted, version) => migrateSettings(persisted, version) as SettingsStore,
       merge: (persisted, current) => mergeWithDefaults(current as SettingsStore, persisted),
     },

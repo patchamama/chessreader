@@ -161,8 +161,14 @@ export function buildGameTreeTwoPass(
   // expectedNext starts at 1.white.
   const chess = new Chess(startFen);
   let parentId: string | null = null;
-  let expNumber = 1;
-  let expColor: 'white' | 'black' = 'white';
+  // A game may start from a position (a FEN in the text): its first move is
+  // numbered as the FEN says. Plies of the main line count from there.
+  const [, side = 'w', , , , fullmove = '1'] = startFen.split(' ');
+  const startPly = (Math.max(1, Number(fullmove) || 1) - 1) * 2 + (side === 'b' ? 1 : 0);
+  const numberAt = (index: number) => Math.floor((startPly + index) / 2) + 1;
+  const colorAt = (index: number): 'white' | 'black' => ((startPly + index) % 2 === 0 ? 'white' : 'black');
+  let expNumber = numberAt(0);
+  let expColor: 'white' | 'black' = colorAt(0);
   // Which token indices were consumed by the mainline (so pass 2 skips them).
   const usedByMainline = new Set<number>();
   // Map "moveNumber:color" → mainline node id (anchor lookup for pass 2).
@@ -254,7 +260,7 @@ export function buildGameTreeTwoPass(
         upcoming: upcomingMainline(tokens, i, expNumber, expColor),
       });
       if (repair) {
-        const label = (ply: number) => `${Math.floor(ply / 2) + 1}${ply % 2 === 0 ? '.' : '...'}`;
+        const label = (ply: number) => `${numberAt(ply)}${colorAt(ply) === 'white' ? '.' : '...'}`;
         const wrongToken = repair.index === tree.mainline.length ? t : tokens[mainTokenIndex[repair.index]];
         if (repair.index < tree.mainline.length) {
           // An earlier mainline move was the wrong one: rebuild from it.
@@ -270,8 +276,8 @@ export function buildGameTreeTwoPass(
           const prev = repair.index > 0 ? tree.nodes.get(tree.mainline[repair.index - 1])! : null;
           chess.load(prev ? prev.fen : startFen);
           parentId = prev ? prev.id : null;
-          expNumber = Math.floor(repair.index / 2) + 1;
-          expColor = repair.index % 2 === 0 ? 'white' : 'black';
+          expNumber = numberAt(repair.index);
+          expColor = colorAt(repair.index);
           redo.forEach((tokenIndex, k) => place(tokenIndex, k === 0 ? repair.san : placedSans[k]));
           place(i);
         } else {
@@ -281,8 +287,8 @@ export function buildGameTreeTwoPass(
           kind: 'wrong-move',
           san: wrongToken.san!.replace(/[!?]+$/, ''),
           ...(wrongToken.rawSan ? { rawSan: wrongToken.rawSan } : {}),
-          moveNumber: Math.floor(repair.index / 2) + 1,
-          color: repair.index % 2 === 0 ? 'white' : 'black',
+          moveNumber: numberAt(repair.index),
+          color: colorAt(repair.index),
           suggestion: repair.san,
           confidence: repair.confidence,
           ...(repair.alternatives.length > 0

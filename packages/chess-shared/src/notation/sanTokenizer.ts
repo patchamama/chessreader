@@ -20,7 +20,8 @@ export type TokenType =
   | 'annotation'     // !, ?, etc. standalone
   | 'paragraph-break' // a newline / paragraph boundary in the source
   | 'result'
-  | 'diagram';        // 1-0, 0-1, 1/2-1/2, *
+  | 'diagram'
+  | 'fen';            // a FEN on its own line: a game (fragment) starts from that position        // 1-0, 0-1, 1/2-1/2, *
 
 export interface SanToken {
   type: TokenType;
@@ -57,6 +58,8 @@ export interface SanToken {
    * among short moves it is a plan written in prose ("and then d4-d5").
    */
   long?: boolean;
+  /** For a 'fen' token: the position, as written. */
+  fen?: string;
 }
 
 /**
@@ -101,6 +104,17 @@ export function tokenize(text: string): SanToken[] {
         end: m.index + m[0].length,
         token: { type: 'paragraph-break', raw: m[0], charStart: m.index, charEnd: m.index + m[0].length },
       });
+    }
+  }
+
+  // A FEN alone on its line ("5rk1/1pp5/… w - - 0 26"): a game starts there
+  // from that position. Longer than any move inside it, so it wins the overlap.
+  {
+    const re = /^[ \t]*((?:[pnbrqkPNBRQK1-8]{1,8}\/){7}[pnbrqkPNBRQK1-8]{1,8} [wb] (?:-|[KQkq]{1,4}) (?:-|[a-h][36])(?: \d{1,3} \d{1,4})?)[ \t]*$/gm;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const start = m.index + m[0].indexOf(m[1]);
+      matches.push({ start, end: start + m[1].length, token: { type: 'fen', raw: m[1], charStart: start, charEnd: start + m[1].length, fen: m[1] } });
     }
   }
 

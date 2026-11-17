@@ -1,3 +1,4 @@
+import { Chess } from 'chess.js';
 /**
  * recognizeGames: finds chess game fragments in a prose text string.
  *
@@ -44,6 +45,12 @@ export interface RecognizedGame {
   tree: GameTree;
 }
 
+/** A FEN the board can be set up from (chess.js checks kings, counts, castling). */
+function validFen(fen: string): boolean {
+  const full = fen.split(' ').length >= 6 ? fen : `${fen} 0 1`;
+  try { new Chess(full); return true; } catch { return false; }
+}
+
 export function recognizeGames(text: string, options: RecognizeOptions = {}): RecognizedGame[] {
   const algorithm = options.algorithm ?? 2;
   // Normalise figurine glyphs (♘→N) and then Spanish notation (Cf3→Nf3).
@@ -59,10 +66,13 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
 
   if (tokens.length === 0) return [];
 
-  // Attach the original source notation (rawSan) to every move token.
+  // Attach the original source notation (rawSan) to every move token. A FEN is
+  // taken as written: the Spanish letters (R = king) must not touch it.
   for (const token of tokens) {
     if (token.type === 'move') {
       token.rawSan = text.slice(token.charStart, token.charEnd);
+    } else if (token.type === 'fen') {
+      token.fen = text.slice(token.charStart, token.charEnd);
     }
   }
 
@@ -114,6 +124,7 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
 
   const startNewGame = () => {
     if (current.some(t => t.type === 'move')) gameSequences.push(current);
+    else startOf.delete(current);
     current = [];
     depth = 0;
     lastMainPly = 0;
@@ -140,7 +151,24 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
   // paragraphs say how far the game has got (analysis paragraphs do not).
   let mainParagraph = false;
 
+  // The start position of each sequence that begins at a FEN of the text.
+  const startOf = new Map<SanToken[], string>();
+
   for (const token of tokens) {
+    // A FEN at top level starts a new game from that position, numbered as the
+    // FEN says (a fragment of a game: "Partida 301 … 5rk1/… w - - 0 26").
+    if (token.type === 'fen') {
+      if (depth > 0 || !validFen(token.fen!)) continue;
+      startNewGame();
+      const full = token.fen!.split(' ').length >= 6 ? token.fen! : `${token.fen} 0 1`;
+      startOf.set(current, full);
+      const [, side, , , , fullmove] = full.split(' ');
+      lastMainPly = (Number(fullmove) - 1) * 2 + (side === 'b' ? 1 : 0);
+      maxTopPly = lastMainPly;
+      sawMove1 = true;
+      afterDiagram = false;
+      continue;
+    }
     if (token.type === 'paragraph-break') {
       openedInParagraph = false;
       prevTopPly = 0;
@@ -254,10 +282,11 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
     const charStart = seq[0].charStart;
     const charEnd = seq[seq.length - 1].charEnd;
 
+    const start = startOf.get(seq) ?? STANDARD_START_FEN;
     const tree =
-      algorithm === 1 ? buildGameTreeTwoPass(seq, STANDARD_START_FEN, true) // mainline only
-      : algorithm === 2 ? buildGameTreeTwoPass(seq, STANDARD_START_FEN)
-      : buildGameTree(seq, STANDARD_START_FEN);
+      algorithm === 1 ? buildGameTreeTwoPass(seq, start, true) // mainline only
+      : algorithm === 2 ? buildGameTreeTwoPass(seq, start)
+      : buildGameTree(seq, start);
 
     if (tree.nodes.size === 0) continue;
 

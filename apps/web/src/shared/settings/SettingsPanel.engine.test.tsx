@@ -23,6 +23,14 @@ describe('SettingsPanel — Engine section', () => {
     expect(useSettingsStore.getState()).toMatchObject({ commentDbUrl: 'https://api.github.com/repos/me/comments/contents', commentDbToken: 'ghp_x', humanComments: false })
   })
 
+  it('chooses how books are read: main line only or with variations (S2)', () => {
+    render(<SettingsPanel onClose={vi.fn()} />)
+    const select = screen.getByLabelText('Recognition') as HTMLSelectElement
+    expect([...select.options].map((o) => o.value)).toEqual(['2', '1'])
+    fireEvent.change(select, { target: { value: '1' } })
+    expect(useSettingsStore.getState().recognitionAlgorithm).toBe(1)
+  })
+
   it('toggles Show evaluation', () => {
     render(<SettingsPanel onClose={vi.fn()} />)
     expect(useSettingsStore.getState().showEval).toBe(true)

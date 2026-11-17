@@ -295,6 +295,17 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           ))}
         </select>
 
+        <label className={labelClass} htmlFor="recognition">Recognition</label>
+        <select
+          id="recognition"
+          value={s.recognitionAlgorithm}
+          onChange={(e) => s.set({ recognitionAlgorithm: Number(e.target.value) as 1 | 2 })}
+          className={inputClass}
+        >
+          <option value="2">Moves with variations</option>
+          <option value="1">Main line only</option>
+        </select>
+
         <label className={labelClass} htmlFor="engine-source">Engine source</label>
         <select
           id="engine-source"

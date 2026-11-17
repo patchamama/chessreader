@@ -20,10 +20,9 @@ interface RecognitionDebugPanelProps {
   games?: RecognizedGame[]
 }
 
-const ALGO_HINTS: Record<1 | 2 | 3, string> = {
+const ALGO_HINTS: Record<1 | 2, string> = {
   1: 'Mainline only — builds just the main line, no variations',
   2: 'Two-pass — clean mainline first, then variations anchored by move number',
-  3: 'Legacy single-pass — validation-anchored (kept for comparison)',
 }
 
 const KIND_LABEL: Record<RecognitionError['kind'], string> = {
@@ -269,7 +268,7 @@ function GameView({ tree, index }: { tree: GameTree; index: number }) {
  */
 export function RecognitionDebugPanel({ chapterText, games }: RecognitionDebugPanelProps) {
   const algorithm = useSettingsStore((s) => s.recognitionAlgorithm)
-  const setAlgorithm = (a: 1 | 2 | 3) => useSettingsStore.getState().set({ recognitionAlgorithm: a })
+  const setAlgorithm = (a: 1 | 2) => useSettingsStore.getState().set({ recognitionAlgorithm: a })
   const [testText, setTestText] = useState('')
 
   const chapterGames = useMemo(() => {
@@ -307,7 +306,7 @@ export function RecognitionDebugPanel({ chapterText, games }: RecognitionDebugPa
         <p className="text-xs font-bold uppercase tracking-wider text-violet-700">Debug — detected games</p>
         <div className="flex items-center gap-1 text-[11px]">
           <span className="text-slate-500">Algorithm</span>
-          {([1, 2, 3] as const).map((a) => (
+          {([1, 2] as const).map((a) => (
             <button
               key={a}
               onClick={() => setAlgorithm(a)}
