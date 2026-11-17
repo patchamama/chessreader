@@ -11,6 +11,7 @@ import { analyseGame } from './reviewEngine'
 import { commentWithModel, configuredModel } from './aiCommentary'
 import { lichessOpening } from '../../gamesearch/sources'
 import { reviewEngine, summarise, useReviewStore } from './reviewStore'
+import { downloadAnnotated, type ExportFormat } from './export/annotatedExport'
 
 interface GameReviewPanelProps {
   games: RecognizedGame[]
@@ -25,7 +26,7 @@ const T: Record<Lang, Record<string, string>> = {
     analysing: 'Analysing position', accuracy: 'accuracy', white: 'White', black: 'Black', opening: 'Opening',
     moments: 'Key moments', none: 'No turning points: a steady game.', go: 'Go to', line: 'Play the line',
     better: 'Better was', follow: 'There followed', level: 'Commentary level', l1: '1 · marks only', l2: '2 · remarks and better lines',
-    l3: '3 · tactics, opening and summary', open: 'Open annotated game', chapter: 'This chapter', book: 'Whole book',
+    l3: '3 · tactics, opening and summary', open: 'Open annotated game', download: 'Download', downloadFormat: 'Download format', chapter: 'This chapter', book: 'Whole book',
     games: 'games', depth: 'Depth', brilliant: 'brilliant', good: 'very good', dubious: 'inaccuracies', mistake: 'mistakes', blunder: 'blunders',
     ai: 'Comment with a language model', aiBusy: 'Writing commentary…', aiSetup: 'To comment with a language model, set its provider, key and model in Settings.',
     layout: 'Layout', inline: 'Remarks in braces', split: 'A line per remark', paragraphs: 'Paragraph after the moves', diagrams: 'Diagrams at key moments', evalUnder: 'Evaluation under diagrams', diagramHere: 'Diagram at this move', diagramsChosen: 'chosen diagrams',
@@ -37,7 +38,7 @@ const T: Record<Lang, Record<string, string>> = {
     analysing: 'Analizando posición', accuracy: 'de precisión', white: 'Blancas', black: 'Negras', opening: 'Apertura',
     moments: 'Momentos clave', none: 'Sin puntos de inflexión: una partida pareja.', go: 'Ir a', line: 'Reproducir la línea',
     better: 'Era mejor', follow: 'Siguió', level: 'Nivel de comentario', l1: '1 · solo signos', l2: '2 · comentarios y líneas mejores',
-    l3: '3 · táctica, apertura y resumen', open: 'Abrir la partida comentada', chapter: 'Este capítulo', book: 'Todo el libro',
+    l3: '3 · táctica, apertura y resumen', open: 'Abrir la partida comentada', download: 'Descargar', downloadFormat: 'Formato de descarga', chapter: 'Este capítulo', book: 'Todo el libro',
     games: 'partidas', depth: 'Profundidad', brilliant: 'brillantes', good: 'muy buenas', dubious: 'imprecisiones', mistake: 'errores', blunder: 'errores graves',
     ai: 'Comentar con un modelo de lenguaje', aiBusy: 'Escribiendo comentarios…', aiSetup: 'Para comentar con un modelo de lenguaje, configura proveedor, clave y modelo en Ajustes.',
     layout: 'Formato', inline: 'Comentarios entre llaves', split: 'Una línea por comentario', paragraphs: 'Párrafo tras las jugadas', diagrams: 'Diagramas en momentos clave', evalUnder: 'Evaluación bajo los diagramas', diagramHere: 'Diagrama en esta jugada', diagramsChosen: 'diagramas elegidos',
@@ -49,7 +50,7 @@ const T: Record<Lang, Record<string, string>> = {
     analysing: 'Analysiere Stellung', accuracy: 'Genauigkeit', white: 'Weiß', black: 'Schwarz', opening: 'Eröffnung',
     moments: 'Schlüsselmomente', none: 'Keine Wendepunkte: eine ausgeglichene Partie.', go: 'Gehe zu', line: 'Variante abspielen',
     better: 'Besser war', follow: 'Es folgte', level: 'Kommentarstufe', l1: '1 · nur Zeichen', l2: '2 · Anmerkungen und bessere Varianten',
-    l3: '3 · Taktik, Eröffnung und Zusammenfassung', open: 'Kommentierte Partie öffnen', chapter: 'Dieses Kapitel', book: 'Ganzes Buch',
+    l3: '3 · Taktik, Eröffnung und Zusammenfassung', open: 'Kommentierte Partie öffnen', download: 'Herunterladen', downloadFormat: 'Download-Format', chapter: 'Dieses Kapitel', book: 'Ganzes Buch',
     games: 'Partien', depth: 'Tiefe', brilliant: 'glänzend', good: 'sehr gut', dubious: 'Ungenauigkeiten', mistake: 'Fehler', blunder: 'grobe Fehler',
     ai: 'Mit einem Sprachmodell kommentieren', aiBusy: 'Kommentar wird geschrieben…', aiSetup: 'Zum Kommentieren mit einem Sprachmodell Anbieter, Schlüssel und Modell in den Einstellungen festlegen.',
     layout: 'Layout', inline: 'Anmerkungen in Klammern', split: 'Eine Zeile pro Anmerkung', paragraphs: 'Absatz nach den Zügen', diagrams: 'Diagramme an Schlüsselstellen', evalUnder: 'Bewertung unter Diagrammen', diagramHere: 'Diagramm bei diesem Zug', diagramsChosen: 'gewählte Diagramme',
@@ -90,6 +91,7 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
   const [focus, setFocus] = useState<'white' | 'black' | 'both'>('white')
   /** Moves the reader picked for a diagram (node ids of this game). */
   const [diagramAt, setDiagramAt] = useState<string[]>([])
+  const [exportFormat, setExportFormat] = useState<ExportFormat>('pdf')
   const diagrams = keyDiagrams || diagramAt.length ? { key: keyDiagrams, at: diagramAt, eval: diagramEval } : undefined
   const [database, setDatabase] = useState<{ tree: unknown; eco: string; name: string } | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
@@ -153,10 +155,21 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
     })
   }
 
+  function annotatedText() {
+    return annotateGame(reviewed!.plies, reviewed!.review, { level, lang, white: players.white, black: players.black, layout, diagrams })
+  }
+
+  /** The annotated game as a file (S34): Markdown, EPUB, PDF or HTML. */
+  function downloadGame() {
+    if (!reviewed) return
+    const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
+    downloadAnnotated(annotatedText(), exportFormat, names, lang)
+  }
+
   function openAnnotated() {
     if (!reviewed) return
     const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
-    const annotated = annotateGame(reviewed.plies, reviewed.review, { level, lang, white: players.white, black: players.black, layout, diagrams })
+    const annotated = annotatedText()
     const { title, chapters } = textToChapters(annotated, `${names} (${t.title.toLowerCase()})`)
     openBook(title, chapters)
     navigate(`/read/${EXTERNAL_BOOK_ID}`)
@@ -364,6 +377,14 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
               ▦ {t.diagramHere}{diagramAt.length ? ` (${diagramAt.length} ${t.diagramsChosen})` : ''}
             </button>
             <button className={button} onClick={openAnnotated}>{t.open}</button>
+            <select aria-label={t.downloadFormat} value={exportFormat} onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
+              className="rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px]">
+              <option value="pdf">PDF</option>
+              <option value="epub">EPUB</option>
+              <option value="md">Markdown</option>
+              <option value="html">HTML</option>
+            </select>
+            <button className={button} onClick={downloadGame}><span aria-hidden="true">⬇ </span>{t.download}</button>
             <label className="flex items-center gap-1 text-[11px] text-slate-700">
               {t.focus}
               <select aria-label={t.focus} value={focus} onChange={(e) => setFocus(e.target.value as 'white' | 'black' | 'both')}

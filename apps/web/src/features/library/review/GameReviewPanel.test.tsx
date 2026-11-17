@@ -7,6 +7,7 @@ import { setReviewEngine, useReviewStore, summarise } from './reviewStore'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
+import * as exporter from './export/annotatedExport'
 
 const TEXT = 'Tutor – Novice, 2024\n1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#'
 const games = recognizeGames(TEXT, { algorithm: 2 })
@@ -73,6 +74,20 @@ describe('GameReviewPanel', () => {
     expect(html).toContain('Nf6??')
     expect(html).toContain('Blunder')
     expect(html).toContain('(3... g6 4. Qf3 Nf6)')
+  })
+
+  it('downloads the annotated game as Markdown, EPUB, PDF or HTML (S34)', async () => {
+    const download = vi.spyOn(exporter, 'downloadAnnotated').mockImplementation(() => {})
+    renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Review and comment the game' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Download format'), { target: { value: 'epub' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Download' }))
+    expect(download).toHaveBeenCalledTimes(1)
+    const [text, format] = download.mock.calls[0]
+    expect(format).toBe('epub')
+    expect(text).toContain('Nf6??')
+    download.mockRestore()
   })
 
   it('writes the game as a book: a line per remark and a diagram with its evaluation at the blunder', async () => {
