@@ -169,6 +169,12 @@ export interface AppSettings {
   /** Play: colour the destinations of the selected piece by how good each move is. */
   /** The thumbnail of a hovered move shows the engine's evaluation, the loss and the engine's move. */
   hintEval: boolean
+  /** Human commentary database: a public base URL, or a GitHub contents API URL of a private repository. */
+  commentDbUrl: string
+  /** Token for a private commentary database (GitHub fine-grained token, contents:read). Kept in this browser. */
+  commentDbToken: string
+  /** Borrow book remarks on the same position when writing an annotated game. */
+  humanComments: boolean
   /** Book diagrams: show the engine's evaluation under each (when it has one). */
   diagramEvalShow: boolean
   /** Book diagrams: an evaluation bar above the evaluation. */
@@ -264,6 +270,9 @@ const DEFAULT: AppSettings = {
   stockfishVersion: 'sf18-local',
   engineSource: 'local',
   hintEval: true,
+  commentDbUrl: '',
+  commentDbToken: '',
+  humanComments: true,
   diagramEvalShow: true,
   diagramEvalBar: false,
   diagramEvalDepth: 16,

@@ -1,7 +1,7 @@
 import { pgnToChapters } from '../../gamesearch/pgnChapters'
 import type { Chapter } from '../api/libraryApi'
 import { boardSvgDataUrl } from './boardSvg'
-import { parseDiagramMark } from './diagramMark'
+import { parseCommentMark, parseDiagramMark } from './diagramMark'
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
@@ -29,6 +29,11 @@ export function textToChapters(text: string, title?: string): { title: string; c
  * recogniser does not read them as moves of the game.
  */
 function paragraph(p: string): string {
+  // A remark borrowed from a book: a quote with its source (its moves are not the game's).
+  const quote = parseCommentMark(p)
+  if (quote) {
+    return `<blockquote class="human-comment" data-no-recognition><p>${esc(quote.text)}</p>${quote.source ? `<footer>— ${esc(quote.source)}</footer>` : ''}</blockquote>`
+  }
   const mark = parseDiagramMark(p)
   if (!mark) return `<p>${esc(p)}</p>`
   const out = [`<img class="diagram" src="${boardSvgDataUrl(mark.fen)}" alt="Diagram" data-fen="${esc(mark.fen)}">`]

@@ -160,4 +160,19 @@ describe('GameReviewPanel', () => {
     expect(html).toMatch(/<img class="diagram"/)
     expect(html).toMatch(/class="diagram-eval">[^<]*· Stockfish 18 lite, depth \d+/)
   })
+
+  it('borrows what a book says about a position of the game, with its source (S5)', async () => {
+    const lookup = await import('../commentdb/commentLookup')
+    const spy = vi.spyOn(lookup, 'humanCommentsForGame').mockResolvedValue({ 4: { text: 'La dama sale demasiado pronto.', source: 'Kasparov, Mis geniales predecesores I, Partida 3' } })
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Review and comment the game' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open annotated game' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Open annotated game' }))
+    await waitFor(() => expect(screen.getByText('annotated book')).toBeInTheDocument())
+    const html = useExternalBookStore.getState().chapters[0].html
+    expect(html).toContain('<blockquote class="human-comment" data-no-recognition><p>La dama sale demasiado pronto.</p><footer>— Kasparov, Mis geniales predecesores I, Partida 3</footer></blockquote>')
+    spy.mockRestore()
+    useSettingsStore.setState({ commentDbUrl: '' })
+  })
 })

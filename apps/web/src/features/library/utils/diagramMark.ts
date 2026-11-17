@@ -23,3 +23,14 @@ export function parseDiagramMark(line: string): DiagramMark | null {
     ...(attrs.alt ? { alt: attrs.alt } : {}),
   }
 }
+
+/** A remark borrowed from a book: `[Comment source="…" text="…"]`. */
+export interface CommentMark { text: string; source: string }
+
+export function parseCommentMark(line: string): CommentMark | null {
+  const m = /^\[Comment((?:\s+\w+="[^"]*")+)\s*\]$/.exec(line.trim())
+  if (!m) return null
+  const attrs: Record<string, string> = {}
+  for (const [, k, v] of m[1].matchAll(/(\w+)="([^"]*)"/g)) attrs[k] = v
+  return attrs.text ? { text: attrs.text, source: attrs.source ?? '' } : null
+}

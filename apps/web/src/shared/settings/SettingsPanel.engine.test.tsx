@@ -15,6 +15,14 @@ describe('SettingsPanel — Engine section', () => {
     expect(useSettingsStore.getState().engineSource).toBe('lichess-cloud')
   })
 
+  it('sets the commentary database (private GitHub repository and token) and whether to borrow its remarks (S6)', () => {
+    render(<SettingsPanel onClose={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('Commentary database URL'), { target: { value: 'https://api.github.com/repos/me/comments/contents' } })
+    fireEvent.change(screen.getByLabelText('Commentary database token'), { target: { value: 'ghp_x' } })
+    fireEvent.click(screen.getByRole('button', { name: /book remarks on the same position/i }))
+    expect(useSettingsStore.getState()).toMatchObject({ commentDbUrl: 'https://api.github.com/repos/me/comments/contents', commentDbToken: 'ghp_x', humanComments: false })
+  })
+
   it('toggles Show evaluation', () => {
     render(<SettingsPanel onClose={vi.fn()} />)
     expect(useSettingsStore.getState().showEval).toBe(true)

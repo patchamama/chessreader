@@ -1096,6 +1096,12 @@ export interface AnnotateOptions {
   /** An opening paragraph written elsewhere, added after the summary line. */
   intro?: string;
   /**
+   * What an author wrote about the position a move reaches, borrowed from the
+   * commentary database (per ply, 1-based), with where it comes from. Written
+   * as a `[Comment source="…" text="…"]` line after the move.
+   */
+  human?: Record<number, { text: string; source: string }>;
+  /**
    * How remarks sit among the moves: 'inline' { in braces } (default),
    * 'split' (the line of moves breaks after a commented move, the remark is its
    * own paragraph), 'paragraphs' (runs of moves, each followed by one paragraph
@@ -1278,6 +1284,9 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
     const due = d?.key && (keyMoment(i) || i === plies.length - 1 || (remarks.length > 0 && i - lastDiagram >= DIAGRAM_EVERY));
     const diagram = d && (due || d.at?.includes(p.nodeId)) ? diagramMark(plies, i, lang, d) : '';
     if (diagram) lastDiagram = i;
+    const borrowed = options.human?.[i + 1];
+    const quote = (x: string) => x.replace(/"/g, '”');
+    const human = borrowed ? `[Comment source="${quote(borrowed.source)}" text="${quote(borrowed.text)}"]` : '';
 
     if (layout === 'inline') {
       let chunk = move;
@@ -1286,14 +1295,16 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
       if (betterIdea) chunk += ` { ${betterIdea} }`;
       if (remarks.length || variation) needNumber = true;
       out.push(chunk);
+      if (human) { out.push(`\n${human}\n`); needNumber = true; }
       if (diagram) { out.push(`\n${diagram}\n`); needNumber = true; }
       return;
     }
     line.push(move);
     if (layout === 'split') {
-      if (remarks.length || variation || diagram) {
+      if (remarks.length || variation || diagram || human) {
         flush();
         if (remarks.length) out.push(remarks.join(' '));
+        if (human) out.push(human);
         if (variation) out.push(variation);
         if (betterIdea) out.push(betterIdea);
         if (diagram) out.push(diagram);
@@ -1304,8 +1315,9 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
     // 'paragraphs': remarks wait for the end of the run; a variation or a
     // diagram ends the run (a variation must follow the move it replaces).
     if (remarks.length) pending.push(`${lang === 'es' ? 'Jugada' : lang === 'en' ? 'Move' : 'Zug'} ${p.moveNumber} (${side(p.color)}): ${remarks.join(' ')}`);
-    if (variation || diagram || line.length >= 10) {
+    if (variation || diagram || human || line.length >= 10) {
       flush();
+      if (human) out.push(human);
       if (variation) out.push(variation);
       if (betterIdea) out.push(betterIdea);
       if (diagram) out.push(diagram);

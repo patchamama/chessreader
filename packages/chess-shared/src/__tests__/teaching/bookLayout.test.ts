@@ -116,3 +116,17 @@ describe('diagrams like a book: the engine, its next moves and who is better (S9
     expect(mainline(text).sans).toEqual(MAIN)
   })
 })
+
+describe('human comments borrowed from the books (S5)', () => {
+  it('a book comment on the same position goes after the move, with where it comes from', () => {
+    const text = annotateGame(game, review, {
+      level: 2, lang: 'es', layout: 'split',
+      human: { 4: { text: 'La dama sale demasiado pronto: "un error típico".', source: 'Kasparov, Mis geniales predecesores I, Partida 3' } },
+    })
+    const lines = text.split('\n')
+    const at = lines.findIndex((l) => l.startsWith('[Comment '))
+    expect(lines[at]).toBe('[Comment source="Kasparov, Mis geniales predecesores I, Partida 3" text="La dama sale demasiado pronto: ”un error típico”."]')
+    expect(lines.slice(0, at).join(' ')).toContain('Cc6')
+    expect(lines.slice(0, at).join(' ')).not.toContain('Ac4')
+  })
+})

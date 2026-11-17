@@ -565,6 +565,9 @@ export default function BookReader() {
     .epub-content h5 { font-weight: ${epub.h5.bold ? '700' : '400'}; font-style: ${epub.h5.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h5.sizeDelta}px; margin: 0.7em 0 0.2em; }
     .epub-content p  { margin-bottom: ${epub.paragraphSpacing}rem; text-indent: ${epub.paragraphIndent}rem; line-height: 1.7; }
     .epub-content p.diagram-eval { text-align: center; text-indent: 0; font-size: 0.85em; color: #555; margin-top: -0.5rem; }
+    .epub-content blockquote.human-comment { border-left: 3px solid #a16207; background: #fefce8; padding: 0.4rem 0.8rem; margin: 0.6rem 0; color: #422006; font-style: italic; }
+    .epub-content blockquote.human-comment p { text-indent: 0; margin-bottom: 0.2rem; }
+    .epub-content blockquote.human-comment footer { font-style: normal; font-size: 0.8em; color: #78716c; }
     .epub-content p.diagram-line { text-align: center; text-indent: 0; font-size: 0.85em; color: #334155; margin-top: -0.6rem; }
     .epub-content p.diagram-alt { color: #64748b; font-style: italic; }
     .epub-content .diagram-host { display: block; text-align: center; margin: 1rem 0 0.75rem; }

@@ -372,6 +372,11 @@ return [
         );
     },
 
+    \App\Application\Comments\Port\PositionCommentStore::class => function (ContainerInterface $c) {
+        $storageDir = $c->get('settings')['storage_dir'] ?? dirname(__DIR__) . '/storage';
+        return new \App\Infrastructure\Comments\SqlitePositionCommentStore($storageDir . '/comments.sqlite');
+    },
+
     // Eval: the Stockfish chosen by the admin, else the system one.
     ChessEngine::class => function (ContainerInterface $c) {
         $settings   = $c->get('settings');

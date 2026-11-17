@@ -13,6 +13,7 @@ import { lichessOpening } from '../../gamesearch/sources'
 import { reviewEngine, summarise, useReviewStore } from './reviewStore'
 import { downloadAnnotated, type ExportFormat } from './export/annotatedExport'
 import { lichessImportGame } from '../../../shared/lichess/lichessImport'
+import { hasCommentSource, humanCommentsForGame } from '../commentdb/commentLookup'
 
 interface GameReviewPanelProps {
   games: RecognizedGame[]
@@ -177,15 +178,25 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
     })
   }
 
-  function annotatedText(r = reviewed!) {
-    return annotateGame(r.plies, r.review, { level, lang, white: players.white, black: players.black, layout, diagrams })
+  function writeAnnotated(r: NonNullable<typeof reviewed>, human?: Record<number, { text: string; source: string }>) {
+    return annotateGame(r.plies, r.review, { level, lang, white: players.white, black: players.black, layout, diagrams, ...(human ? { human } : {}) })
+  }
+
+  /**
+   * The annotated game, with the remarks of the books on the same positions
+   * when chosen in Settings and a commentary database can be asked (written at
+   * once otherwise).
+   */
+  function annotatedText(r = reviewed!, done: (text: string) => void) {
+    if (!useSettingsStore.getState().humanComments || !hasCommentSource()) return done(writeAnnotated(r))
+    void humanCommentsForGame(r.plies, lang).catch(() => ({})).then((found) => done(writeAnnotated(r, Object.keys(found).length ? found : undefined)))
   }
 
   /** The annotated game as a file (S34): Markdown, EPUB, PDF or HTML. */
   function downloadGame() {
     if (!reviewed) return
     const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
-    downloadAnnotated(annotatedText(), exportFormat, names, lang)
+    annotatedText(reviewed, (text) => downloadAnnotated(text, exportFormat, names, lang))
   }
 
   /**
@@ -202,10 +213,11 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
   function openAnnotated(r = reviewed) {
     if (!r) return
     const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
-    const annotated = annotatedText(r)
-    const { title, chapters } = textToChapters(annotated, `${names} (${t.title.toLowerCase()})`)
-    openBook(title, chapters)
-    navigate(`/read/${EXTERNAL_BOOK_ID}`)
+    annotatedText(r, (annotated) => {
+      const { title, chapters } = textToChapters(annotated, `${names} (${t.title.toLowerCase()})`)
+      openBook(title, chapters)
+      navigate(`/read/${EXTERNAL_BOOK_ID}`)
+    })
   }
 
   function openCoach() {

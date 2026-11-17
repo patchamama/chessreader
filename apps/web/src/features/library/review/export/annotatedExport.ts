@@ -1,5 +1,5 @@
 import { boardSvg } from '../../utils/boardSvg'
-import { parseDiagramMark } from '../../utils/diagramMark'
+import { parseCommentMark, parseDiagramMark } from '../../utils/diagramMark'
 
 /**
  * The annotated game (the text annotateGame writes, book layout) as a file to
@@ -14,6 +14,7 @@ export type Block =
   | { kind: 'moves'; text: string }
   | { kind: 'variation'; text: string }
   | { kind: 'diagram'; fen: string; eval?: string; line?: string; alt?: string }
+  | { kind: 'quote'; text: string; source: string }
 
 export interface AnnotatedDoc { title: string; blocks: Block[] }
 
@@ -26,7 +27,9 @@ export function parseAnnotated(text: string): AnnotatedDoc {
     const line = raw.trim()
     if (!line) continue
     const d = parseDiagramMark(line)
+    const q = d ? null : parseCommentMark(line)
     if (d) blocks.push({ kind: 'diagram', ...d })
+    else if (q) blocks.push({ kind: 'quote', ...q })
     else if (/^\d+\.(\.\.)?\s/.test(line)) blocks.push({ kind: 'moves', text: line })
     else if (line.startsWith('(')) blocks.push({ kind: 'variation', text: line })
     else blocks.push({ kind: 'text', text: line })
@@ -74,6 +77,7 @@ function toMarkdown(doc: AnnotatedDoc): string {
     if (b.kind === 'moves') out.push(`**${b.text}**`, '')
     else if (b.kind === 'variation') out.push(`*${b.text}*`, '')
     else if (b.kind === 'text') out.push(b.text, '')
+    else if (b.kind === 'quote') out.push(`> ${b.text}${b.source ? `\n> — ${b.source}` : ''}`, '')
     else {
       out.push(`![Diagram](data:image/svg+xml;base64,${base64(boardSvg(b.fen, 280))})`, '')
       if (b.eval) out.push(`*${b.eval}*`, '')
@@ -91,6 +95,7 @@ function bodyHtml(doc: AnnotatedDoc): string {
     if (b.kind === 'moves') return `<p class="moves">${esc(b.text)}</p>`
     if (b.kind === 'variation') return `<p class="variation">${esc(b.text)}</p>`
     if (b.kind === 'text') return `<p>${esc(b.text)}</p>`
+    if (b.kind === 'quote') return `<blockquote><p>${esc(b.text)}</p>${b.source ? `<p class="source">— ${esc(b.source)}</p>` : ''}</blockquote>`
     return `<figure class="diagram">${boardSvg(b.fen, 280)}</figure>${b.eval ? `<p class="eval">${esc(b.eval)}</p>` : ''}`
       + (b.line ? `<p class="eval line">${esc(b.line)}</p>` : '') + (b.alt ? `<p class="eval line">${esc(b.alt)}</p>` : '')
   }).join('\n')
@@ -98,7 +103,7 @@ function bodyHtml(doc: AnnotatedDoc): string {
 
 const STYLE = 'body{font-family:Georgia,serif;max-width:40em;margin:2em auto;padding:0 1em;line-height:1.5;color:#222;background:#fff}'
   + 'h1{font-size:1.4em}.moves{font-weight:bold}.variation{font-style:italic;color:#444}'
-  + '.diagram{margin:1em 0 .2em;text-align:center}.eval{text-align:center;font-size:.9em;color:#555;margin-top:0}'
+  + '.diagram{margin:1em 0 .2em;text-align:center}blockquote{margin:.6em 1.5em;color:#334155;font-style:italic}.source{font-style:normal;font-size:.85em;color:#64748b}.eval{text-align:center;font-size:.9em;color:#555;margin-top:0}'
 
 function toHtml(doc: AnnotatedDoc): string {
   return `<!doctype html>\n<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(doc.title)}</title><style>${STYLE}</style></head>\n<body>\n<h1>${esc(doc.title)}</h1>\n${bodyHtml(doc)}\n</body></html>\n`
@@ -263,6 +268,9 @@ function toPdf(doc: AnnotatedDoc, lang: 'es' | 'en' | 'de'): Uint8Array {
       if (b.line) text(b.line, 'F1', 9.5, 2, true)
       if (b.alt) text(b.alt, 'F1', 9, 2, true)
       y -= 4
+    } else if (b.kind === 'quote') {
+      text(b.text, 'F3', 10.5, 2)
+      if (b.source) text(`— ${b.source}`, 'F1', 9, 5)
     } else {
       text(b.text, b.kind === 'moves' ? 'F2' : b.kind === 'variation' ? 'F3' : 'F1', 11, 5)
     }

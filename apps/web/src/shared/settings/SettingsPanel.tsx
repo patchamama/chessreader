@@ -358,6 +358,33 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               label="Evaluation in move thumbnails"
             />
           </div>
+
+          {/* Human commentary database (book remarks by position) */}
+          <label className={labelClass}>Commentary database</label>
+          <div className="flex flex-col gap-1.5">
+            <Toggle
+              on={s.humanComments}
+              onClick={() => s.set({ humanComments: !s.humanComments })}
+              label="Borrow book remarks on the same position"
+            />
+            <input
+              aria-label="Commentary database URL"
+              placeholder="https://api.github.com/repos/<owner>/<repo>/contents"
+              value={s.commentDbUrl}
+              onChange={(e) => s.set({ commentDbUrl: e.target.value.trim() })}
+              className={inputClass}
+            />
+            <input
+              aria-label="Commentary database token"
+              type="password"
+              autoComplete="off"
+              placeholder="GitHub token (contents: read), only for a private repository"
+              value={s.commentDbToken}
+              onChange={(e) => s.set({ commentDbToken: e.target.value.trim() })}
+              className={inputClass}
+            />
+            <p className="text-[10px] text-gray-400">With a server the database is read there; the token stays in this browser and is sent only to GitHub.</p>
+          </div>
         </div>
 
         {/* Font family */}

@@ -216,6 +216,22 @@ cd packages/chess-shared && pnpm test
 
 ---
 
+## Human commentary database
+
+What book authors (and Lichess study writers) said about a position, borrowed when another game reaches it: the annotated game then shows the remark as a quote with a quiet source line ("— Kasparov, Mis geniales predecesores III, Partida 12"). Books come before studies; the reader's language first.
+
+Build it from your own books (plain text, chapters separated by form feeds) and PGN files with `{comments}`:
+
+```bash
+pnpm --filter @chess-ebook/chess-shared build
+node packages/chess-shared/scripts/build-comment-db.mjs manifest.json out/
+```
+
+`manifest.json` lists the sources: `[{ "file": "kasparov3.txt", "title": "…", "author": "…", "lang": "es", "kind": "book" }, …]`. The output has `comments.sqlite` (schema `apps/api/migrations/005_position_comments.sql`, with a `comment_translations` table for later), `index.json`, `p/<xx>.json` (comments by the first two hex digits of the position hash, FNV-1a 64 of the FEN without move counters) and `g/<id>.json` (the whole game of each comment).
+
+- **With the server:** copy `comments.sqlite` to `apps/api/storage/`; the app asks `GET /api/comments/position?hash=…&fen=…` and `GET /api/comments/games/{id}`.
+- **Static (demo):** Settings → *Commentary database*: the base URL of the output. Book texts are third-party works: publish them only in a **private** GitHub repository and give the app its contents API URL (`https://api.github.com/repos/<owner>/<repo>/contents`) and a fine-grained token with *contents: read* (kept in the browser, sent only to GitHub). Never commit the output to this repository.
+
 ## License
 
 [MIT](LICENSE) · built with ♞ and a lot of coffee.
