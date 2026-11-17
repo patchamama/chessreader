@@ -58,7 +58,7 @@ describe('moveMotifs, ideas a move creates', () => {
     // Rook e1 looks through the black knight e5 at the king e8.
     expect(kinds('4k3/8/8/4n3/8/8/8/R3K3 w - - 0 1', 'Re1')).not.toContain('x-ray') // own king blocks: nothing
     expect(kinds('4k3/8/8/4n3/8/8/8/R5K1 w - - 0 1', 'Re1')).toContain('pin')
-    expect(kinds('3r2k1/3q4/8/8/8/8/8/R5K1 w - - 0 1', 'Rd1')).toContain('x-ray')
+    expect(kinds('3r2k1/3q4/8/8/8/8/8/R3K3 w - - 0 1', 'Rd1')).toContain('x-ray')
   })
   it('a move that leaves an own piece hanging is flagged', () => {
     expect(kinds('4k3/8/3p4/4N3/8/5P2/8/4K3 w - - 0 1', 'f4')).not.toContain('leaves-hanging')

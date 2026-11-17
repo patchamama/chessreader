@@ -3,6 +3,11 @@
  * How much of what human annotators point out does the automatic commentary find?
  *
  *   node scripts/evaluate-commentary.mjs <annotated.pgn> [--misses <tag,tag…>] [--json]
+ *   node scripts/evaluate-commentary.mjs --book <book.txt> [--misses …] [--json]
+ *
+ * `--book` reads the plain text of a chess book (an epub turned into text,
+ * one paragraph per line): every game is recognised in it and the prose
+ * between two moves of the main line is the author's remark on the first.
  *
  * For every annotated game the comments are read for the ideas they name (a
  * fork, a pin, a sacrifice, a hanging piece…). The comments are then thrown
@@ -18,9 +23,11 @@
  * the material for the next detector.
  */
 import { readFileSync } from 'node:fs';
-import { recognizeGames, moveMotifs, positionIdeas } from '../dist/index.js';
+import { recognizeGames, reviewGame, positionIdeas } from '../dist/index.js';
 
-const [file, ...flags] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const book = argv[0] === '--book';
+const [file, ...flags] = book ? argv.slice(1) : argv;
 if (!file) { console.error('usage: evaluate-commentary.mjs <annotated.pgn> [--misses <tag>] [--json]'); process.exit(2); }
 const missesOf = flags.includes('--misses') ? flags[flags.indexOf('--misses') + 1] : null;
 
@@ -41,6 +48,10 @@ const GOLD = {
   threat: /\bthreat|amenaz/i,
   development: /\bdevelop|desarroll/i,
   castling: /\bcastl|enroc|enroque/i,
+  trapped: /\btrapp|atrapad|encerrad/i,
+  overloaded: /overload|overworked|sobrecarg/i,
+  combination: /combination|combinaci[oó]n/i,
+  mate: /\bmate\b|checkmate|\bmates\b|jaque mate/i,
 };
 
 /** Which detector outputs count as finding each idea. */
@@ -60,10 +71,18 @@ const FOUND = {
   threat: (m) => m.has('threat') || m.has('attack-undefended') || m.has('fork') || m.has('mate-threat') || m.has('discovered-attack') || m.has('joint-attack') || m.has('check') || m.has('pin') || m.has('skewer'),
   development: (m) => m.has('development'),
   castling: (m) => m.has('castle') || m.has('prepares-castling'),
+  trapped: (m) => m.has('traps'),
+  overloaded: (m) => m.has('overloaded'),
+  combination: (m) => m.has('combination') || m.has('sacrifice') || m.has('exchange-sacrifice'),
+  mate: (m) => m.has('mate') || m.has('mate-threat') || m.has('threat:mate') || m.has('aims-at'),
 };
 
 const pgn = readFileSync(file, 'utf8').replace(/\r/g, '');
-const games = pgn.split(/\n\n(?=\[Event )/);
+// A book: one chunk per game heading ("Partida 12", "Game 12") or chapter break.
+const games = book
+  ? pgn.split(/\f|\n(?=(?:Partida|Game|Partie|Partie Nr\.?)\s+\d+\s*\n)/).map((t) => `\n\n${t}`)
+  : pgn.split(/\n\n(?=\[Event )/);
+const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 const stats = Object.fromEntries(Object.keys(GOLD).map((t) => [t, { gold: 0, found: 0, fired: 0, misses: [] }]));
 let plies = 0;
 let used = 0;
@@ -72,16 +91,21 @@ let comments = 0;
 for (const raw of games) {
   const split = raw.indexOf('\n\n');
   if (split < 0 || /\[FEN "/.test(raw.slice(0, split))) continue;
-  const text = raw.slice(split + 2).replace(/\[%[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
-  let game;
-  try { [game] = recognizeGames(text, { algorithm: 2 }); } catch { continue; }
-  if (!game || game.tree.mainline.length < 10) continue;
+  const text = book ? raw.slice(split + 2) : raw.slice(split + 2).replace(/\[%[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
+  let found;
+  try { found = recognizeGames(text, { algorithm: 2 }); } catch { continue; }
+  for (const game of found) {
+  if (!game || game.tree.mainline.length < 10 || game.tree.startFen !== START) continue;
   const tree = game.tree;
   const main = tree.mainline.map((id) => tree.nodes.get(id));
-  // Detector output per ply, from the bare moves.
+  // Detector output per ply, from the bare moves (as the product does: the
+  // whole game is reviewed, so ideas seen from later moves count too; no engine).
+  const review = reviewGame(main.map((node, k) => ({
+    nodeId: node.id, san: node.san, color: node.color, moveNumber: node.moveNumber, from: node.from, to: node.to,
+    fenBefore: k === 0 ? tree.startFen : main[k - 1].fen, fenAfter: node.fen, before: { cp: 0 }, after: { cp: 0 },
+  })));
   const detected = main.map((node, k) => {
-    const fenBefore = k === 0 ? tree.startFen : main[k - 1].fen;
-    const found = moveMotifs(fenBefore, node.san);
+    const found = review.moves[k].motifs;
     const motifs = new Set(found.map((m) => m.kind));
     for (const m of found) if (m.kind === 'threat') motifs.add(`threat:${m.data.type}`);
     if (k < 24 && /^[NB]/.test(node.san) && /[18]$/.test(node.from)) motifs.add('development');
@@ -106,7 +130,8 @@ for (const raw of games) {
     const between = text.slice(node.charEnd, next ? next.charStart : text.length);
     let depth = 0;
     let remark = '';
-    for (const m of between.matchAll(/[()]|\{[^}]*\}/g)) {
+    if (book) remark = between.replace(/Stockfish[^\n]*eval:[^\n]*/g, '').replace(/\ufffc/g, ' ');
+    else for (const m of between.matchAll(/[()]|\{[^}]*\}/g)) {
       if (m[0] === '(') depth++;
       else if (m[0] === ')') depth = Math.max(0, depth - 1);
       else if (depth === 0) remark += ` ${m[0].slice(1, -1)}`;
@@ -124,6 +149,7 @@ for (const raw of games) {
     }
   });
   if (any) used++;
+  }
 }
 
 const rows = Object.entries(stats).map(([tag, s]) => ({

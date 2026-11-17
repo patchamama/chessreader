@@ -68,7 +68,7 @@ describe('moveMotifs', () => {
   })
   it('finds a pin and a skewer', () => {
     expect(kinds('4k3/8/2n5/8/8/8/8/4KB2 w - - 0 1', 'Bb5')).toContain('pin')
-    expect(kinds('8/8/8/k7/8/q7/8/5RK1 w - - 0 1', 'Ra1')).toContain('pin')
+    expect(kinds('8/8/8/k7/8/qN6/8/5RK1 w - - 0 1', 'Ra1')).toContain('pin')
     expect(kinds('3r4/8/8/3k4/8/8/8/R3K3 w - - 0 1', 'Rd1+')).toContain('skewer')
   })
   it('finds a sacrifice, an exchange sacrifice and a discovered check', () => {
