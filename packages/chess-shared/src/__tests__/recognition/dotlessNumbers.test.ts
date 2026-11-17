@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { recognizeGames } from '../../recognition/recognizeGames.js'
+import { spanishToEnglish } from '../../notation/spanishToEnglish.js'
 
 const sans = (g: ReturnType<typeof recognizeGames>[number]) => g.tree.mainline.map((id) => g.tree.nodes.get(id)!.san)
 
@@ -91,5 +92,14 @@ describe('a "(" the book never closes does not swallow the game', () => {
   const [g] = recognizeGames(text, { algorithm: 2 })
   it('the next paragraph that goes on with the game is the main line again', () => {
     expect(g.tree.mainline.map((id) => g.tree.nodes.get(id)!.san).slice(15)).toEqual(['Nxc3', 'bxc3', 'cxb5', 'Ng5', 'Bb7', 'Qh5', 'g6'])
+  })
+})
+
+describe('a promotion written without "=" ("32 b8D!", "fxg8D+")', () => {
+  it('is read, in Spanish and in English letters', () => {
+    expect(spanishToEnglish('32 b8D! Txb8 30 fxg8D+')).toBe('32 b8Q! Rxb8 30 fxg8Q+')
+    const [g] = recognizeGames('1. e4 d5 2. exd5 c6 3. dxc6 Nf6 4. cxb7 Nbd7 5. bxa8D', { algorithm: 2 })
+    expect(sans(g).at(-1)).toBe('bxa8=Q')
+    expect(g.tree.errors).toEqual([])
   })
 })

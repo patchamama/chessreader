@@ -105,6 +105,10 @@ export function spanishToEnglish(text: string): string {
     return result;
   }
 
+  // A promotion to a Spanish piece ("b8D", "fxg8=D+"): D T A C are no English
+  // letters, so this holds whatever the notation of the rest of the text.
+  result = result.replace(/([a-h][18])(=?)([DTAC])(?![a-zA-Z])/g, (_m, sq: string, eq: string, p: string) => `${sq}${eq}${({ D: 'Q', T: 'R', A: 'B', C: 'N' } as Record<string, string>)[p]}`);
+
   // If already English notation, skip piece-letter substitution.
   // This prevents Re1 (Rook e1) from being mangled into Ke1 (King e1).
   // Lines an engine added to the book ("Stockfish 14 eval: [+0.48] 8 cxd5 …")

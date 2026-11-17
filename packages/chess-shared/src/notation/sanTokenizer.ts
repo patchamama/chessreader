@@ -70,7 +70,7 @@ export const DIAGRAM_MARK = '\uFFFC';
 // SAN move pattern (English notation only — caller should normalise Spanish first)
 // Note: no trailing \b because check (+) and mate (#) symbols are non-word chars
 const SAN_MOVE_RE =
-  /(?<![a-zA-Z])(O-O-O|O-O|[KQRBN][a-h1-8]?x?[a-h][1-8](?:=[QRBN])?[+#]?[!?]*|[KQRBN][a-h1-8]?[a-h][1-8](?:=[QRBN])?[+#]?[!?]*|[a-h]x?[a-h][1-8](?:=[QRBN])?[+#]?[!?]*|[a-h][1-8](?:=[QRBN])?[+#]?[!?]*)(?=[^a-zA-Z]|$)/g;
+  /(?<![a-zA-Z])(O-O-O|O-O|[KQRBN][a-h1-8]?x?[a-h][1-8](?:=?[QRBN])?[+#]?[!?]*|[KQRBN][a-h1-8]?[a-h][1-8](?:=?[QRBN])?[+#]?[!?]*|[a-h]x?[a-h][1-8](?:=?[QRBN])?[+#]?[!?]*|[a-h][1-8](?:=?[QRBN])?[+#]?[!?]*)(?=[^a-zA-Z]|$)/g;
 
 const MOVE_NUMBER_RE = /\b(\d{1,3})(\.{1,3})\s*/g;
 const RESULT_RE = /\b(1-0|0-1|1\/2-1\/2|\*)\b/g;
