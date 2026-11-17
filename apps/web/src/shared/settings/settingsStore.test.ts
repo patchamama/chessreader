@@ -145,3 +145,12 @@ describe('settingsStore — annotated games laid out like a book by default', ()
     expect(migrateSettings({ commentLayout: 'paragraphs' }, 1)).toMatchObject({ commentLayout: 'paragraphs' })
   })
 })
+
+describe('settingsStore — pause after each move in the narration (S32)', () => {
+  it('is 0 s by default (as before) and can be set', () => {
+    useSettingsStore.getState().reset()
+    expect(useSettingsStore.getState().narrationMovePause).toBe(0)
+    useSettingsStore.getState().set({ narrationMovePause: 3 })
+    expect(useSettingsStore.getState().narrationMovePause).toBe(3)
+  })
+})

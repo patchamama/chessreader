@@ -143,6 +143,8 @@ export interface AppSettings {
   aiModel: string
   /** Scroll the book so the move being played or narrated stays centred. */
   autoscroll: boolean
+  /** Seconds of silence after each game move the narration says (live and in the MP3). */
+  narrationMovePause: number
   /** How an annotated game is written: remarks in braces, lines split at each remark, or runs of moves followed by a paragraph. */
   commentLayout: 'inline' | 'split' | 'paragraphs'
   /** Diagrams in an annotated game at its key moments, with the engine evaluation under them. */
@@ -226,6 +228,7 @@ const DEFAULT: AppSettings = {
   lichessPlayToken: '',
   commentLayout: 'split',
   autoscroll: true,
+  narrationMovePause: 0,
   commentDiagrams: true,
   commentDiagramEval: true,
   boardTheme: 'blue',

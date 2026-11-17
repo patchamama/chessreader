@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { recognizeGames, buildNarrationScript } from '@chess-ebook/chess-shared'
 import { useNarrationStore, setNarrationRuntime } from './narrationStore'
 import { useStudyBoardStore } from '../store/studyBoardStore'
+import { useSettingsStore } from '../../../shared/settings/settingsStore'
 
 const TEXT = [
   'La partida de la Ópera',
@@ -294,5 +295,20 @@ describe('variations announced and closed (S19)', () => {
     const back = events.findIndex((e) => e.startsWith('say:Volvamos a la partida'))
     expect(events[back]).toBe('say:Volvamos a la partida: la última jugada de las negras fue alfil ge 4.')
     expect(events[back + 1]).toBe('wait:2000')
+  })
+})
+
+describe('the pause after each move, chosen in the settings (S32)', () => {
+  it('waits that long after every game move it says', async () => {
+    const delays: number[] = []
+    setNarrationRuntime({ speaker: { speak: async (text) => { spoken.push(text) }, cancel: () => {} }, delay: async (ms) => { delays.push(ms) } })
+    useSettingsStore.setState({ narrationMovePause: 2 })
+    const n = useNarrationStore.getState()
+    n.load(script, game.tree)
+    n.setOption({ simulate: false })
+    n.play()
+    await settle(() => useNarrationStore.getState().status === 'finished')
+    expect(delays.filter((d) => d === 2000)).toHaveLength(script.filter((s) => s.kind === 'move').length)
+    useSettingsStore.setState({ narrationMovePause: 0 })
   })
 })

@@ -63,3 +63,16 @@ describe('buildNarrationTrack', () => {
     expect(JSON.parse(JSON.stringify(track))).toEqual(track)
   })
 })
+
+describe('a pause after each game move (S32)', () => {
+  it('movePause puts that many seconds of silence after every game move, nowhere else', () => {
+    const withPause = narrationSegments(script, game.tree, 'es', { movePause: 1.5 })
+    const kinds = withPause.map((s) => s.kind)
+    expect(kinds.slice(0, 5)).toEqual(['comment', 'move', 'pause', 'move', 'pause'])
+    expect(withPause[2]).toMatchObject({ kind: 'pause', speech: '[pause 1.5]', nodeId: game.tree.mainline[0] })
+    expect(withPause.filter((s) => s.kind === 'move').length).toBe(withPause.filter((s) => s.speech === '[pause 1.5]').length)
+  })
+  it('no movePause (or 0): the segments are as before', () => {
+    expect(narrationSegments(script, game.tree, undefined, { movePause: 0 })).toEqual(segments)
+  })
+})

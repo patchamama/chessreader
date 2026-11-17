@@ -48,7 +48,8 @@ export interface NarrationSegment {
 }
 
 /** The script as a flat list of things said, one per audio segment. */
-export function narrationSegments(script: NarrationStep[], tree: GameTree, lang?: Lang): NarrationSegment[] {
+export function narrationSegments(script: NarrationStep[], tree: GameTree, lang?: Lang, options: { movePause?: number } = {}): NarrationSegment[] {
+  const movePause = Math.max(0, Math.min(10, options.movePause ?? 0));
   let intros = 0;
   const fenOf = (id: string | null) => (id ? tree.nodes.get(id)?.fen ?? tree.startFen : tree.startFen);
   const out: NarrationSegment[] = [];
@@ -61,6 +62,8 @@ export function narrationSegments(script: NarrationStep[], tree: GameTree, lang?
         ...(step.quality ? { quality: step.quality } : {}),
         pause: true, cues: step.sentences[0].cues, step: index,
       });
+      // The silence chosen in the settings after every game move (S32).
+      if (movePause > 0) out.push({ kind: 'pause', speech: `[pause ${movePause}]`, text: '', nodeId: node.id, fen: node.fen, cues: [], step: index });
       return;
     }
     for (const sentence of step.sentences) {

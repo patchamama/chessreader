@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { VoiceSettings } from './VoiceSettings'
+import { LICHESS_TOKEN_URL } from '../lichess/tokenUrl'
 import { APP_LANGUAGES, type AppLanguage } from './settingsStore'
 import { useSettingsStore, BOARD_THEMES, FONT_FAMILIES, STOCKFISH_VERSIONS, APP_THEME_PRESETS, PIECE_THEMES, type BoardTheme, type FontFamily, type EvalBarDirection, type StockfishVersion, type ImageAlign, type HeadingStyle, type EngineVariations, type AppTheme, type PieceTheme } from './settingsStore'
 
@@ -138,11 +139,13 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           <input type="checkbox" checked={s.autoscroll} onChange={(e) => s.set({ autoscroll: e.target.checked })} />
           Autoscroll: keep the move being played or narrated in view
         </label>
+        <label className={labelClass} htmlFor="move-pause">Pause after each move in the narration and the audio: {s.narrationMovePause} s</label>
+        <input id="move-pause" type="range" min={0} max={5} step={0.5} className="w-full" value={s.narrationMovePause} onChange={(e) => s.set({ narrationMovePause: Number(e.target.value) })} />
 
         {/* Lichess */}
-        <label className={labelClass} htmlFor="lichess-token">Lichess token (masters database; kept in this browser, sent only to Lichess)</label>
+        <label className={labelClass} htmlFor="lichess-token">Lichess token (masters database, your games and playing; kept in this browser, sent only to Lichess)</label>
         <input id="lichess-token" type="password" autoComplete="off" className={inputClass} value={s.lichessToken} onChange={(e) => s.set({ lichessToken: e.target.value })} />
-        <a className="mt-1 block text-[11px] text-blue-600 underline" href="https://lichess.org/account/oauth/token/create?description=Chess%20reader" target="_blank" rel="noreferrer">
+        <a className="mt-1 block text-[11px] text-blue-600 underline" href={LICHESS_TOKEN_URL} target="_blank" rel="noreferrer">
           Create a Lichess token ↗
         </a>
 

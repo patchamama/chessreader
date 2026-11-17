@@ -13,3 +13,6 @@ export function lichessTokenUrl(scopes: string[], description: string): string {
  * and challenge:write (the Lichess AI); study:read opens private studies.
  */
 export const LICHESS_ALL_SCOPES = ['board:play', 'challenge:write', 'study:read']
+
+/** The token form with those permissions ticked. */
+export const LICHESS_TOKEN_URL = lichessTokenUrl(LICHESS_ALL_SCOPES, 'Chess reader')

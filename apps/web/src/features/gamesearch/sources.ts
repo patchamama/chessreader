@@ -14,9 +14,9 @@
  */
 
 /** Where a Lichess user creates the personal token, its permissions already ticked (one token for reading and playing). */
-export const LICHESS_TOKEN_URL = lichessTokenUrl(LICHESS_ALL_SCOPES, 'Chess reader')
+export { LICHESS_TOKEN_URL }
 
-import { LICHESS_ALL_SCOPES, lichessTokenUrl } from '../../shared/lichess/tokenUrl'
+import { LICHESS_TOKEN_URL } from '../../shared/lichess/tokenUrl'
 
 /** Lichess refused the request: it needs a personal token, or the one given is wrong. */
 export class LichessAuthError extends Error {

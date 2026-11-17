@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { moveCue, detectLang, sanToSpeech, variationIntro, backToGame, RETURN_PAUSE } from '@chess-ebook/chess-shared'
 import type { BoardCue, GameTree, Lang, NarrationStep } from '@chess-ebook/chess-shared'
 import { useStudyBoardStore } from '../store/studyBoardStore'
@@ -123,6 +124,12 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
           set({ cues: sentence.cues, caption: step.caption })
           await runtime.speaker.speak(step.speech, lang, rate)
           if (!alive()) return
+          // The silence chosen in the settings after every game move (S32).
+          const pause = useSettingsStore.getState().narrationMovePause
+          if (pause > 0) {
+            await runtime.delay(pause * 1000)
+            if (!alive()) return
+          }
         }
         addConcepts(sentence.cues)
       } else {

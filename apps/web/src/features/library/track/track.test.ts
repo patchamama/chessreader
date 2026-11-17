@@ -62,6 +62,22 @@ describe('renderTrack', () => {
     vi.unstubAllGlobals()
   })
 
+  it('the pause after each move (Settings) goes into the audio as silence', async () => {
+    const bodies: { segments: string[] }[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/api/narration/render')) {
+        const body = JSON.parse(String(init!.body)) as { segments: string[] }
+        bodies.push(body)
+        return new Response(JSON.stringify({ id: 'abc', audioUrl: '/a.mp3', durations: body.segments.map(() => 1), total: 9 }), { status: 200 })
+      }
+      return new Response(new Blob(['mp3']), { status: 200 })
+    }))
+    useSettingsStore.setState({ voiceProvider: 'system', narrationMovePause: 1.5 })
+    await renderTrack({ script, tree: game.tree, lang: 'es', title: 'Opera' })
+    expect(bodies[0].segments.filter((x) => x === '[pause 1.5]').length).toBe(script.filter((s) => s.kind === 'move').length)
+    vi.unstubAllGlobals()
+  })
+
   it('the browser voice cannot make a file: it says so', async () => {
     useSettingsStore.setState({ voiceProvider: 'browser' })
     await expect(renderTrack({ script, tree: game.tree, lang: 'es', title: 'x' })).rejects.toThrow(/server voice/)
