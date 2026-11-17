@@ -58,4 +58,15 @@ final class NarrationHardeningTest extends TestCase
         $this->expectExceptionMessage('a segment is too long (max 2000 characters)');
         $handler->handle(new RenderNarrationCommand([str_repeat('a', 2001)], 'es', new VoiceOptions('system'), 0.2));
     }
+
+    public function test_a_failing_program_does_not_hand_its_error_output_to_the_client(): void
+    {
+        try {
+            \App\Infrastructure\Narration\Shell::run(['sh', '-c', 'echo /secret/path/voice.onnx >&2; exit 3']);
+            $this->fail('expected a failure');
+        } catch (\RuntimeException $e) {
+            $this->assertStringNotContainsString('/secret/path', $e->getMessage());
+            $this->assertStringContainsString('exit code 3', $e->getMessage());
+        }
+    }
 }

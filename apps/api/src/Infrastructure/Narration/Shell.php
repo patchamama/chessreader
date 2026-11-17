@@ -47,7 +47,9 @@ final class Shell
         fclose($pipes[2]);
         proc_close($proc);
         if ($status['exitcode'] !== 0) {
-            throw new \RuntimeException($command[0] . ' failed: ' . substr(trim($err) ?: trim($out), -300));
+            // The program's own output can name server paths: it goes to the server log only.
+            error_log(basename($command[0]) . ' failed: ' . substr(trim($err) ?: trim($out), -300));
+            throw new \RuntimeException(basename($command[0]) . ' failed (exit code ' . $status['exitcode'] . ')');
         }
         return $out;
     }

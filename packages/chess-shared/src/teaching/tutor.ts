@@ -15,8 +15,11 @@ const PIECE: Record<Lang, Record<string, string>> = {
   en: { p: 'the pawn', n: 'the knight', b: 'the bishop', r: 'the rook', q: 'the queen', k: 'the king' },
   de: { p: 'den Bauern', n: 'den Springer', b: 'den Läufer', r: 'den Turm', q: 'die Dame', k: 'den König' },
 };
-const LETTERS: Record<string, string> = { K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' };
-const local = (san: string, lang: Lang) => (lang === 'es' ? san.replace(/^[KQRBN]/, (c) => LETTERS[c]) : san);
+const LETTERS: Partial<Record<Lang, Record<string, string>>> = {
+  es: { K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' },
+  de: { K: 'K', Q: 'D', R: 'T', B: 'L', N: 'S' },
+};
+const local = (san: string, lang: Lang) => (LETTERS[lang] ? san.replace(/^[KQRBN]/, (c) => LETTERS[lang]![c]) : san);
 const on = (lang: Lang) => (lang === 'es' ? 'de' : lang === 'en' ? 'on' : 'auf');
 
 export function opportunities(fen: string, lang: Lang): Opportunity[] {

@@ -33,10 +33,13 @@ final class NarrationController
                 lang: in_array($body['lang'] ?? 'es', ['es', 'en', 'de'], true) ? (string) ($body['lang'] ?? 'es') : 'es',
                 voice: VoiceOptions::fromArray((array) ($body['voice'] ?? [])),
                 gapSeconds: (float) ($body['gap'] ?? 0.25),
+                owner: isset($request->getAttribute('auth_user')->sub) ? (string) $request->getAttribute('auth_user')->sub : null,
             );
             $result = $this->handler->handle($command);
         } catch (\InvalidArgumentException $e) {
             return $this->json($response, ['error' => $e->getMessage()], 400);
+        } catch (\OverflowException $e) {
+            return $this->json($response, ['error' => $e->getMessage()], 429);
         } catch (\RuntimeException $e) {
             // The voice (a program or a remote service) failed: say why.
             return $this->json($response, ['error' => $e->getMessage()], 502);

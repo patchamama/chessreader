@@ -139,3 +139,21 @@ describe('piece letters glued to the move number (books print "3.Cc3", "3...Ab4"
     expect(g.tree.errors).toEqual([])
   })
 })
+
+describe('German piece letters (S, L, T, D, K)', () => {
+  it('are translated when the text is written with them', async () => {
+    const { spanishToEnglish } = await import('../../notation/spanishToEnglish.js')
+    expect(spanishToEnglish('1.e4 e5 2.Sf3 Sc6 3.Lb5 a6 4.La4 Sf6 5.0-0 Le7 6.Te1 b5 7.Lb3 d6 8.c3 0-0 9.h3 Dd7 10.Kh2'))
+      .toBe('1.e4 e5 2.Nf3 Nc6 3.Bb5 a6 4.Ba4 Nf6 5.O-O Be7 6.Re1 b5 7.Bb3 d6 8.c3 O-O 9.h3 Qd7 10.Kh2')
+  })
+  it('a German game is recognised', async () => {
+    const { recognizeGames } = await import('../../recognition/recognizeGames.js')
+    const [g] = recognizeGames('Partie 1\n1.e4 e5 2.Sf3 Sc6 3.Lb5 a6 4.La4 Sf6 5.0-0 Le7 6.Te1 b5 7.Lb3 d6\nDer Läufer zieht sich zurück.', { algorithm: 2 })
+    expect(g.tree.mainline.length).toBe(14)
+    expect(g.tree.errors).toEqual([])
+  })
+  it('English text with a stray S word stays English', async () => {
+    const { spanishToEnglish } = await import('../../notation/spanishToEnglish.js')
+    expect(spanishToEnglish('1.e4 e5 2.Nf3 Nc6 3.Bb5 a6 4.Ba4 Nf6')).toBe('1.e4 e5 2.Nf3 Nc6 3.Bb5 a6 4.Ba4 Nf6')
+  })
+})

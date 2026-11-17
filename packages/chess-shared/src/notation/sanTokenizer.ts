@@ -144,6 +144,14 @@ export function tokenize(text: string): SanToken[] {
       });
     }
   }
+  // A "{" never closed (a typo, a cut comment) would swallow the rest of the
+  // text: it ends where its paragraph ends.
+  for (const open of openStack) {
+    if (open.ch !== '{') continue;
+    const nl = text.indexOf('\n', open.match.end);
+    if (nl < 0) continue;
+    matches.push({ start: nl, end: nl, token: { type: 'variation-close', raw: '', charStart: nl, charEnd: nl } });
+  }
 
   // Collect move numbers
   {

@@ -79,3 +79,23 @@ describe('remarks the audit found wrong (S26)', () => {
     expect(kinds('rn1qkbnr/pppppppp/8/8/6b1/8/PPPP1PBP/RNBQK1NR w KQkq - 0 1', 'Bxb7')).not.toContain('wins-material')
   })
 })
+
+describe('trapped only when nothing saves the piece (audit round 2)', () => {
+  it('a queen hit by a bishop is not trapped when a piece can be put in between', () => {
+    // 8. Bg5 hits the queen on d8; ...Be7 or ...f6 blocks.
+    expect(kinds('r1bqkb1r/pppp1ppp/2nn4/4P3/P7/5N2/1PP2PPP/RNBQ1RK1 w kq - 1 8', 'Bg5')).not.toContain('traps')
+  })
+})
+
+describe('game accuracy like Lichess (open limit)', () => {
+  it('one blunder among good moves weighs more than in a plain mean', async () => {
+    const { playerAccuracy } = await import('../../teaching/gameReview.js')
+    const acc = [100, 100, 100, 100, 100, 100, 100, 100, 100, 10]
+    const wins = [50, 52, 51, 53, 52, 54, 53, 55, 54, 56, 10]
+    const a = playerAccuracy(acc, wins)
+    expect(a).toBeLessThan(91) // plain mean
+    expect(a).toBeGreaterThan(40)
+    expect(playerAccuracy([100, 100, 100], [50, 50, 50, 50])).toBe(100)
+    expect(playerAccuracy([], [50])).toBe(0)
+  })
+})

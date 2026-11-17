@@ -24,7 +24,7 @@ final class RenderNarrationHandlerTest extends TestCase
 
     protected function tearDown(): void
     {
-        array_map('unlink', glob($this->dir . '/*') ?: []);
+        array_map('unlink', array_merge(glob($this->dir . '/*') ?: [], glob($this->dir . '/.renders-*') ?: []));
         @rmdir($this->dir);
     }
 
@@ -109,5 +109,31 @@ final class RenderNarrationHandlerTest extends TestCase
         $path = $this->dir . '/x.wav';
         WavFile::writeSilence($path, 1.5);
         $this->assertEqualsWithDelta(1.5, WavFile::duration($path), 0.001);
+    }
+
+    public function test_old_audio_files_are_removed_when_a_new_one_is_rendered(): void
+    {
+        $said = [];
+        $calls = [];
+        file_put_contents($this->dir . '/aaaaaaaaaaaaaaaaaaaaaaaa.mp3', 'old');
+        touch($this->dir . '/aaaaaaaaaaaaaaaaaaaaaaaa.mp3', time() - 2 * 86400);
+        file_put_contents($this->dir . '/bbbbbbbbbbbbbbbbbbbbbbbb.mp3', 'recent');
+        $handler = new RenderNarrationHandler($this->synthesizer($said), $this->assembler($calls), $this->dir);
+        $handler->handle(new RenderNarrationCommand(['Hola'], 'es', VoiceOptions::fromArray([]), 0.2));
+        $this->assertFileDoesNotExist($this->dir . '/aaaaaaaaaaaaaaaaaaaaaaaa.mp3');
+        $this->assertFileExists($this->dir . '/bbbbbbbbbbbbbbbbbbbbbbbb.mp3');
+    }
+
+    public function test_a_user_can_render_only_so_many_narrations_per_hour(): void
+    {
+        $said = [];
+        $calls = [];
+        $handler = new RenderNarrationHandler($this->synthesizer($said), $this->assembler($calls), $this->dir);
+        for ($i = 0; $i < RenderNarrationHandler::MAX_RENDERS_PER_HOUR; $i++) {
+            $handler->handle(new RenderNarrationCommand(['a'], 'es', VoiceOptions::fromArray([]), 0.0, owner: '7'));
+        }
+        $handler->handle(new RenderNarrationCommand(['a'], 'es', VoiceOptions::fromArray([]), 0.0, owner: '8'));
+        $this->expectException(\OverflowException::class);
+        $handler->handle(new RenderNarrationCommand(['a'], 'es', VoiceOptions::fromArray([]), 0.0, owner: '7'));
     }
 }

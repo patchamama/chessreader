@@ -16,6 +16,9 @@ final class RenderNarrationHandler
 {
     public const MAX_SEGMENTS = 2000;
     public const MAX_SEGMENT_CHARS = 2000;
+    /** Rendered audio is kept this long, then removed on the next render. */
+    public const KEEP_SECONDS = 86400;
+    public const MAX_RENDERS_PER_HOUR = 30;
 
     public function __construct(
         private readonly SpeechSynthesizer $synthesizer,
@@ -42,6 +45,11 @@ final class RenderNarrationHandler
             throw new \RuntimeException('cannot create the audio folder');
         }
 
+        $this->removeOldAudio();
+        if ($command->owner !== null) {
+            $this->countRender($command->owner);
+        }
+
         $id   = bin2hex(random_bytes(12));
         $gap  = max(0.0, min(3.0, $command->gapSeconds));
         $wavs = [];
@@ -61,5 +69,39 @@ final class RenderNarrationHandler
         }
 
         return new RenderedNarration($id, $durations, round(array_sum($durations) + $gap * (count($durations) - 1), 3));
+    }
+
+    private function removeOldAudio(): void
+    {
+        foreach (glob($this->outputDir . '/*.mp3') ?: [] as $file) {
+            if (filemtime($file) < time() - self::KEEP_SECONDS) {
+                @unlink($file);
+            }
+        }
+    }
+
+    /** One more render for `owner` in the last hour, or OverflowException past the limit. */
+    private function countRender(string $owner): void
+    {
+        $file = $this->outputDir . '/.renders-' . preg_replace('/[^A-Za-z0-9_-]/', '', $owner) . '.json';
+        $handle = fopen($file, 'c+');
+        if ($handle === false) {
+            return;
+        }
+        try {
+            flock($handle, LOCK_EX);
+            $times = json_decode((string) stream_get_contents($handle), true);
+            $recent = array_values(array_filter(is_array($times) ? $times : [], fn($t) => is_int($t) && $t > time() - 3600));
+            if (count($recent) >= self::MAX_RENDERS_PER_HOUR) {
+                throw new \OverflowException('too many narrations in the last hour (max ' . self::MAX_RENDERS_PER_HOUR . '); try again later');
+            }
+            $recent[] = time();
+            ftruncate($handle, 0);
+            rewind($handle);
+            fwrite($handle, (string) json_encode($recent));
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
     }
 }

@@ -64,6 +64,15 @@ export function spanishTokenToEnglish(token: string): string {
 // like "Después" (D+e) or "Cada" (C+a) from being mistaken for moves.
 const SAN_TAIL = '[a-h1-8]?x?[a-h][1-8]'
 
+const countLed = (text: string, letters: string) =>
+  (text.match(new RegExp(`(?:^|[\\s(.])[${letters}]${SAN_TAIL}`, 'g')) ?? []).length
+
+/** S (Springer) and L (Läufer) lead more moves than the English-only or Spanish-only letters. */
+function isGermanNotation(text: string): boolean {
+  const german = countLed(text, 'SL')
+  return german > 0 && german >= countLed(text, 'NBQ') && german >= countLed(text, 'CA')
+}
+
 function isEnglishNotation(text: string): boolean {
   // English-only piece letters (K, Q, B, N) against Spanish-only ones (C, D, T,
   // A); R is both a rook and a "rey". The MAJORITY decides: one foreign-looking
@@ -86,6 +95,16 @@ export function spanishToEnglish(text: string): string {
     .replace(/\b0-0\b/g, 'O-O')
     .replace(/\b0–0–0\b/g, 'O-O-O')
     .replace(/\b0–0\b/g, 'O-O');
+
+  // German letters (Springer, Läufer, Turm, Dame, König): S and L only exist in German.
+  if (isGermanNotation(result)) {
+    const piece = (letter: string, to: string, s: string) =>
+      s.replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.)${letter}(?=${SAN_TAIL})`, 'g'), to);
+    result = piece('T', '\x00ROOK\x00', result);
+    result = piece('S', 'N', piece('L', 'B', piece('D', 'Q', result))).replace(/\x00ROOK\x00/g, 'R')
+      .replace(/([a-h][18])=([DTLS])(?![a-z])/g, (_m, sq: string, p: string) => `${sq}=${({ D: 'Q', T: 'R', L: 'B', S: 'N' } as Record<string, string>)[p]}`);
+    return result;
+  }
 
   // If already English notation, skip piece-letter substitution.
   // This prevents Re1 (Rook e1) from being mangled into Ke1 (King e1).

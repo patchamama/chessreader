@@ -67,3 +67,13 @@ describe('diagrams at the key moments (S18)', () => {
     expect(mainline(text)).toEqual({ sans: MAIN, errors: [] })
   })
 })
+
+describe('German commentary writes German letters', () => {
+  it('Sf3, Lb5 … and reads back', () => {
+    const g = plies('e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 O-O Be7', Array(11).fill({ cp: 20 }))
+    const text = annotateGame(g, reviewGame(g), { level: 1, lang: 'de' })
+    expect(text).toContain('2. Sf3 Sc6 3. Lb5')
+    const [r] = recognizeGames(text, { algorithm: 2 })
+    expect(r.tree.mainline.length).toBe(10)
+  })
+})

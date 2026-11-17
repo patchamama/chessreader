@@ -311,21 +311,15 @@ export function moveMotifs(fenBefore: string, san: string, context: MotifContext
     for (const row of chess.board()) for (const p of row) {
       if (!p || p.color !== foe || !'nbrq'.includes(p.type)) continue;
       if (!threatened(chess, p.square, p.type, foe) || threatened(before, p.square, p.type, foe)) continue;
-      // Not trapped if what attacks it can simply be taken.
-      const hunters = chess.attackers(p.square, me);
-      const removes = chess.moves({ verbose: true }).some((mv) => {
-        if (!hunters.includes(mv.to as Square) || mv.from === p.square) return false;
-        if (VALUE[mv.captured!] >= VALUE[mv.piece]) return true;
+      // Trapped only if no reply at all (moving it, blocking, taking the
+      // attacker, defending it) leaves it safe.
+      const escapes = chess.moves({ verbose: true }).some((mv) => {
+        if (mv.from === p.square && mv.captured && VALUE[mv.captured] >= VALUE[p.type]) return true;
         chess.move(mv);
-        const safe = !threatened(chess, mv.to, mv.piece, foe);
-        chess.undo();
-        return safe;
-      });
-      if (removes) continue;
-      const escapes = chess.moves({ square: p.square, verbose: true }).some((mv) => {
-        if (mv.captured && VALUE[mv.captured] >= VALUE[p.type]) return true;
-        chess.move(mv);
-        const safe = !threatened(chess, mv.to, p.type, foe);
+        const where = mv.from === p.square ? mv.to : p.square;
+        // …without giving up the piece that does the saving.
+        const helper = mv.from === p.square || (mv.captured && VALUE[mv.captured] >= VALUE[mv.piece]) || !threatened(chess, mv.to, mv.piece, foe);
+        const safe = helper && !threatened(chess, where, p.type, foe);
         chess.undo();
         return safe;
       });
@@ -509,6 +503,27 @@ export interface GameReview {
   keyMoments: KeyMoment[];
 }
 
+/**
+ * A player's accuracy over a game, as Lichess computes it: the mean of the
+ * move accuracies weighted by how volatile the position was around each move
+ * (so a slip in a sharp position counts more), averaged with their harmonic
+ * mean (so one blunder is not hidden by many easy moves).
+ * `wins` is White's winning chances before each of these moves and after the last.
+ */
+export function playerAccuracy(accuracies: number[], wins: number[]): number {
+  if (!accuracies.length) return 0;
+  const window = Math.max(2, Math.min(8, Math.floor(wins.length / 10)));
+  const weights = accuracies.map((_, i) => {
+    const slice = wins.slice(Math.max(0, i - window + 1), i + 2);
+    const mean = slice.reduce((a, b) => a + b, 0) / slice.length;
+    const sd = Math.sqrt(slice.reduce((a, b) => a + (b - mean) ** 2, 0) / slice.length);
+    return Math.max(0.5, Math.min(12, sd));
+  });
+  const weighted = accuracies.reduce((a, x, i) => a + x * weights[i], 0) / weights.reduce((a, b) => a + b, 0);
+  const harmonic = accuracies.length / accuracies.reduce((a, x) => a + 1 / Math.max(x, 1), 0);
+  return Math.round(((weighted + harmonic) / 2) * 10) / 10;
+}
+
 export function reviewGame(plies: PlyInput[]): GameReview {
   const moves: ReviewedMove[] = plies.map((p, i) => {
     const white = p.color === 'white';
@@ -566,7 +581,10 @@ export function reviewGame(plies: PlyInput[]): GameReview {
     const own = moves.filter((m) => m.color === color);
     const count = (q: MoveQuality) => own.filter((m) => m.quality === q).length;
     return {
-      accuracy: own.length ? Math.round((own.reduce((a, m) => a + m.accuracy, 0) / own.length) * 10) / 10 : 0,
+      accuracy: playerAccuracy(own.map((m) => m.accuracy), [
+        ...moves.filter((m) => m.color === color).map((m) => (m.color === 'white' ? m.winBefore : 100 - m.winBefore)),
+        ...(own.length ? [own[own.length - 1].color === 'white' ? own[own.length - 1].winAfter : 100 - own[own.length - 1].winAfter] : []),
+      ]),
       moves: own.length,
       brilliant: count('brilliant'), good: count('good'),
       inaccuracies: count('dubious'), mistakes: count('mistake'), blunders: count('blunder'),
@@ -969,9 +987,13 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
   if (options.intro) lines.push(options.intro);
 
   // Moves are written in the letters of the language (Spanish: R D T A C).
-  const LETTERS: Record<string, string> = { K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' };
+  const LETTERS: Record<string, Record<string, string>> = {
+    es: { K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' },
+    de: { K: 'K', Q: 'D', R: 'T', B: 'L', N: 'S' },
+  };
+  const map = LETTERS[lang];
   const local = (san: string) =>
-    lang === 'es' ? san.replace(/^[KQRBN]/, (c) => LETTERS[c]).replace(/=([QRBN])/, (_m, c: string) => `=${LETTERS[c]}`) : san;
+    map ? san.replace(/^[KQRBN]/, (c) => map[c]).replace(/=([QRBN])/, (_m, c: string) => `=${map[c]}`) : san;
   const layout = options.layout ?? 'inline';
   const keyMoment = (i: number) => {
     const q = review.moves[i].quality;

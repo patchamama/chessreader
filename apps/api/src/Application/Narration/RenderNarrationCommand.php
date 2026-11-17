@@ -12,6 +12,8 @@ final class RenderNarrationCommand
         public readonly string $lang,
         public readonly VoiceOptions $voice,
         public readonly float $gapSeconds,
+        /** Who asks (user id): renders are limited per hour and per user. */
+        public readonly ?string $owner = null,
     ) {
     }
 }
