@@ -70,19 +70,43 @@ export async function lichessEvents(token: string, onEvent: (e: { type: string; 
   if (res.body) await readNdjson(res.body, (x) => onEvent(x as never))
 }
 
-export interface LichessGameState { moves: string; status: string; winner?: string }
+/** A game's state: moves so far (UCI), status, and the clocks in milliseconds. */
+export interface LichessGameState { moves: string; status: string; winner?: string; wtime?: number; btime?: number; winc?: number; binc?: number }
+
+export interface LichessPlayer { id?: string; name?: string; rating?: number; title?: string | null; aiLevel?: number; provisional?: boolean }
+
+/** What Lichess tells about the game when it starts: the players, the speed, rated or not. */
+export interface LichessGameFull { id: string; speed?: string; rated?: boolean; white: LichessPlayer; black: LichessPlayer; state: LichessGameState }
 
 /** A game's moves as they are played: the full game first, then each state. */
-export async function lichessGameStream(token: string, gameId: string, onState: (s: LichessGameState) => void, signal: AbortSignal) {
+export async function lichessGameStream(token: string, gameId: string, onState: (s: LichessGameState) => void, signal: AbortSignal, onFull?: (g: LichessGameFull) => void) {
   const res = await fetch(`${API}/board/game/stream/${gameId}`, { headers: { Authorization: `Bearer ${token}` }, signal })
   check(res)
   if (res.body) {
     await readNdjson(res.body, (x) => {
       const e = x as { type: string; state?: LichessGameState } & LichessGameState
-      if (e.type === 'gameFull' && e.state) onState(e.state)
+      if (e.type === 'gameFull' && e.state) { onFull?.(x as LichessGameFull); onState(e.state) }
       else if (e.type === 'gameState') onState(e)
     })
   }
+}
+
+/** Lichess bots that play like people of a given level (Maia: trained on human games). */
+export const LICHESS_BOTS = [
+  { id: 'maia1', label: 'Maia 1100 (human-like)' },
+  { id: 'maia5', label: 'Maia 1500 (human-like)' },
+  { id: 'maia9', label: 'Maia 1900 (human-like)' },
+] as const
+
+/** Challenge a Lichess bot (casual); the game starts when it accepts (an event on the account stream). */
+export async function lichessChallengeBot(token: string, bot: string, o: { clock: { minutes: number; increment: number }; color: 'white' | 'black' }): Promise<void> {
+  const res = await fetch(`${API}/challenge/${bot}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `rated=false&clock.limit=${o.clock.minutes * 60}&clock.increment=${o.clock.increment}&color=${o.color}`,
+  })
+  if (res.status === 401 || res.status === 403) throw new Error('Lichess rejected the token: it needs the board:play and challenge:write permissions.')
+  check(res)
 }
 
 export async function lichessMakeMove(token: string, gameId: string, uci: string): Promise<void> {

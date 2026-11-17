@@ -1,9 +1,16 @@
 import { create } from 'zustand'
 import { Chess } from 'chess.js'
-import { explainMove, opponentIntent, opportunities, type Lang } from '@chess-ebook/chess-shared'
+import { explainMove, opponentIntent, opportunities, sanToSpeech, type Lang, type Score } from '@chess-ebook/chess-shared'
 import { createEngineAnalyser, type AnalysePosition } from '../library/review/reviewEngine'
 import { engineMove } from './enginePlayer'
-import { lichessChallengeAi, lichessEvents, lichessGameStream, lichessMakeMove, lichessSeek, LICHESS_CLOCKS } from './lichessBoard'
+import {
+  lichessChallengeAi, lichessChallengeBot, lichessEvents, lichessGameStream, lichessMakeMove, lichessResign, lichessSeek, LICHESS_CLOCKS,
+  type LichessGameFull, type LichessGameState, type LichessPlayer,
+} from './lichessBoard'
+import { useSettingsStore, STOCKFISH_VERSIONS } from '../../shared/settings/settingsStore'
+import { browserSpeaker } from '../library/narration/speaker'
+import { judgeByEngine, judgeByTablebase, lichessTablebase, type MoveJudgement } from './moveJudge'
+import { bookMove } from './openingBook'
 
 /**
  * A game played on this board — against the engine (chosen strength), against
@@ -12,14 +19,41 @@ import { lichessChallengeAi, lichessEvents, lichessGameStream, lichessMakeMove, 
  * opponent is up to, what the move leaves to the opponent and the chances the
  * side to move has.
  */
-export type PlayMode = 'engine' | 'human' | 'lichess' | 'lichess-ai'
+export type PlayMode = 'engine' | 'human' | 'lichess' | 'lichess-ai' | 'lichess-bot'
 export type Clock = { minutes: number; increment: number }
 export interface TutorNote { ply: number; who: 'you' | 'opponent' | 'tutor'; text: string }
 
 interface Runtime { analyse: AnalysePosition }
 let runtime: Runtime | null = null
-const engine = () => (runtime ??= { analyse: createEngineAnalyser().analyse })
-export function setPlayRuntime(next: Runtime) { runtime = next }
+let runtimeUrl = ''
+let injected = false
+/** The engine of the game: the Stockfish version chosen in Settings. */
+const engine = () => {
+  const url = STOCKFISH_VERSIONS[useSettingsStore.getState().stockfishVersion]?.url ?? ''
+  if (!injected && (!runtime || runtimeUrl !== url)) { runtime = { analyse: createEngineAnalyser(url || undefined).analyse }; runtimeUrl = url }
+  return runtime!
+}
+export function setPlayRuntime(next: Runtime) { runtime = next; injected = true }
+
+type Say = (text: string, lang: Lang) => void
+let speaker: { speak: (t: string, l: Lang, r: number) => Promise<void> } | null = null
+let say: Say = (text, lang) => { speaker ??= browserSpeaker(); void speaker.speak(text, lang, 1) }
+/** Swap the voice (tests). */
+export function setPlaySpeaker(fn: Say) { say = fn }
+
+export interface PlayerInfo { name: string; rating?: number; title?: string }
+export interface Clocks { white: number; black: number; increment: number; at: number; running: 'white' | 'black' | null }
+export interface Judged extends MoveJudgement { ply: number; san: string }
+
+const JUDGE_DEPTH = 10
+
+function playerInfo(p: LichessPlayer): PlayerInfo {
+  return {
+    name: p.name ?? (p.aiLevel ? `Lichess AI level ${p.aiLevel}` : '?'),
+    ...(p.rating ? { rating: p.rating } : {}),
+    ...(p.title ? { title: p.title } : {}),
+  }
+}
 
 interface PlayState {
   mode: PlayMode
@@ -34,7 +68,19 @@ interface PlayState {
   result: string
   error: string | null
   lichess: { token: string; gameId: string | null } | null
-  start: (o: { mode: PlayMode; color: 'white' | 'black'; strength: number; lang: Lang; token?: string; clock?: Clock }) => void
+  /** Who plays White and Black (names, ratings, titles as Lichess gives them). */
+  players: { white: PlayerInfo; black: PlayerInfo } | null
+  /** Time left in milliseconds at `at`, on Lichess games. */
+  clocks: Clocks | null
+  gameInfo: { speed: string; rated: boolean; url: string } | null
+  /** The last judged move: book, best, good, inaccuracy, mistake or blunder. */
+  judgement: Judged | null
+  /** Every judged move by ply, for the move list. */
+  judgements: Judged[]
+  /** Increases with every new game: a late answer for an old game is dropped. */
+  gameId: number
+  start: (o: { mode: PlayMode; color: 'white' | 'black'; strength: number; lang: Lang; token?: string; clock?: Clock; bot?: string }) => void
+  resign: () => void
   /** The user's move on the board; false when it is not theirs or not legal. */
   move: (from: string, to: string, promotion?: string) => boolean
   reset: () => void
@@ -44,9 +90,9 @@ let chess = new Chess()
 let abort: AbortController | null = null
 const START = new Chess().fen()
 const T = {
-  es: { leaves: 'Cuidado, tu jugada le deja al rival esto:', your: 'Tu jugada:', chance: 'Oportunidad:', mated: 'Jaque mate.', draw: 'Tablas.', seeking: 'Buscando rival en Lichess…' },
-  en: { leaves: 'Careful, your move leaves the opponent this:', your: 'Your move:', chance: 'Chance:', mated: 'Checkmate.', draw: 'Draw.', seeking: 'Looking for an opponent on Lichess…' },
-  de: { leaves: 'Vorsicht, dein Zug erlaubt dem Gegner:', your: 'Dein Zug:', chance: 'Chance:', mated: 'Schachmatt.', draw: 'Remis.', seeking: 'Suche Gegner auf Lichess…' },
+  es: { leaves: 'Cuidado, tu jugada le deja al rival esto:', your: 'Tu jugada:', chance: 'Oportunidad:', mated: 'Jaque mate.', draw: 'Tablas.', seeking: 'Buscando rival en Lichess…', resigned: 'Abandonaste.' },
+  en: { leaves: 'Careful, your move leaves the opponent this:', your: 'Your move:', chance: 'Chance:', mated: 'Checkmate.', draw: 'Draw.', seeking: 'Looking for an opponent on Lichess…', resigned: 'You resigned.' },
+  de: { leaves: 'Vorsicht, dein Zug erlaubt dem Gegner:', your: 'Dein Zug:', chance: 'Chance:', mated: 'Schachmatt.', draw: 'Remis.', seeking: 'Suche Gegner auf Lichess…', resigned: 'Du hast aufgegeben.' },
 }
 
 export const usePlayStore = create<PlayState>((set, get) => {
@@ -60,6 +106,10 @@ export const usePlayStore = create<PlayState>((set, get) => {
     const { lang, mode } = get()
     const t = T[lang]
     set({ fen: chess.fen(), sans: chess.history(), lastMove: { from, to } })
+    const settings = useSettingsStore.getState()
+    const opponents = !byUser && mode !== 'human'
+    if (settings.playVoice === 'both' || (settings.playVoice === 'opponent' && opponents)) say(sanToSpeech(mv.san, lang), lang)
+    if (settings.playMoveStatus && (byUser || mode === 'human')) void judge(before, `${mv.from}${mv.to}${mv.promotion ?? ''}`, chess.fen(), mv.san, chess.history().length)
     const two = mode === 'human'
     const ideas = byUser || two ? explainMove(before, mv.san, lang) : opponentIntent(before, mv.san, lang)
     if (ideas.length) note(byUser || two ? 'you' : 'opponent', (byUser ? `${t.your} ` : '') + ideas.join(' '))
@@ -77,6 +127,35 @@ export const usePlayStore = create<PlayState>((set, get) => {
     return true
   }
 
+  /** Judge a played move: book first, then the endgame tablebase, then the engine. */
+  async function judge(fenBefore: string, uci: string, fenAfter: string, san: string, ply: number) {
+    const game = get().gameId
+    const mover = fenBefore.split(' ')[1] as 'w' | 'b'
+    let verdict: MoveJudgement | null = null
+    const token = useSettingsStore.getState().lichessToken || undefined
+    const book = ply <= 30 ? await bookMove(fenBefore, uci, fenAfter, token) : null
+    if (book) verdict = { kind: 'book', loss: 0, opening: book.eco ? `${book.name} (${book.eco})` : book.name }
+    if (!verdict) {
+      const tb = await lichessTablebase(fenBefore).catch(() => null)
+      if (tb) verdict = judgeByTablebase(tb, uci)
+    }
+    if (!verdict) {
+      const whiteScore = (lines: { scoreCp?: number; mate?: number }[], fen: string): Score => {
+        const l = lines[0]
+        const sign = fen.split(' ')[1] === 'w' ? 1 : -1
+        if (!l) return { cp: 0 }
+        return l.mate !== undefined ? { mate: sign * l.mate } : { cp: sign * (l.scoreCp ?? 0) }
+      }
+      const done = new Chess(fenAfter)
+      const best = await engine().analyse(fenBefore, JUDGE_DEPTH, 1)
+      const after: Score = done.isCheckmate() ? { mate: mover === 'w' ? 1 : -1 } : done.isGameOver() ? { cp: 0 } : whiteScore(await engine().analyse(fenAfter, JUDGE_DEPTH, 1), fenAfter)
+      verdict = judgeByEngine(whiteScore(best, fenBefore), after, mover, best[0]?.pv[0] === uci)
+    }
+    if (get().gameId !== game) return
+    const judged: Judged = { ...verdict, ply, san }
+    set({ judgement: judged, judgements: [...get().judgements.filter((j) => j.ply !== ply), judged] })
+  }
+
   async function engineTurn() {
     set({ status: 'thinking' })
     const uci = await engineMove(engine().analyse, chess.fen(), get().strength)
@@ -89,12 +168,36 @@ export const usePlayStore = create<PlayState>((set, get) => {
   function followLichess(token: string, gameId: string, color: 'white' | 'black', signal: AbortSignal) {
     chess = new Chess()
     set({ lichess: { token, gameId }, color, status: 'playing', fen: START, sans: [] })
-    void lichessGameStream(token, gameId, (s) => {
+    const onState = (s: LichessGameState) => {
       const uci = s.moves ? s.moves.split(' ') : []
       // Moves arrive as the whole list: play the ones not on the board yet.
       for (const m of uci.slice(chess.history().length)) apply(m.slice(0, 2), m.slice(2, 4), m[4], false)
+      if (s.wtime !== undefined && s.btime !== undefined) {
+        const over = s.status !== 'started' && s.status !== 'created'
+        set({ clocks: { white: s.wtime, black: s.btime, increment: s.winc ?? 0, at: Date.now(), running: over || uci.length < 2 ? null : chess.turn() === 'w' ? 'white' : 'black' } })
+      }
       if (s.status !== 'started' && s.status !== 'created') set({ status: 'over', result: s.winner ? `${s.winner} wins` : s.status })
-    }, signal).catch((err) => { if (!signal.aborted) set({ error: String(err.message ?? err) }) })
+    }
+    const onFull = (g: LichessGameFull) => {
+      set({
+        players: { white: playerInfo(g.white ?? {}), black: playerInfo(g.black ?? {}) },
+        gameInfo: { speed: g.speed ?? '', rated: !!g.rated, url: `https://lichess.org/${g.id}` },
+      })
+    }
+    void lichessGameStream(token, gameId, onState, signal, onFull).catch((err) => { if (!signal.aborted) set({ error: String(err.message ?? err) }) })
+  }
+
+  /** Challenge a Lichess bot and follow the game once it accepts. */
+  async function lichessBot(token: string, bot: string, clock: Clock) {
+    abort = new AbortController()
+    const signal = abort.signal
+    const { color } = get()
+    set({ status: 'seeking' })
+    void lichessEvents(token, (e) => {
+      if (e.type !== 'gameStart' || !e.game) return
+      followLichess(token, e.game.gameId, e.game.color, signal)
+    }, signal).catch((err) => { if (!signal.aborted) set({ error: String(err.message ?? err), status: 'idle' }) })
+    lichessChallengeBot(token, bot, { clock, color }).catch((err) => { if (!signal.aborted) set({ error: String(err.message ?? err), status: 'idle' }) })
   }
 
   async function lichessGame(token: string, clock: Clock) {
@@ -124,13 +227,21 @@ export const usePlayStore = create<PlayState>((set, get) => {
 
   return {
     mode: 'engine', color: 'white', strength: 3, lang: 'en', fen: START, sans: [], lastMove: null, log: [],
-    status: 'idle', result: '', error: null, lichess: null,
+    status: 'idle', result: '', error: null, lichess: null, players: null, clocks: null, gameInfo: null, judgement: null, judgements: [], gameId: 0,
     start: (o) => {
       abort?.abort()
       chess = new Chess()
-      set({ mode: o.mode, color: o.color, strength: o.strength, lang: o.lang, fen: START, sans: [], lastMove: null, log: [], status: 'playing', result: '', error: null, lichess: null })
+      // Lichess games learn their players from the game stream.
+      const me = { name: o.lang === 'es' ? 'Tú' : o.lang === 'de' ? 'Du' : 'You' }
+      const sf = { name: `Stockfish (${o.strength}/8)` }
+      const players = o.mode === 'engine'
+        ? (o.color === 'white' ? { white: me, black: sf } : { white: sf, black: me })
+        : o.mode === 'human' ? { white: me, black: me } : null
+      set({ mode: o.mode, color: o.color, strength: o.strength, lang: o.lang, fen: START, sans: [], lastMove: null, log: [], status: 'playing', result: '', error: null, lichess: null,
+        players, clocks: null, gameInfo: null, judgement: null, judgements: [], gameId: get().gameId + 1 })
       if (o.mode === 'lichess') { void lichessGame(o.token ?? '', o.clock ?? LICHESS_CLOCKS[0]); return }
       if (o.mode === 'lichess-ai') { void lichessAi(o.token ?? '', o.clock ?? LICHESS_CLOCKS[0]); return }
+      if (o.mode === 'lichess-bot') { void lichessBot(o.token ?? '', o.bot ?? 'maia5', o.clock ?? LICHESS_CLOCKS[0]); return }
       if (o.mode === 'engine' && o.color === 'black') void engineTurn()
     },
     move: (from, to, promotion) => {
@@ -141,16 +252,21 @@ export const usePlayStore = create<PlayState>((set, get) => {
       const before = chess.history().length
       if (!apply(from, to, promotion, true)) return false
       if (s.mode === 'engine' && get().status === 'playing') void engineTurn()
-      if ((s.mode === 'lichess' || s.mode === 'lichess-ai') && s.lichess?.gameId) {
+      if ((s.mode === 'lichess' || s.mode === 'lichess-ai' || s.mode === 'lichess-bot') && s.lichess?.gameId) {
         const m = chess.history({ verbose: true })[before]
         lichessMakeMove(s.lichess.token, s.lichess.gameId, `${m.from}${m.to}${m.promotion ?? ''}`).catch((err) => set({ error: String(err.message ?? err) }))
       }
       return true
     },
+    resign: () => {
+      const s = get()
+      if (s.lichess?.gameId) lichessResign(s.lichess.token, s.lichess.gameId).catch((err) => set({ error: String(err.message ?? err) }))
+      else if (s.status === 'playing' || s.status === 'thinking') set({ status: 'over', result: T[s.lang].resigned })
+    },
     reset: () => {
       abort?.abort()
       chess = new Chess()
-      set({ fen: START, sans: [], lastMove: null, log: [], status: 'idle', result: '', error: null, lichess: null })
+      set({ fen: START, sans: [], lastMove: null, log: [], status: 'idle', result: '', error: null, lichess: null, players: null, clocks: null, gameInfo: null, judgement: null, judgements: [], gameId: get().gameId + 1 })
     },
   }
 })

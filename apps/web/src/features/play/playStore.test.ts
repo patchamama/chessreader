@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { usePlayStore, setPlayRuntime } from './playStore'
+import { usePlayStore, setPlayRuntime, setPlaySpeaker } from './playStore'
+import { useSettingsStore } from '../../shared/settings/settingsStore'
+import { clearOpeningBook } from './openingBook'
 
 const flush = () => new Promise((r) => setTimeout(r, 0))
 async function settle(until: () => boolean) { for (let i = 0; i < 100 && !until(); i++) await flush() }
 
 beforeEach(() => {
+  clearOpeningBook()
   setPlayRuntime({ analyse: vi.fn(async () => [{ idx: 1, pv: ['e7e5'], scoreCp: 0, depth: 1 }]) as never })
   usePlayStore.getState().reset()
 })
@@ -55,6 +58,86 @@ describe('playing with a tutor (S27)', () => {
     await settle(() => usePlayStore.getState().sans.length === 2)
     expect(usePlayStore.getState().sans).toEqual(['e4', 'c5'])
     expect(calls).toContain('POST https://lichess.org/api/board/game/g1/move/e2e4')
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps the Lichess players, ratings and clocks from the game stream (S13)', async () => {
+    const enc = new TextEncoder()
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('/challenge/ai')) return { ok: true, status: 201, json: async () => ({ id: 'g2' }) }
+      if (url.includes('/board/game/stream/')) {
+        const full = { type: 'gameFull', id: 'g2', speed: 'rapid', rated: false,
+          white: { id: 'me', name: 'Mandy', rating: 1650, title: null }, black: { aiLevel: 3 },
+          state: { moves: '', wtime: 600000, btime: 600000, winc: 5000, binc: 5000, status: 'started' } }
+        return { ok: true, status: 200, body: new ReadableStream({ start(c) { c.enqueue(enc.encode(JSON.stringify(full) + '\n')) } }) }
+      }
+      return { ok: true, status: 200, json: async () => ({}) }
+    }))
+    usePlayStore.getState().start({ mode: 'lichess-ai', color: 'white', strength: 3, lang: 'en', token: 'tok', clock: { minutes: 10, increment: 5 } })
+    await settle(() => usePlayStore.getState().players !== null)
+    const s = usePlayStore.getState()
+    expect(s.players).toEqual({ white: { name: 'Mandy', rating: 1650 }, black: { name: 'Lichess AI level 3' } })
+    expect(s.clocks).toMatchObject({ white: 600000, black: 600000, increment: 5000 })
+    expect(s.gameInfo).toEqual({ speed: 'rapid', rated: false, url: 'https://lichess.org/g2' })
+    vi.unstubAllGlobals()
+  })
+
+  it('challenges a Maia bot on Lichess and follows the game when it starts (S13)', async () => {
+    const calls: string[] = []
+    const enc = new TextEncoder()
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${url} ${init?.body ?? ''}`.trim())
+      if (url.endsWith('/stream/event')) {
+        return { ok: true, status: 200, body: new ReadableStream({ start(c) { c.enqueue(enc.encode('{"type":"gameStart","game":{"gameId":"m1","color":"black"}}\n')) } }) }
+      }
+      if (url.includes('/board/game/stream/')) return { ok: true, status: 200, body: new ReadableStream({ start() {} }) }
+      return { ok: true, status: 200, json: async () => ({ id: 'c1' }) }
+    }))
+    usePlayStore.getState().start({ mode: 'lichess-bot', bot: 'maia5', color: 'black', strength: 3, lang: 'en', token: 'tok', clock: { minutes: 10, increment: 5 } })
+    await settle(() => usePlayStore.getState().lichess?.gameId === 'm1')
+    expect(calls).toContain('POST https://lichess.org/api/challenge/maia5 rated=false&clock.limit=600&clock.increment=5&color=black')
+    expect(usePlayStore.getState().color).toBe('black')
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('move status (S12)', () => {
+  it('a move of a named opening is a book move', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -': ['B00', "King's Pawn Game"] }), { status: 200 })))
+    usePlayStore.getState().start({ mode: 'human', color: 'white', strength: 3, lang: 'en' })
+    usePlayStore.getState().move('e2', 'e4')
+    await settle(() => usePlayStore.getState().judgement !== null)
+    expect(usePlayStore.getState().judgement).toMatchObject({ san: 'e4', kind: 'book', opening: "King's Pawn Game (B00)" })
+    vi.unstubAllGlobals()
+  })
+
+  it('out of the book, the engine rates the move: a move that drops the queen is a blunder', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })))
+    // After 2. Qg4?? the queen hangs to ...d5/...Nf6: +9 for Black (the side to move).
+    setPlayRuntime({ analyse: vi.fn(async (fen: string) => (fen.startsWith('rnbqkbnr/pppp1ppp/8/4p3/4P1Q1')
+      ? [{ idx: 1, pv: ['d7d5'], scoreCp: 900, depth: 10 }]
+      : [{ idx: 1, pv: ['g1f3'], scoreCp: 40, depth: 10 }])) as never })
+    usePlayStore.getState().start({ mode: 'human', color: 'white', strength: 3, lang: 'en' })
+    usePlayStore.getState().move('e2', 'e4')
+    usePlayStore.getState().move('e7', 'e5')
+    usePlayStore.getState().move('d1', 'g4')
+    await settle(() => usePlayStore.getState().judgement?.san === 'Qg4')
+    expect(usePlayStore.getState().judgement).toMatchObject({ san: 'Qg4', kind: 'blunder' })
+    vi.unstubAllGlobals()
+  })
+})
+
+describe('voice (S13)', () => {
+  it('says only the opponent\'s moves when the voice is set to the opponent', async () => {
+    const said: string[] = []
+    setPlaySpeaker((text) => { said.push(text) })
+    useSettingsStore.setState({ playVoice: 'opponent' })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })))
+    usePlayStore.getState().start({ mode: 'engine', color: 'white', strength: 3, lang: 'en' })
+    usePlayStore.getState().move('e2', 'e4')
+    await settle(() => usePlayStore.getState().sans.length === 2)
+    expect(said).toEqual(['pawn to e 5'])
+    useSettingsStore.setState({ playVoice: 'none' })
     vi.unstubAllGlobals()
   })
 })

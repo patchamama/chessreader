@@ -161,6 +161,16 @@ export interface AppSettings {
   evalBarDirection: EvalBarDirection
   stockfishVersion: StockfishVersion
   engineSource: EngineSource
+  /** Play: colour the destinations of the selected piece by how good each move is. */
+  playMoveHints: boolean
+  /** Play: say after each move whether it was book, best, good, an inaccuracy, a mistake or a blunder. */
+  playMoveStatus: boolean
+  /** Play: show the evaluation bar beside the board. */
+  playEvalBar: boolean
+  /** Play: show the legend of the hint colours during the first moves. */
+  playLegend: boolean
+  /** Play: say the moves aloud — none, only the opponent's, or both sides'. */
+  playVoice: 'none' | 'opponent' | 'both'
   /** Master switch: ON → engine runs, eval panel + best-move arrow shown. */
   showEval: boolean
   /** Target search depth (plies). Progressive analysis ramps up to this value. */
@@ -239,6 +249,11 @@ const DEFAULT: AppSettings = {
   evalBarDirection: 'vertical',
   stockfishVersion: 'sf10-jsdelivr',
   engineSource: 'local',
+  playMoveHints: true,
+  playMoveStatus: true,
+  playEvalBar: false,
+  playLegend: true,
+  playVoice: 'none',
   showEval: true,
   engineDepth: 30,
   engineVariations: 1,
