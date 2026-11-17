@@ -66,16 +66,17 @@ class VariationParserTest extends TestCase
     public function testMarksIllegalMoveAsInvalid(): void
     {
         $tree = $this->build('1. e4 e5 2. Nc4'); // Nc4 is illegal
-        $nodes = $tree->mainlineNodes();
+        // Same contract as fixtures/golden/illegal-move.json: the mainline stops
+        // before the illegal move, which stays in the tree marked invalid.
+        $this->assertSame(['e4', 'e5'], array_map(fn($n) => $n->san, $tree->mainlineNodes()));
         $invalidNode = null;
-        foreach ($nodes as $n) {
+        foreach ($tree->getNodes() as $n) {
             if ($n->san === 'Nc4') {
                 $invalidNode = $n;
             }
         }
         $this->assertNotNull($invalidNode);
         $this->assertTrue($invalidNode->invalid);
-        $this->assertCount(3, $nodes);
     }
 
     public function testHandlesCastling(): void

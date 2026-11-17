@@ -127,7 +127,10 @@ final class VariationParser
                 invalid: $isInvalid,
             );
 
-            if (empty($variationStack)) {
+            if (empty($variationStack) && $isInvalid) {
+                // An illegal move: kept in the tree, off the mainline (the line stops).
+                $tree->addDetachedNode($node);
+            } elseif (empty($variationStack)) {
                 // Mainline
                 $tree->addMainlineNode($node);
             } else {

@@ -136,24 +136,21 @@ class GoldenParityTest extends TestCase
         $tree = $this->buildFromFixture($fixture['inputText']);
         $nodes = $tree->mainlineNodes();
 
+        // The invalid node is NOT in the mainline: the mainline stops before it.
         $this->assertCount(count($fixture['expectedMainline']), $nodes);
-
-        $invalidNode = null;
         foreach ($nodes as $n) {
+            $this->assertFalse($n->invalid);
+        }
+
+        // It lives in the tree's nodes, marked invalid, with no squares.
+        $invalidNode = null;
+        foreach ($tree->getNodes() as $n) {
             if ($n->invalid) {
                 $invalidNode = $n;
             }
         }
         $this->assertNotNull($invalidNode);
-
-        $expectedInvalid = null;
-        foreach ($fixture['expectedMainline'] as $m) {
-            if (!empty($m['invalid'])) {
-                $expectedInvalid = $m;
-            }
-        }
-        $this->assertNotNull($expectedInvalid);
-        $this->assertSame($expectedInvalid['san'], $invalidNode->san);
+        $this->assertSame($fixture['expectedInvalidMove']['san'], $invalidNode->san);
         $this->assertSame('', $invalidNode->from);
         $this->assertSame('', $invalidNode->to);
     }

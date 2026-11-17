@@ -32,6 +32,12 @@ final class GameTree
         $this->mainline[] = $node->id;
     }
 
+    /** A node kept in the tree but on no line (an illegal move: the line stops before it). */
+    public function addDetachedNode(GameNode $node): void
+    {
+        $this->nodes[$node->id] = $node;
+    }
+
     public function addVariationNode(GameNode $node, string $variationParentId, int $lineIndex): void
     {
         $this->nodes[$node->id] = $node;
