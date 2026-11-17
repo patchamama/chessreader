@@ -36,6 +36,8 @@ export interface PlyInput {
   after: Score;
   /** The engine's choice in the position before the move, with its line (SAN). */
   best?: { san: string; line: string[] };
+  /** The engine's second choice there, its line and its evaluation (White's view). */
+  second?: { san: string; line: string[]; score: Score };
 }
 
 /** Chance of winning for White, 0–100 (the curve Lichess uses). */
@@ -58,7 +60,8 @@ export type MotifKind =
   | 'attack-undefended' | 'wins-material' | 'discovered-attack' | 'outpost' | 'open-file'
   | 'passed-pawn' | 'battery' | 'x-ray' | 'leaves-hanging'
   | 'threat' | 'pawn-sacrifice' | 'prepares-castling'
-  | 'aims-at' | 'overloaded' | 'traps' | 'combination' | 'positional-sacrifice' | 'key-square';
+  | 'aims-at' | 'overloaded' | 'traps' | 'combination' | 'positional-sacrifice' | 'key-square'
+  | 'only-move' | 'plan';
 
 export interface Motif {
   kind: MotifKind;
@@ -622,8 +625,65 @@ export function reviewGame(plies: PlyInput[]): GameReview {
  * a castling still to come, the pieces that gather on the square where the
  * game is decided, and the start of a combination that wins material.
  */
+/**
+ * Moves not played, from the engine (S31). Annotated books discuss the
+ * alternatives where the engine disagrees, and show more often why the
+ * tempting one fails than why it was better; their plans are carried out in
+ * about a third of the games. So:
+ *  - "the only good move": the game move is the engine's choice and its second
+ *    choice loses 10% or more of the chances — its line shows why;
+ *  - "plan": after a quiet move, the engine's line brings one piece round in
+ *    two moves; the remark says whether the game carries it out.
+ */
+function enginePlans(plies: PlyInput[], moves: ReviewedMove[], add: (i: number, motif: Motif) => void) {
+  const lastPlan: Record<string, number> = { white: -99, black: -99 };
+  let lastOnly = -99;
+  plies.forEach((p, j) => {
+    const view = (sc: Score) => (p.color === 'white' ? winPercent(sc) : 100 - winPercent(sc));
+    const s = p.second;
+    // Only while the game is open, and only when the second choice really fails.
+    const open = view(p.after) >= 15 && view(p.after) <= 85;
+    if (s && p.best && open && j - lastOnly >= 8 && s.line.length >= 2 && stripMarks(p.san) === stripMarks(p.best.san) && view(p.after) - view(s.score) >= 20) {
+      const [alt, ...rest] = s.line.slice(0, 4);
+      const next = p.color === 'white' ? { n: p.moveNumber, c: 'black' as const } : { n: p.moveNumber + 1, c: 'white' as const };
+      add(j, { kind: 'only-move', square: p.to, squares: [], data: { alt: numberLine([`${alt}?`], p.moveNumber, p.color), rest: numberLine(rest, next.n, next.c) } });
+      lastOnly = j;
+    }
+    // A move the engine faults gets "Better was …" instead.
+    const q = moves[j].quality;
+    if (q === 'blunder' || q === 'mistake' || q === 'dubious') return;
+    const line = plies[j + 1]?.best?.line;
+    if (!line || line.length < 4 || /[x+#]/.test(p.san) || p.san.startsWith('O-O') || j - lastPlan[p.color] < 6) return;
+    const c = new Chess(p.fenAfter);
+    const mv = [];
+    for (const san of line.slice(0, 4)) {
+      try { mv.push(c.move(san)); } catch { return; }
+    }
+    const [, a, , b] = mv;
+    // A manoeuvre: one piece, twice, quietly — not a capture, not a step back
+    // from an attack (the reply chasing it makes that a reaction, not a plan).
+    if (!a || !b || a.piece === 'p' || a.piece === 'k' || b.from !== a.to || a.captured || b.captured || b.to === a.from) return;
+    if (attacksFrom(new Chess(mv[2].after), mv[2].to).includes(a.to)) return;
+    const mine = plies.slice(j + 1, j + 9).filter((q) => q.color === p.color);
+    const ia = mine.findIndex((q) => stripMarks(q.san) === stripMarks(a.san));
+    const ib = mine.findIndex((q) => stripMarks(q.san) === stripMarks(b.san));
+    const reached = ia >= 0 && ib > ia ? mine[ib].moveNumber : 0;
+    const reply = p.color === 'white' ? { n: p.moveNumber, c: 'black' as const } : { n: p.moveNumber + 1, c: 'white' as const };
+    add(j, { kind: 'plan', square: p.to, squares: [a.from, a.to, b.to], data: { line: numberLine(mv.map((x) => x.san), reply.n, reply.c), reached } });
+    lastPlan[p.color] = j;
+  });
+}
+
+/** SAN written with the piece letters of the language ("Nc3" → "Cc3"), in a line of moves. */
+function localLine(text: string, lang: Lang): string {
+  const map = lang === 'es' ? { K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' } as Record<string, string>
+    : lang === 'de' ? { K: 'K', Q: 'D', R: 'T', B: 'L', N: 'S' } as Record<string, string> : null;
+  return map ? text.replace(/(^|\s)([KQRBN])(?=[a-h1-8x])/g, (_m, sp: string, c: string) => `${sp}${map[c]}`).replace(/=([QRBN])/g, (_m, c: string) => `=${map[c]}`) : text;
+}
+
 function lookAhead(plies: PlyInput[], moves: ReviewedMove[]) {
   const add = (i: number, motif: Motif) => moves[i].motifs.push(motif);
+  enginePlans(plies, moves, add);
   // Material won that the opponent wins back a few moves later ("4…Nxe4 …
   // 6.Nxe5"): it was taken, not won — the remark says when it comes back.
   plies.forEach((p, j) => {
@@ -850,7 +910,7 @@ export function motifText(m: Motif, fenAfter: string, lang: Lang): string {
       const [target, ...attackers] = m.squares;
       if (m.data?.prior) {
         const prior = String(m.data.prior).split(',').map(who);
-        return lang === 'es' ? `${me} se suma al ataque ${prior.length > 1 ? 'de ' : ''}${list(prior, lang).replace(/^el /, 'del ')} sobre ${who(target)}.`
+        return lang === 'es' ? `${me} se suma al ataque ${list(prior, lang).replace(/^el /, 'del ').replace(/^(?!del )/, 'de ')} sobre ${who(target)}.`
           : lang === 'en' ? `${me} joins the attack of ${list(prior, lang)} on ${who(target)}.`
           : `${me} verstärkt den Angriff ${list(prior, lang).replace(/^der (\S+)/, (_x, n: string) => `des ${n === 'Bauer' ? 'Bauern' : n === 'König' ? 'Königs' : n === 'Turm' ? 'Turms' : n + 's'}`)} auf ${whom(target)}.`;
       }
@@ -861,8 +921,11 @@ export function motifText(m: Motif, fenAfter: string, lang: Lang): string {
     case 'mate-threat':
       return lang === 'es' ? `Amenaza mate en ${m.data?.n}.` : lang === 'en' ? `Threatens mate in ${m.data?.n}.` : `Droht Matt in ${m.data?.n}.`;
     case 'late-value':
-      return lang === 'es' ? `Parece una jugada modesta, pero ${piece(lang, m.data?.piece)} colocado aquí será decisivo en la jugada ${m.data?.move}.`
-        : lang === 'en' ? `It looks modest, but ${piece(lang, m.data?.piece)} placed here will be decisive on move ${m.data?.move}.`
+      if (lang === 'es') {
+        const fem = m.data?.piece === 'r' || m.data?.piece === 'q';
+        return `Parece una jugada modesta, pero ${piece(lang, m.data?.piece)} colocad${fem ? 'a' : 'o'} aquí será decisiv${fem ? 'a' : 'o'} en la jugada ${m.data?.move}.`;
+      }
+      return lang === 'en' ? `It looks modest, but ${piece(lang, m.data?.piece)} placed here will be decisive on move ${m.data?.move}.`
         : `Sieht bescheiden aus, aber ${piece(lang, m.data?.piece)} auf diesem Feld entscheidet im ${m.data?.move}. Zug.`;
     case 'threat': {
       const sq = m.squares[0];
@@ -969,6 +1032,20 @@ export function motifText(m: Motif, fenAfter: string, lang: Lang): string {
       return lang === 'es' ? `Sacrificio posicional: entrega ${pawn ? 'un peón' : 'material'} a cambio de juego (no lo recupera en las jugadas siguientes).`
         : lang === 'en' ? `A positional sacrifice: it gives ${pawn ? 'a pawn' : 'material'} for play (not won back in the next moves).`
         : `Positionelles Opfer: gibt ${pawn ? 'einen Bauern' : 'Material'} für Spiel (in den nächsten Zügen nicht zurückgewonnen).`;
+    }
+    case 'only-move': {
+      const alt = localLine(String(m.data?.alt), lang);
+      const rest = localLine(String(m.data?.rest), lang);
+      return lang === 'es' ? `La única jugada buena: si ${alt}, ${rest}.`
+        : lang === 'en' ? `The only good move: if ${alt}, ${rest}.`
+        : `Der einzige gute Zug: auf ${alt} folgt ${rest}.`;
+    }
+    case 'plan': {
+      const line = localLine(String(m.data?.line), lang);
+      const n = Number(m.data?.reached);
+      return lang === 'es' ? `Plan: ${line}; ${n ? `se cumple en la jugada ${n}` : 'en la partida no se lleva a cabo'}.`
+        : lang === 'en' ? `Plan: ${line}; ${n ? `carried out on move ${n}` : 'the game does not carry it out'}.`
+        : `Plan: ${line}; ${n ? `im ${n}. Zug umgesetzt` : 'in der Partie nicht umgesetzt'}.`;
     }
     case 'combination':
       return m.data?.mate

@@ -33,6 +33,22 @@ describe('analyseGame', () => {
     expect(plies[5].before).toEqual({ cp: 0 }) // Black still had other moves
   })
 
+  it('asks for two lines and keeps the second choice with its evaluation (S31)', async () => {
+    const counts: number[] = []
+    const analyse: AnalysePosition = async (fen, _d, count) => {
+      counts.push(count)
+      const white = fen.split(' ')[1] === 'w'
+      return [
+        { idx: 1, depth: 10, scoreCp: 50, pv: white ? ['g1f3'] : ['g8f6'] },
+        { idx: 2, depth: 10, scoreCp: -120, pv: white ? ['a2a3', 'e7e5'] : ['a7a6', 'g1f3'] },
+      ]
+    }
+    const plies = await analyseGame(game.tree, analyse, { depth: 10 })
+    expect(new Set(counts)).toEqual(new Set([2]))
+    expect(plies[0].second).toEqual({ san: 'a3', line: ['a3', 'e5'], score: { cp: -120 } })
+    expect(plies[1].second).toEqual({ san: 'a6', line: ['a6', 'Nf3'], score: { cp: 120 } }) // Black to move: −120 for Black
+  })
+
   it('stops when aborted', async () => {
     const ctrl = new AbortController()
     const analyse: AnalysePosition = async () => { ctrl.abort(); return [{ idx: 1, depth: 1, scoreCp: 0, pv: [] }] }

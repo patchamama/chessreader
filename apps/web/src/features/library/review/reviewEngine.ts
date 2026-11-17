@@ -71,6 +71,7 @@ export async function analyseGame(tree: GameTree, analyse: AnalysePosition, opti
   const fens = [tree.startFen, ...nodes.map((n) => n.fen)]
   const scores: Score[] = []
   const best: Array<{ san: string; line: string[] } | undefined> = []
+  const second: Array<{ san: string; line: string[]; score: Score } | undefined> = []
   for (let i = 0; i < fens.length; i++) {
     if (options.signal?.aborted) throw new Error('aborted')
     const chess = new Chess(fens[i])
@@ -78,15 +79,20 @@ export async function analyseGame(tree: GameTree, analyse: AnalysePosition, opti
     if (chess.isCheckmate()) {
       scores.push({ mate: whiteToMove ? -1 : 1 })
       best.push(undefined)
+      second.push(undefined)
     } else if (chess.isGameOver()) {
       scores.push({ cp: 0 })
       best.push(undefined)
+      second.push(undefined)
     } else {
-      const [line] = await analyse(fens[i], options.depth, 1)
+      // Two lines: the second choice tells "the only good move" (S31).
+      const [line, other] = await analyse(fens[i], options.depth, 2)
       if (options.signal?.aborted) throw new Error('aborted')
       scores.push(toWhite(line, whiteToMove))
       const san = uciLineToSan(fens[i], line?.pv ?? [])
       best.push(san.length ? { san: san[0], line: san } : undefined)
+      const alt = other ? uciLineToSan(fens[i], other.pv ?? []) : []
+      second.push(alt.length ? { san: alt[0], line: alt, score: toWhite(other, whiteToMove) } : undefined)
     }
     options.onProgress?.(i + 1, fens.length)
   }
@@ -102,6 +108,7 @@ export async function analyseGame(tree: GameTree, analyse: AnalysePosition, opti
   return nodes.map((n, i) => ({
     nodeId: n.id, san: n.san, color: n.color, moveNumber: n.moveNumber, from: n.from, to: n.to,
     fenBefore: fens[i], fenAfter: n.fen, before: scores[i], after: scores[i + 1], best: best[i],
+    ...(second[i] ? { second: second[i] } : {}),
   }))
 }
 
