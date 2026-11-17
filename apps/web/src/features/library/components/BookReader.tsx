@@ -382,7 +382,8 @@ export default function BookReader() {
       range.setEndBefore(img)
       const offset = range.toString().length
 
-      const fen = inferDiagramFen(games, offset)
+      // A diagram written by the commentary carries its position.
+      const fen = img.getAttribute('data-fen') || inferDiagramFen(games, offset)
       const src = img.getAttribute('src') ?? ''
       const alt = img.getAttribute('alt') ?? 'diagram'
 
@@ -548,6 +549,7 @@ export default function BookReader() {
     .epub-content h4 { font-weight: ${epub.h4.bold ? '700' : '400'}; font-style: ${epub.h4.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h4.sizeDelta}px; margin: 0.8em 0 0.2em; }
     .epub-content h5 { font-weight: ${epub.h5.bold ? '700' : '400'}; font-style: ${epub.h5.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h5.sizeDelta}px; margin: 0.7em 0 0.2em; }
     .epub-content p  { margin-bottom: ${epub.paragraphSpacing}rem; text-indent: ${epub.paragraphIndent}rem; line-height: 1.7; }
+    .epub-content p.diagram-eval { text-align: center; text-indent: 0; font-size: 0.85em; color: #555; margin-top: -0.5rem; }
     .epub-content hr { border: none; border-top: 1px solid #cbd5e1; margin: 1.5em 0; }
     .epub-content img { max-width: 100%; height: auto; display: block; margin: 1rem ${epub.imageAlign === 'center' ? 'auto' : epub.imageAlign === 'right' ? '0 0 auto' : '0 auto 0 0'}; border-radius: 4px; }
     .epub-content ul { list-style: disc; padding-left: 1.5rem; margin-bottom: ${epub.paragraphSpacing}rem; }

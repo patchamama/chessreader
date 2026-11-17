@@ -141,6 +141,11 @@ export interface AppSettings {
   /** Its API key (kept in this browser, sent only to that provider) and model id. */
   aiKey: string
   aiModel: string
+  /** How an annotated game is written: remarks in braces, lines split at each remark, or runs of moves followed by a paragraph. */
+  commentLayout: 'inline' | 'split' | 'paragraphs'
+  /** Diagrams in an annotated game at its key moments, with the engine evaluation under them. */
+  commentDiagrams: boolean
+  commentDiagramEval: boolean
   /** Personal Lichess token (the masters explorer needs one). Kept in this browser, sent only to Lichess. */
   lichessToken: string
   boardTheme: BoardTheme
@@ -214,6 +219,9 @@ const DEFAULT: AppSettings = {
   aiKey: '',
   aiModel: '',
   lichessToken: '',
+  commentLayout: 'inline',
+  commentDiagrams: false,
+  commentDiagramEval: true,
   boardTheme: 'blue',
   evalBarDirection: 'vertical',
   stockfishVersion: 'sf10-jsdelivr',

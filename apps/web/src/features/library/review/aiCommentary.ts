@@ -1,4 +1,4 @@
-import { annotateGame, buildCommentaryRequest, parseCommentaryResponse } from '@chess-ebook/chess-shared'
+import { annotateGame, buildCommentaryRequest, parseCommentaryResponse, type AnnotateOptions } from '@chess-ebook/chess-shared'
 import type { GameReview, Lang, PlyInput } from '@chess-ebook/chess-shared'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { claudeModel } from './claudeModel'
@@ -53,6 +53,9 @@ export interface AiCommentaryInput {
   lang: Lang
   white?: string | null
   black?: string | null
+  /** Book layout and diagrams, as for the rule-based commentary. */
+  layout?: AnnotateOptions['layout']
+  diagrams?: AnnotateOptions['diagrams']
 }
 
 /** The game annotated with the model's remarks (better lines and marks still come from the engine). */
@@ -62,5 +65,6 @@ export async function commentWithModel(model: CommentaryModel, input: AiCommenta
   if (Object.keys(parsed.comments).length === 0) throw new Error('The model returned no remarks for this game.')
   return annotateGame(input.plies, input.review, {
     level: 2, lang: input.lang, white: input.white, black: input.black, intro: parsed.intro || undefined, remarks: parsed.comments,
+    layout: input.layout, diagrams: input.diagrams,
   })
 }

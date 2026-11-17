@@ -28,6 +28,7 @@ const T: Record<Lang, Record<string, string>> = {
     l3: '3 · tactics, opening and summary', open: 'Open annotated game', chapter: 'This chapter', book: 'Whole book',
     games: 'games', depth: 'Depth', brilliant: 'brilliant', good: 'very good', dubious: 'inaccuracies', mistake: 'mistakes', blunder: 'blunders',
     ai: 'Comment with a language model', aiBusy: 'Writing commentary…', aiSetup: 'To comment with a language model, set its provider, key and model in Settings.',
+    layout: 'Layout', inline: 'Remarks in braces', split: 'A line per remark', paragraphs: 'Paragraph after the moves', diagrams: 'Diagrams at key moments', evalUnder: 'Evaluation under diagrams', diagramHere: 'Diagram at this move', diagramsChosen: 'chosen diagrams',
     players: 'Players are read from PGN tags, from lines "White: … / Black: …" or from a heading "White – Black".',
   },
   es: {
@@ -38,6 +39,7 @@ const T: Record<Lang, Record<string, string>> = {
     l3: '3 · táctica, apertura y resumen', open: 'Abrir la partida comentada', chapter: 'Este capítulo', book: 'Todo el libro',
     games: 'partidas', depth: 'Profundidad', brilliant: 'brillantes', good: 'muy buenas', dubious: 'imprecisiones', mistake: 'errores', blunder: 'errores graves',
     ai: 'Comentar con un modelo de lenguaje', aiBusy: 'Escribiendo comentarios…', aiSetup: 'Para comentar con un modelo de lenguaje, configura proveedor, clave y modelo en Ajustes.',
+    layout: 'Formato', inline: 'Comentarios entre llaves', split: 'Una línea por comentario', paragraphs: 'Párrafo tras las jugadas', diagrams: 'Diagramas en momentos clave', evalUnder: 'Evaluación bajo los diagramas', diagramHere: 'Diagrama en esta jugada', diagramsChosen: 'diagramas elegidos',
     players: 'Los jugadores se leen de las etiquetas PGN, de líneas "Blancas: … / Negras: …" o de un encabezado "Blancas – Negras".',
   },
   de: {
@@ -48,6 +50,7 @@ const T: Record<Lang, Record<string, string>> = {
     l3: '3 · Taktik, Eröffnung und Zusammenfassung', open: 'Kommentierte Partie öffnen', chapter: 'Dieses Kapitel', book: 'Ganzes Buch',
     games: 'Partien', depth: 'Tiefe', brilliant: 'glänzend', good: 'sehr gut', dubious: 'Ungenauigkeiten', mistake: 'Fehler', blunder: 'grobe Fehler',
     ai: 'Mit einem Sprachmodell kommentieren', aiBusy: 'Kommentar wird geschrieben…', aiSetup: 'Zum Kommentieren mit einem Sprachmodell Anbieter, Schlüssel und Modell in den Einstellungen festlegen.',
+    layout: 'Layout', inline: 'Anmerkungen in Klammern', split: 'Eine Zeile pro Anmerkung', paragraphs: 'Absatz nach den Zügen', diagrams: 'Diagramme an Schlüsselstellen', evalUnder: 'Bewertung unter Diagrammen', diagramHere: 'Diagramm bei diesem Zug', diagramsChosen: 'gewählte Diagramme',
     players: 'Die Spieler werden aus PGN-Tags, aus Zeilen "Weiß: … / Schwarz: …" oder aus einer Überschrift "Weiß – Schwarz" gelesen.',
   },
 }
@@ -77,6 +80,13 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
   const navigate = useNavigate()
   const [progress, setProgress] = useState<{ done: number; total: number; game: number } | null>(null)
   const [level, setLevel] = useState<1 | 2 | 3>(2)
+  const layout = useSettingsStore((s) => s.commentLayout)
+  const keyDiagrams = useSettingsStore((s) => s.commentDiagrams)
+  const diagramEval = useSettingsStore((s) => s.commentDiagramEval)
+  const currentNodeId = useStudyBoardStore((s) => s.currentNodeId)
+  /** Moves the reader picked for a diagram (node ids of this game). */
+  const [diagramAt, setDiagramAt] = useState<string[]>([])
+  const diagrams = keyDiagrams || diagramAt.length ? { key: keyDiagrams, at: diagramAt, eval: diagramEval } : undefined
   const [database, setDatabase] = useState<{ tree: unknown; eco: string; name: string } | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
@@ -140,7 +150,7 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
   function openAnnotated() {
     if (!reviewed) return
     const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
-    const annotated = annotateGame(reviewed.plies, reviewed.review, { level, lang, white: players.white, black: players.black })
+    const annotated = annotateGame(reviewed.plies, reviewed.review, { level, lang, white: players.white, black: players.black, layout, diagrams })
     const { title, chapters } = textToChapters(annotated, `${names} (${t.title.toLowerCase()})`)
     openBook(title, chapters)
     navigate(`/read/${EXTERNAL_BOOK_ID}`)
@@ -153,7 +163,7 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
     setAiError(null)
     try {
       const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
-      const annotated = await commentWithModel(model, { plies: reviewed.plies, review: reviewed.review, lang, white: players.white, black: players.black })
+      const annotated = await commentWithModel(model, { plies: reviewed.plies, review: reviewed.review, lang, white: players.white, black: players.black, layout, diagrams })
       const { title, chapters } = textToChapters(annotated, `${names} (${t.ai.toLowerCase()})`)
       openBook(title, chapters)
       navigate(`/read/${EXTERNAL_BOOK_ID}`)
@@ -308,6 +318,35 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
                 <option value={3}>{t.l3}</option>
               </select>
             </label>
+            <label className="flex items-center gap-1 text-[11px] text-slate-700">
+              {t.layout}
+              <select
+                aria-label={t.layout}
+                value={layout}
+                onChange={(e) => setSettings({ commentLayout: e.target.value as 'inline' | 'split' | 'paragraphs' })}
+                className="rounded border border-slate-300 bg-white px-1 py-0.5"
+              >
+                <option value="inline">{t.inline}</option>
+                <option value="split">{t.split}</option>
+                <option value="paragraphs">{t.paragraphs}</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-1 text-[11px] text-slate-700">
+              <input type="checkbox" checked={keyDiagrams} onChange={(e) => setSettings({ commentDiagrams: e.target.checked })} />
+              {t.diagrams}
+            </label>
+            <label className="flex items-center gap-1 text-[11px] text-slate-700">
+              <input type="checkbox" checked={diagramEval} onChange={(e) => setSettings({ commentDiagramEval: e.target.checked })} />
+              {t.evalUnder}
+            </label>
+            <button
+              className={button}
+              disabled={!currentNodeId || !reviewed.plies.some((p) => p.nodeId === currentNodeId)}
+              aria-pressed={!!currentNodeId && diagramAt.includes(currentNodeId)}
+              onClick={() => currentNodeId && setDiagramAt((d) => (d.includes(currentNodeId) ? d.filter((x) => x !== currentNodeId) : [...d, currentNodeId]))}
+            >
+              ▦ {t.diagramHere}{diagramAt.length ? ` (${diagramAt.length} ${t.diagramsChosen})` : ''}
+            </button>
             <button className={button} onClick={openAnnotated}>{t.open}</button>
             <button className={button} onClick={() => void openAiAnnotated()} disabled={!aiReady || aiBusy} title={aiReady ? undefined : t.aiSetup}>
               {aiBusy ? t.aiBusy : `✨ ${t.ai}`}

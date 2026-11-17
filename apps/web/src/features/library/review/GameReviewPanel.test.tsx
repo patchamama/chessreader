@@ -75,6 +75,22 @@ describe('GameReviewPanel', () => {
     expect(html).toContain('(3... g6 4. Qf3 Nf6)')
   })
 
+  it('writes the game as a book: a line per remark and a diagram with its evaluation at the blunder', async () => {
+    useSettingsStore.setState({ commentLayout: 'inline', commentDiagrams: false, commentDiagramEval: true })
+    renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Review game with the engine' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open annotated game' })).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Layout'), { target: { value: 'split' } })
+    fireEvent.click(screen.getByLabelText('Diagrams at key moments'))
+    fireEvent.click(screen.getByRole('button', { name: 'Open annotated game' }))
+    const html = useExternalBookStore.getState().chapters[0].html
+    expect(html).not.toContain('{')
+    expect(html).toMatch(/<p>Blunder/)
+    expect(html).toMatch(/<img [^>]*data-fen=/)
+    expect(html).toContain('class="diagram-eval"')
+    useSettingsStore.setState({ commentLayout: 'inline', commentDiagrams: false })
+  })
+
   it('keeps a record per book and chapter and sums players up', async () => {
     renderPanel()
     fireEvent.click(screen.getByRole('button', { name: 'Review game with the engine' }))

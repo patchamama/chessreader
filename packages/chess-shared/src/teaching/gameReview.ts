@@ -878,6 +878,35 @@ export interface AnnotateOptions {
   remarks?: Record<number, string>;
   /** An opening paragraph written elsewhere, added after the summary line. */
   intro?: string;
+  /**
+   * How remarks sit among the moves: 'inline' { in braces } (default),
+   * 'split' (the line of moves breaks after a commented move, the remark is its
+   * own paragraph), 'paragraphs' (runs of moves, each followed by one paragraph
+   * with the remarks of those moves) — the last two as chess books print them.
+   */
+  layout?: 'inline' | 'split' | 'paragraphs';
+  /** Diagram marks (`[Diagram fen="…" eval="…"]`, one line each): after the key moments, after chosen moves (node ids), with the evaluation. */
+  diagrams?: { key?: boolean; at?: string[]; eval?: boolean };
+}
+
+/** "Evaluation: +1.2 (White is better)" / "White mates in 3", from White's point of view. */
+export function evalText(score: Score, lang: Lang): string {
+  if (score.mate !== undefined && score.mate !== 0) {
+    const n = Math.abs(score.mate);
+    const white = score.mate > 0;
+    return lang === 'es' ? `Mate en ${n} para las ${white ? 'blancas' : 'negras'}`
+      : lang === 'en' ? `${white ? 'White' : 'Black'} mates in ${n}`
+      : `${white ? 'Weiß' : 'Schwarz'} setzt in ${n} matt`;
+  }
+  const cp = score.cp ?? 0;
+  const value = `${cp >= 0 ? '+' : '−'}${(Math.abs(cp) / 100).toFixed(1)}`;
+  const side = cp > 0 ? 0 : 1;
+  const words = Math.abs(cp) < 50
+    ? { es: 'igualdad', en: 'equal', de: 'ausgeglichen' }
+    : Math.abs(cp) < 150
+      ? { es: `algo mejor las ${['blancas', 'negras'][side]}`, en: `${['White', 'Black'][side]} is slightly better`, de: `${['Weiß', 'Schwarz'][side]} steht etwas besser` }
+      : { es: `ventaja de las ${['blancas', 'negras'][side]}`, en: `${['White', 'Black'][side]} is clearly better`, de: `${['Weiß', 'Schwarz'][side]} steht klar besser` };
+  return `${lang === 'es' ? 'Evaluación' : lang === 'en' ? 'Evaluation' : 'Bewertung'}: ${value} (${words[lang]})`;
 }
 
 /**
@@ -919,14 +948,29 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
   const LETTERS: Record<string, string> = { K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' };
   const local = (san: string) =>
     lang === 'es' ? san.replace(/^[KQRBN]/, (c) => LETTERS[c]).replace(/=([QRBN])/, (_m, c: string) => `=${LETTERS[c]}`) : san;
-  const body: string[] = [];
+  const layout = options.layout ?? 'inline';
+  const keyMoment = (i: number) => {
+    const q = review.moves[i].quality;
+    return q === 'blunder' || q === 'mistake' || q === 'brilliant' || q === 'good' || plies[i].san.includes('#');
+  };
+  const side = (c: 'white' | 'black') => (lang === 'es' ? (c === 'white' ? 'blancas' : 'negras') : lang === 'en' ? (c === 'white' ? 'White' : 'Black') : (c === 'white' ? 'Weiß' : 'Schwarz'));
+
+  const out: string[] = []; // lines (split/paragraphs) or chunks (inline)
+  let line: string[] = [];
+  let pending: string[] = []; // 'paragraphs': remarks waiting for the end of the run
   let needNumber = true;
+  const flush = () => {
+    if (line.length) out.push(line.join(' '));
+    line = [];
+    if (pending.length) out.push(pending.join(' '));
+    pending = [];
+  };
   plies.forEach((p, i) => {
     const m = review.moves[i];
     const white = p.color === 'white';
     const glyph = m.quality ? GLYPH[m.quality] : '';
     const number = white ? `${p.moveNumber}. ` : needNumber ? `${p.moveNumber}... ` : '';
-    let chunk = `${number}${local(p.san.replace(/[!?]+$/, ''))}${glyph}`;
+    const move = `${number}${local(p.san.replace(/[!?]+$/, ''))}${glyph}`;
     needNumber = false;
 
     const remarks: string[] = [];
@@ -949,14 +993,50 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
     }
     const better = level >= 2 && m.best && (m.quality === 'blunder' || m.quality === 'mistake' || m.quality === 'dubious');
     if (better) remarks.push(`${t.better}:`);
-    if (remarks.length) { chunk += ` { ${remarks.join(' ')} }`; needNumber = true; }
-    if (better) {
-      const line = m.best!.line.slice(0, 6);
-      chunk += ` (${numberLine(line.length ? line : [m.best!.san], p.moveNumber, p.color).split(' ').map(local).join(' ')})`;
+    const variation = better
+      ? `(${numberLine(m.best!.line.slice(0, 6).length ? m.best!.line.slice(0, 6) : [m.best!.san], p.moveNumber, p.color).split(' ').map(local).join(' ')})`
+      : '';
+    const d = options.diagrams;
+    const diagram = d && ((d.key && keyMoment(i)) || d.at?.includes(p.nodeId))
+      ? `[Diagram fen="${p.fenAfter}"${d.eval ? ` eval="${evalText(p.after, lang)}"` : ''}]`
+      : '';
+
+    if (layout === 'inline') {
+      let chunk = move;
+      if (remarks.length) chunk += ` { ${remarks.join(' ')} }`;
+      if (variation) chunk += ` ${variation}`;
+      if (remarks.length || variation) needNumber = true;
+      out.push(chunk);
+      if (diagram) { out.push(`\n${diagram}\n`); needNumber = true; }
+      return;
     }
-    body.push(chunk);
+    line.push(move);
+    if (layout === 'split') {
+      if (remarks.length || variation || diagram) {
+        flush();
+        if (remarks.length) out.push(remarks.join(' '));
+        if (variation) out.push(variation);
+        if (diagram) out.push(diagram);
+        needNumber = true;
+      }
+      return;
+    }
+    // 'paragraphs': remarks wait for the end of the run; a variation or a
+    // diagram ends the run (a variation must follow the move it replaces).
+    if (remarks.length) pending.push(`${lang === 'es' ? 'Jugada' : lang === 'en' ? 'Move' : 'Zug'} ${p.moveNumber} (${side(p.color)}): ${remarks.join(' ')}`);
+    if (variation || diagram || line.length >= 10) {
+      flush();
+      if (variation) out.push(variation);
+      if (diagram) out.push(diagram);
+      needNumber = true;
+    }
   });
-  lines.push(body.join(' '));
+  if (layout === 'inline') {
+    lines.push(out.join(' ').replace(/ ?\n /g, '\n').replace(/\n /g, '\n'));
+  } else {
+    flush();
+    lines.push(...out);
+  }
   return lines.join('\n');
 }
 
