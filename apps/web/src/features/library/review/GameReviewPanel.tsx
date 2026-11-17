@@ -21,7 +21,7 @@ interface GameReviewPanelProps {
 
 const T: Record<Lang, Record<string, string>> = {
   en: {
-    title: 'Engine review', run: 'Review game with the engine', all: 'Review every game of the chapter', cancel: 'Cancel',
+    title: 'Engine review', run: 'Review and comment the game', all: 'Review and comment every game of the chapter', cancel: 'Cancel',
     analysing: 'Analysing position', accuracy: 'accuracy', white: 'White', black: 'Black', opening: 'Opening',
     moments: 'Key moments', none: 'No turning points: a steady game.', go: 'Go to', line: 'Play the line',
     better: 'Better was', follow: 'There followed', level: 'Commentary level', l1: '1 · marks only', l2: '2 · remarks and better lines',
@@ -33,7 +33,7 @@ const T: Record<Lang, Record<string, string>> = {
     players: 'Players are read from PGN tags, from lines "White: … / Black: …" or from a heading "White – Black".',
   },
   es: {
-    title: 'Revisión con el motor', run: 'Revisar la partida con el motor', all: 'Revisar todas las partidas del capítulo', cancel: 'Cancelar',
+    title: 'Revisión con el motor', run: 'Revisar y comentar la partida', all: 'Revisar y comentar todas las partidas del capítulo', cancel: 'Cancelar',
     analysing: 'Analizando posición', accuracy: 'de precisión', white: 'Blancas', black: 'Negras', opening: 'Apertura',
     moments: 'Momentos clave', none: 'Sin puntos de inflexión: una partida pareja.', go: 'Ir a', line: 'Reproducir la línea',
     better: 'Era mejor', follow: 'Siguió', level: 'Nivel de comentario', l1: '1 · solo signos', l2: '2 · comentarios y líneas mejores',
@@ -45,7 +45,7 @@ const T: Record<Lang, Record<string, string>> = {
     players: 'Los jugadores se leen de las etiquetas PGN, de líneas "Blancas: … / Negras: …" o de un encabezado "Blancas – Negras".',
   },
   de: {
-    title: 'Engine-Analyse', run: 'Partie mit der Engine prüfen', all: 'Alle Partien des Kapitels prüfen', cancel: 'Abbrechen',
+    title: 'Engine-Analyse', run: 'Partie prüfen und kommentieren', all: 'Alle Partien des Kapitels prüfen und kommentieren', cancel: 'Abbrechen',
     analysing: 'Analysiere Stellung', accuracy: 'Genauigkeit', white: 'Weiß', black: 'Schwarz', opening: 'Eröffnung',
     moments: 'Schlüsselmomente', none: 'Keine Wendepunkte: eine ausgeglichene Partie.', go: 'Gehe zu', line: 'Variante abspielen',
     better: 'Besser war', follow: 'Es folgte', level: 'Kommentarstufe', l1: '1 · nur Zeichen', l2: '2 · Anmerkungen und bessere Varianten',

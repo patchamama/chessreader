@@ -1,6 +1,6 @@
 import { Chess, type Square } from 'chess.js';
 import type { Lang } from './concepts.js';
-import { moveMotifs, motifText, type GameReview, type Motif, type PlyInput } from './gameReview.js';
+import { moveMotifs, motifText, spokenMotifs, type GameReview, type Motif, type PlyInput } from './gameReview.js';
 
 /**
  * A master going through a game the user played: for the side the user chose
@@ -117,13 +117,13 @@ export function coachGame(plies: PlyInput[], review: GameReview, options: CoachO
       }
       // Level 3: the idea behind every move.
       if (level >= 3 && said.length === 0) {
-        const ideas = m.motifs.filter((x) => !PLAIN.has(x.kind)).slice(0, 2).map((x) => motifText(x, p.fenAfter, lang)).filter(Boolean);
+        const ideas = spokenMotifs(m.motifs).filter((x) => !PLAIN.has(x.kind)).slice(0, 2).map((x) => motifText(x, p.fenAfter, lang)).filter(Boolean);
         said.push(...ideas);
       }
     } else if (level >= 2) {
       // The opponent: what this move is up to.
       const direct = (k: Motif['kind']) => k === 'threat' || k === 'mate-threat' || k === 'attack-undefended';
-      const warn = m.motifs.filter((x) => WARN.has(x.kind)).sort((a, b) => Number(direct(b.kind)) - Number(direct(a.kind))).slice(0, 2).map((x) => ({ x, t: motifText(x, p.fenAfter, lang) })).filter((y) => y.t);
+      const warn = spokenMotifs(m.motifs).filter((x) => WARN.has(x.kind)).sort((a, b) => Number(direct(b.kind)) - Number(direct(a.kind))).slice(0, 2).map((x) => ({ x, t: motifText(x, p.fenAfter, lang) })).filter((y) => y.t);
       if (warn.length) {
         const verb = (k: Motif['kind']) => k === 'threat' || k === 'mate-threat' || k === 'attack-undefended';
         said.push(warn.map(({ x, t }, k) => (k === 0 ? (verb(x.kind) ? `${w.watch} ${lowerFirst(t)}` : `${w.idea} — ${t}`) : t)).join(' '));

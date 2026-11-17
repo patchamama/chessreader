@@ -43,7 +43,7 @@ beforeEach(() => {
 describe('GameReviewPanel', () => {
   it('rates both players by name and lists the key moment', async () => {
     renderPanel()
-    fireEvent.click(screen.getByRole('button', { name: 'Review game with the engine' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review and comment the game' }))
     await waitFor(() => expect(screen.getByTestId('accuracy-white')).toBeInTheDocument())
     expect(screen.getByTestId('accuracy-white')).toHaveTextContent('Tutor')
     expect(screen.getByTestId('accuracy-black')).toHaveTextContent('Novice')
@@ -56,7 +56,7 @@ describe('GameReviewPanel', () => {
 
   it('a key moment links back to its position', async () => {
     renderPanel()
-    fireEvent.click(screen.getByRole('button', { name: 'Review game with the engine' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review and comment the game' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Go to 3... Nf6' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Go to 3... Nf6' }))
     expect(useStudyBoardStore.getState().currentNodeId).toBe(main[5])
@@ -64,7 +64,7 @@ describe('GameReviewPanel', () => {
 
   it('opens the game annotated at the chosen level', async () => {
     renderPanel()
-    fireEvent.click(screen.getByRole('button', { name: 'Review game with the engine' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review and comment the game' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Open annotated game' })).toBeInTheDocument())
     fireEvent.change(screen.getByLabelText('Commentary level'), { target: { value: '3' } })
     fireEvent.click(screen.getByRole('button', { name: 'Open annotated game' }))
@@ -78,7 +78,7 @@ describe('GameReviewPanel', () => {
   it('writes the game as a book: a line per remark and a diagram with its evaluation at the blunder', async () => {
     useSettingsStore.setState({ commentLayout: 'inline', commentDiagrams: false, commentDiagramEval: true })
     renderPanel()
-    fireEvent.click(screen.getByRole('button', { name: 'Review game with the engine' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review and comment the game' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Open annotated game' })).toBeInTheDocument())
     fireEvent.change(screen.getByLabelText('Layout'), { target: { value: 'split' } })
     fireEvent.click(screen.getByLabelText('Diagrams at key moments'))
@@ -93,7 +93,7 @@ describe('GameReviewPanel', () => {
 
   it('opens a coach review for the chosen side (S25)', async () => {
     renderPanel()
-    fireEvent.click(screen.getByRole('button', { name: 'Review game with the engine' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review and comment the game' }))
     await waitFor(() => expect(screen.getByRole('button', { name: /Coach review/ })).toBeInTheDocument())
     fireEvent.change(screen.getByLabelText('Focus on'), { target: { value: 'black' } })
     fireEvent.click(screen.getByRole('button', { name: /Coach review/ }))
@@ -104,7 +104,7 @@ describe('GameReviewPanel', () => {
 
   it('keeps a record per book and chapter and sums players up', async () => {
     renderPanel()
-    fireEvent.click(screen.getByRole('button', { name: 'Review game with the engine' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review and comment the game' }))
     await waitFor(() => expect(useReviewStore.getState().records).toHaveLength(1))
     const [record] = useReviewStore.getState().records
     expect(record).toMatchObject({ bookId: 7, chapter: 1, gameIndex: 0, white: 'Tutor', black: 'Novice' })

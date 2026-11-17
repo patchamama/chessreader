@@ -1,6 +1,6 @@
 import { Chess, type Square } from 'chess.js';
 import type { Lang } from './concepts.js';
-import { moveMotifs, motifText, type Motif } from './gameReview.js';
+import { moveMotifs, motifText, spokenMotifs, type Motif } from './gameReview.js';
 
 /**
  * The tutor of a live game: what the side to move could do right now
@@ -61,12 +61,12 @@ const WARN = new Set<Motif['kind']>(['threat', 'fork', 'attack-undefended', 'pin
 export function opponentIntent(fenBefore: string, san: string, lang: Lang): string[] {
   const chess = new Chess(fenBefore);
   try { chess.move(san); } catch { return []; }
-  return moveMotifs(fenBefore, san).filter((m) => WARN.has(m.kind)).slice(0, 3).map((m) => motifText(m, chess.fen(), lang)).filter(Boolean);
+  return spokenMotifs(moveMotifs(fenBefore, san)).filter((m) => WARN.has(m.kind)).slice(0, 3).map((m) => motifText(m, chess.fen(), lang)).filter(Boolean);
 }
 
 /** The idea of a move (what it creates on the board). */
 export function explainMove(fenBefore: string, san: string, lang: Lang): string[] {
   const chess = new Chess(fenBefore);
   try { chess.move(san); } catch { return []; }
-  return moveMotifs(fenBefore, san).filter((m) => m.kind !== 'capture').slice(0, 3).map((m) => motifText(m, chess.fen(), lang)).filter(Boolean);
+  return spokenMotifs(moveMotifs(fenBefore, san)).filter((m) => m.kind !== 'capture').slice(0, 3).map((m) => motifText(m, chess.fen(), lang)).filter(Boolean);
 }

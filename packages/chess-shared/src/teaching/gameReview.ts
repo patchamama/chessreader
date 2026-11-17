@@ -216,7 +216,7 @@ export function moveMotifs(fenBefore: string, san: string, context: MotifContext
     if (ideasAfter.outposts.some((o) => o.square === m.to) && !ideasBefore.outposts.some((o) => o.square === m.from)) add('outpost');
     if (moved.type === 'r' && m.from[0] !== m.to[0]
       && (ideasAfter.openFiles.includes(m.to[0]) || ideasAfter.halfOpenFiles.some((h) => h.file === m.to[0] && h.for === (me === 'w' ? 'white' : 'black')))) {
-      add('open-file', [], { file: m.to[0] });
+      add('open-file', [], { file: m.to[0], ...(ideasAfter.openFiles.includes(m.to[0]) ? {} : { half: 1 }) });
     }
     if (moved.type === 'p') {
       const isPassed = ideasAfter.passedPawns.some((p) => p.square === m.to);
@@ -242,7 +242,7 @@ export function moveMotifs(fenBefore: string, san: string, context: MotifContext
       const mineNow = (h: { file: string; for: string }) => h.for === (me === 'w' ? 'white' : 'black');
       const opened = [...ideasAfter.openFiles, ...ideasAfter.halfOpenFiles.filter(mineNow).map((h) => h.file)]
         .filter((f) => !ideasBefore.openFiles.includes(f) && !ideasBefore.halfOpenFiles.some((h) => h.file === f && mineNow(h)));
-      for (const file of opened) if (!out.some((x) => x.kind === 'open-file')) add('open-file', [], { file });
+      for (const file of opened) if (!out.some((x) => x.kind === 'open-file')) add('open-file', [], { file, ...(ideasAfter.openFiles.includes(file) ? {} : { half: 1 }) });
     }
     // Threats: what the mover would do if it could move again — and could not do before.
     if (!chess.isCheck()) {
@@ -624,6 +624,18 @@ export function reviewGame(plies: PlyInput[]): GameReview {
  */
 function lookAhead(plies: PlyInput[], moves: ReviewedMove[]) {
   const add = (i: number, motif: Motif) => moves[i].motifs.push(motif);
+  // Material won that the opponent wins back a few moves later ("4…Nxe4 …
+  // 6.Nxe5"): it was taken, not won — the remark says when it comes back.
+  plies.forEach((p, j) => {
+    const won = moves[j].motifs.find((m) => m.kind === 'wins-material');
+    if (!won) return;
+    const me: ChessColor = p.color === 'white' ? 'w' : 'b';
+    const b0 = balance(new Chess(p.fenBefore), me);
+    for (let k = j + 1; k < Math.min(plies.length, j + 7); k++) {
+      if (plies[k].color === p.color || !plies[k].san.includes('x')) continue;
+      if (balance(new Chess(plies[k].fenAfter), me) <= b0) { won.data = { ...won.data, back: plies[k].moveNumber }; break; }
+    }
+  });
   // The squares annotators discuss in this opening: the first move fighting
   // for each of them (per side, first 15 moves) says so.
   const sans = plies.map((p) => stripMarks(p.san));
@@ -692,7 +704,8 @@ function lookAhead(plies: PlyInput[], moves: ReviewedMove[]) {
         const b0 = balance(new Chess(p.fenBefore), me);
         const given = b0 - balance(new Chess(reply.fenAfter), me);
         const still = b0 - balance(new Chess(late.fenAfter), me);
-        if (given >= 1 && still >= 1) {
+        // Giving back material won earlier is no sacrifice (4…Nxe4 5.Re1 Nd6 6.Nxe5).
+        if (given >= 1 && still >= 1 && balance(new Chess(reply.fenAfter), me) < 0) {
           moves[j].motifs = moves[j].motifs.filter((m) => m.kind !== 'pawn-sacrifice');
           add(j, { kind: 'positional-sacrifice', square: p.to, squares: [reply.to], data: { amount: Math.min(given, still) } });
         }
@@ -869,6 +882,13 @@ export function motifText(m: Motif, fenAfter: string, lang: Lang): string {
         : lang === 'en' ? `${me} attacks ${list(m.squares.map(who), lang)}, which nothing defends.`
         : `${me} greift ${list(m.squares.map(whom), lang)} an, ungedeckt.`;
     case 'wins-material':
+      if (m.data?.back) {
+        const foe = fenAfter.split(' ')[1] === 'w';
+        const pawn = m.data.piece === 'p';
+        return lang === 'es' ? `Toma ${pawn ? 'un peón' : 'material'}, que las ${foe ? 'blancas' : 'negras'} recuperan en la jugada ${m.data.back}.`
+          : lang === 'en' ? `Takes ${pawn ? 'a pawn' : 'material'}, which ${foe ? 'White' : 'Black'} wins back on move ${m.data.back}.`
+          : `Nimmt ${pawn ? 'einen Bauern' : 'Material'}, ${pawn ? 'den' : 'das'} ${foe ? 'Weiß' : 'Schwarz'} im ${m.data.back}. Zug zurückgewinnt.`;
+      }
       return lang === 'es' ? `Gana ${PIECE.es[String(m.data?.piece)] === 'peón' ? 'un peón' : 'material'}.`
         : lang === 'en' ? `Wins ${m.data?.piece === 'p' ? 'a pawn' : 'material'}.`
         : `Gewinnt ${m.data?.piece === 'p' ? 'einen Bauern' : 'Material'}.`;
@@ -881,6 +901,11 @@ export function motifText(m: Motif, fenAfter: string, lang: Lang): string {
         : lang === 'en' ? `${me} takes an outpost on ${m.square}: no enemy pawn can drive it away.`
         : `${me} besetzt einen Vorposten auf ${m.square}: kein gegnerischer Bauer kann ihn vertreiben.`;
     case 'open-file':
+      if (m.data?.half) {
+        return lang === 'es' ? `La columna ${m.data.file} queda semiabierta para la torre.`
+          : lang === 'en' ? `The ${m.data.file}-file is half-open for the rook.`
+          : `Die ${m.data.file}-Linie ist für den Turm halboffen.`;
+      }
       return lang === 'es' ? `La columna ${m.data?.file} queda abierta para las torres.`
         : lang === 'en' ? `The ${m.data?.file}-file is open for the rooks.`
         : `Die ${m.data?.file}-Linie ist für die Türme offen.`;
@@ -1004,6 +1029,15 @@ export interface AnnotateOptions {
 }
 
 /** "Evaluation: +1.2 (White is better)" / "White mates in 3", from White's point of view. */
+/**
+ * The motifs of one move worth saying: "attacks the knight on e4, which nothing
+ * defends" already says "threatens to take the knight on e4".
+ */
+export function spokenMotifs(motifs: Motif[]): Motif[] {
+  return motifs.filter((m) => !(m.kind === 'threat' && m.data?.type === 'capture'
+    && motifs.some((x) => x.kind === 'attack-undefended' && x.squares.includes(m.squares[0]))));
+}
+
 export function evalText(score: Score, lang: Lang): string {
   if (score.mate !== undefined && score.mate !== 0) {
     const n = Math.abs(score.mate);
@@ -1028,6 +1062,9 @@ export function evalText(score: Score, lang: Lang): string {
  * better lines in parentheses — the format the reader recognises, so it can be
  * read, narrated and lit up like a page of a book.
  */
+/** Half-moves after which a commented move gets a diagram in a quiet stretch. */
+const DIAGRAM_EVERY = 20;
+
 export function annotateGame(plies: PlyInput[], review: GameReview, options: AnnotateOptions): string {
   const { level, lang } = options;
   const t = TEXT[lang];
@@ -1077,6 +1114,7 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
   let line: string[] = [];
   let pending: string[] = []; // 'paragraphs': remarks waiting for the end of the run
   let needNumber = true;
+  let lastDiagram = -1;
   const flush = () => {
     if (line.length) out.push(line.join(' '));
     line = [];
@@ -1104,7 +1142,7 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
       }
     }
     if (!given && level >= 3) {
-      for (const motif of m.motifs) {
+      for (const motif of spokenMotifs(m.motifs)) {
         const said = motifText(motif, p.fenAfter, lang);
         if (said) remarks.push(said);
       }
@@ -1127,9 +1165,13 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
       }
     }
     const d = options.diagrams;
-    const diagram = d && ((d.key && keyMoment(i)) || d.at?.includes(p.nodeId))
+    // As books print them: at the key moments, at the final position, and —
+    // in a quiet stretch — on a commented move every 20 half-moves or so.
+    const due = d?.key && (keyMoment(i) || i === plies.length - 1 || (remarks.length > 0 && i - lastDiagram >= DIAGRAM_EVERY));
+    const diagram = d && (due || d.at?.includes(p.nodeId))
       ? `[Diagram fen="${p.fenAfter}"${d.eval ? ` eval="${evalText(p.after, lang)}"` : ''}]`
       : '';
+    if (diagram) lastDiagram = i;
 
     if (layout === 'inline') {
       let chunk = move;

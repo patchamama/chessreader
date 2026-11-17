@@ -176,7 +176,7 @@ Go to **Webparser**, paste a URL (e.g. a chess blog post) and ChessReader fetche
 Load the unpacked extension from `apps/extension/` in Chrome (`chrome://extensions → Load unpacked`). Visit any chess site — the extension detects diagrams and game notation and makes them interactive.
 
 ### Commenting a game
-Open a game → **Review game with the engine** → choose the commentary level, layout and diagrams → **Open annotated game**, or pick **Focus on** and **Coach review** for a master's view of a game you played (paste it with *Paste text*).
+Open a game → **Review and comment the game** → choose the commentary level, layout (a line per remark by default, as books print it) and diagrams (key moments, every 20 half-moves and the final position, with the evaluation) → **Open annotated game**, or pick **Focus on** and **Coach review** for a master's view of a game you played (paste it with *Paste text*).
 
 ### Play
 **Play** in the menu: choose the opponent and the engine strength, click a piece and then its square (or drag it). For Lichess, create a token with the `board:play` permission (link on the page).

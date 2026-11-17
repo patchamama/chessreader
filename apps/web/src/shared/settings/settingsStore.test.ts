@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useSettingsStore, mergeWithDefaults } from './settingsStore'
+import { useSettingsStore, mergeWithDefaults, migrateSettings } from './settingsStore'
 
 describe('settingsStore — persistence migration', () => {
   it('fills missing new keys from defaults (old persisted state lacks showEngineArrow)', () => {
@@ -128,5 +128,20 @@ describe('settingsStore — appearance & behavior settings', () => {
     expect(s.fullSquareHighlight).toBe(true)
     expect(s.playMoveSound).toBe(true)
     expect(s.autoplayDelay).toBe(1)
+  })
+})
+
+describe('settingsStore — annotated games laid out like a book by default', () => {
+  it('a new reader gets split lines, key-moment diagrams and their evaluation', () => {
+    useSettingsStore.getState().reset()
+    const s = useSettingsStore.getState()
+    expect(s.commentLayout).toBe('split')
+    expect(s.commentDiagrams).toBe(true)
+    expect(s.commentDiagramEval).toBe(true)
+  })
+  it('settings saved before (version 0) move once to the book layout; the rest is kept', () => {
+    const old = { commentLayout: 'paragraphs', commentDiagrams: false, commentDiagramEval: false, fontSize: 21 }
+    expect(migrateSettings(old, 0)).toMatchObject({ commentLayout: 'split', commentDiagrams: true, commentDiagramEval: true, fontSize: 21 })
+    expect(migrateSettings({ commentLayout: 'paragraphs' }, 1)).toMatchObject({ commentLayout: 'paragraphs' })
   })
 })

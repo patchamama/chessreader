@@ -77,3 +77,22 @@ describe('German commentary writes German letters', () => {
     expect(r.tree.mainline.length).toBe(10)
   })
 })
+
+describe('diagrams as a book prints them (S34)', () => {
+  const quiet = plies('e4 e5 Nf3 Nc6 Bb5 Nf6 O-O Nxe4 Re1 Nd6 Nxe5 Be7 Bf1 Nxe5 Rxe5 O-O d4 Bf6 Re1 Re8 c3 Rxe1 Qxe1 Ne8 Bf4 d6 Nd2 Bf5',
+    Array.from({ length: 29 }, () => ({ cp: 20 })))
+  const text = annotateGame(quiet, reviewGame(quiet), { level: 3, lang: 'es', layout: 'split', diagrams: { key: true, eval: true } })
+  const marks = text.split('\n').filter((l) => l.startsWith('[Diagram'))
+  it('the final position always gets a diagram, with its evaluation', () => {
+    expect(text.trim().split('\n').at(-1)).toMatch(/^\[Diagram fen="[^"]+" eval="Evaluación: \+0\.2 \(igualdad\)"\]$/)
+  })
+  it('a quiet game still gets a diagram every 20 half-moves or so, on a commented move', () => {
+    expect(marks.length).toBeGreaterThanOrEqual(2)
+  })
+  it('remarks sit on their own line, right after the move they speak of', () => {
+    const lines = text.split('\n')
+    const i = lines.findIndex((l) => /^5\. Te1/.test(l) || / 5\. Te1$/.test(l) || /5\. Te1$/.test(l))
+    expect(i).toBeGreaterThan(0)
+    expect(lines[i + 1]).toMatch(/semiabierta/)
+  })
+})

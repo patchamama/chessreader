@@ -224,9 +224,9 @@ const DEFAULT: AppSettings = {
   aiModel: '',
   lichessToken: '',
   lichessPlayToken: '',
-  commentLayout: 'inline',
+  commentLayout: 'split',
   autoscroll: true,
-  commentDiagrams: false,
+  commentDiagrams: true,
   commentDiagramEval: true,
   boardTheme: 'blue',
   evalBarDirection: 'vertical',
@@ -273,6 +273,17 @@ export function mergeWithDefaults(
   return { ...current, ...(persisted as Partial<SettingsStore> | undefined) }
 }
 
+/**
+ * Saved settings of an older version. Version 1 (v0.64): annotated games are
+ * laid out like a book — moves split at each remark, diagrams with their
+ * evaluation — also for readers who had kept the old defaults.
+ */
+export function migrateSettings(persisted: unknown, version: number): Partial<SettingsStore> {
+  const s = { ...(persisted as Partial<SettingsStore> | undefined) }
+  if (version < 1) Object.assign(s, { commentLayout: 'split', commentDiagrams: true, commentDiagramEval: true })
+  return s
+}
+
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set) => ({
@@ -289,6 +300,8 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'chessreader-settings',
+      version: 1,
+      migrate: (persisted, version) => migrateSettings(persisted, version) as SettingsStore,
       merge: (persisted, current) => mergeWithDefaults(current as SettingsStore, persisted),
     },
   ),
