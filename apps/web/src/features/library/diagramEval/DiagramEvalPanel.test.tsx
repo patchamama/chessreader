@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { DiagramEvalPanel } from './DiagramEvalPanel'
 import { useDiagramEvalStore } from './diagramEvalStore'
