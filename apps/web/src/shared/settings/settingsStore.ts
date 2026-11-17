@@ -162,6 +162,8 @@ export interface AppSettings {
   stockfishVersion: StockfishVersion
   engineSource: EngineSource
   /** Play: colour the destinations of the selected piece by how good each move is. */
+  /** The thumbnail of a hovered move shows the engine's evaluation, the loss and the engine's move. */
+  hintEval: boolean
   playMoveHints: boolean
   /** Play: say after each move whether it was book, best, good, an inaccuracy, a mistake or a blunder. */
   playMoveStatus: boolean
@@ -249,6 +251,7 @@ const DEFAULT: AppSettings = {
   evalBarDirection: 'vertical',
   stockfishVersion: 'sf10-jsdelivr',
   engineSource: 'local',
+  hintEval: true,
   playMoveHints: true,
   playMoveStatus: true,
   playEvalBar: false,

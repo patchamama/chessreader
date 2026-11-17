@@ -1,4 +1,5 @@
 import { boardSvg } from '../../utils/boardSvg'
+import { parseDiagramMark } from '../../utils/diagramMark'
 
 /**
  * The annotated game (the text annotateGame writes, book layout) as a file to
@@ -12,11 +13,10 @@ export type Block =
   | { kind: 'text'; text: string }
   | { kind: 'moves'; text: string }
   | { kind: 'variation'; text: string }
-  | { kind: 'diagram'; fen: string; eval?: string }
+  | { kind: 'diagram'; fen: string; eval?: string; line?: string; alt?: string }
 
 export interface AnnotatedDoc { title: string; blocks: Block[] }
 
-const DIAGRAM_RE = /^\[Diagram fen="([^"]+)"(?: eval="([^"]*)")?\]$/
 
 /** Lines of the annotated text: the title, then moves, remarks, variations and diagrams. */
 export function parseAnnotated(text: string): AnnotatedDoc {
@@ -25,8 +25,8 @@ export function parseAnnotated(text: string): AnnotatedDoc {
   for (const raw of rest) {
     const line = raw.trim()
     if (!line) continue
-    const d = DIAGRAM_RE.exec(line)
-    if (d) blocks.push({ kind: 'diagram', fen: d[1], ...(d[2] ? { eval: d[2] } : {}) })
+    const d = parseDiagramMark(line)
+    if (d) blocks.push({ kind: 'diagram', ...d })
     else if (/^\d+\.(\.\.)?\s/.test(line)) blocks.push({ kind: 'moves', text: line })
     else if (line.startsWith('(')) blocks.push({ kind: 'variation', text: line })
     else blocks.push({ kind: 'text', text: line })
@@ -77,6 +77,8 @@ function toMarkdown(doc: AnnotatedDoc): string {
     else {
       out.push(`![Diagram](data:image/svg+xml;base64,${base64(boardSvg(b.fen, 280))})`, '')
       if (b.eval) out.push(`*${b.eval}*`, '')
+      if (b.line) out.push(b.line, '')
+      if (b.alt) out.push(b.alt, '')
     }
   }
   return out.join('\n')
@@ -90,6 +92,7 @@ function bodyHtml(doc: AnnotatedDoc): string {
     if (b.kind === 'variation') return `<p class="variation">${esc(b.text)}</p>`
     if (b.kind === 'text') return `<p>${esc(b.text)}</p>`
     return `<figure class="diagram">${boardSvg(b.fen, 280)}</figure>${b.eval ? `<p class="eval">${esc(b.eval)}</p>` : ''}`
+      + (b.line ? `<p class="eval line">${esc(b.line)}</p>` : '') + (b.alt ? `<p class="eval line">${esc(b.alt)}</p>` : '')
   }).join('\n')
 }
 
@@ -256,7 +259,10 @@ function toPdf(doc: AnnotatedDoc, lang: 'es' | 'en' | 'de'): Uint8Array {
       if (y - 8 * cell - 30 < PAGE.margin) newPage()
       ops.push(diagramOps(b.fen, (PAGE.w - 8 * cell) / 2, y - 6, cell, PIECE_LETTERS[lang]))
       y -= 8 * cell + 10
-      if (b.eval) text(b.eval, 'F3', 9.5, 6, true)
+      if (b.eval) text(b.eval, 'F3', 9.5, 2, true)
+      if (b.line) text(b.line, 'F1', 9.5, 2, true)
+      if (b.alt) text(b.alt, 'F1', 9, 2, true)
+      y -= 4
     } else {
       text(b.text, b.kind === 'moves' ? 'F2' : b.kind === 'variation' ? 'F3' : 'F1', 11, 5)
     }

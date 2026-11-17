@@ -352,6 +352,11 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               onClick={() => s.set({ showEngineArrow: !s.showEngineArrow })}
               label="Show engine move arrow"
             />
+            <Toggle
+              on={s.hintEval}
+              onClick={() => s.set({ hintEval: !s.hintEval })}
+              label="Evaluation in move thumbnails"
+            />
           </div>
         </div>
 

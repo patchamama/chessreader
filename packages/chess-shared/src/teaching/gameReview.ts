@@ -1102,7 +1102,37 @@ export interface AnnotateOptions {
    */
   layout?: 'inline' | 'split' | 'paragraphs';
   /** Diagram marks (`[Diagram fen="…" eval="…"]`, one line each): after the key moments, after chosen moves (node ids), with the evaluation. */
-  diagrams?: { key?: boolean; at?: string[]; eval?: boolean };
+  diagrams?: {
+    key?: boolean; at?: string[]; eval?: boolean
+    /** The engine that judged the game ("Stockfish 18", "Lichess cloud") and its depth, named under the diagram as books do. */
+    engine?: string; depth?: number
+  };
+}
+
+/** "+1.2", "−0.4", "#3", "#−2": a score from White's point of view, short. */
+export function shortScore(score: Score): string {
+  if (score.mate !== undefined && score.mate !== 0) return `#${score.mate < 0 ? '−' : ''}${Math.abs(score.mate)}`;
+  const cp = score.cp ?? 0;
+  return `${cp >= 0 ? '+' : '−'}${(Math.abs(cp) / 100).toFixed(1)}`;
+}
+
+const attr = (s: string) => s.replace(/"/g, "'");
+
+/**
+ * The diagram mark after ply `i`: the position, the evaluation in words (who is
+ * better), the engine and depth, and the engine's next moves from there with
+ * one alternative — as a book prints under its diagrams.
+ */
+function diagramMark(plies: PlyInput[], i: number, lang: Lang, d: NonNullable<AnnotateOptions['diagrams']>): string {
+  const p = plies[i];
+  if (!d.eval) return `[Diagram fen="${p.fenAfter}"]`;
+  const depthWord = lang === 'es' ? 'prof.' : lang === 'en' ? 'depth' : 'Tiefe';
+  const engine = d.engine ? ` · ${d.engine}${d.depth ? `, ${depthWord} ${d.depth}` : ''}` : '';
+  let out = `[Diagram fen="${p.fenAfter}" eval="${attr(evalText(p.after, lang) + engine)}"`;
+  const next = plies[i + 1];
+  if (next?.best?.line.length) out += ` line="${attr(localLine(numberLine(next.best.line.slice(0, 6), next.moveNumber, next.color), lang))}"`;
+  if (next?.second?.line.length) out += ` alt="${attr(localLine(numberLine(next.second.line.slice(0, 4), next.moveNumber, next.color), lang))} (${shortScore(next.second.score)})"`;
+  return `${out}]`;
 }
 
 /** "Evaluation: +1.2 (White is better)" / "White mates in 3", from White's point of view. */
@@ -1245,9 +1275,7 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
     // As books print them: at the key moments, at the final position, and —
     // in a quiet stretch — on a commented move every 20 half-moves or so.
     const due = d?.key && (keyMoment(i) || i === plies.length - 1 || (remarks.length > 0 && i - lastDiagram >= DIAGRAM_EVERY));
-    const diagram = d && (due || d.at?.includes(p.nodeId))
-      ? `[Diagram fen="${p.fenAfter}"${d.eval ? ` eval="${evalText(p.after, lang)}"` : ''}]`
-      : '';
+    const diagram = d && (due || d.at?.includes(p.nodeId)) ? diagramMark(plies, i, lang, d) : '';
     if (diagram) lastDiagram = i;
 
     if (layout === 'inline') {

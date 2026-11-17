@@ -139,4 +139,25 @@ describe('GameReviewPanel', () => {
     expect(decodeURIComponent(String(init.body)).replace(/\+/g, ' ')).toContain('1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#')
     open.mockRestore()
   })
+
+  it('re-analyses from scratch and regenerates every comment and diagram (S8)', async () => {
+    let calls = 0
+    setReviewEngine(async (fen) => {
+      calls++
+      if (fen === afterNf6) return [{ idx: 1, depth: 8, mate: 1, pv: ['h5f7'] }]
+      return [{ idx: 1, depth: 8, scoreCp: 20, pv: [] }]
+    })
+    useSettingsStore.setState({ commentDiagrams: true, commentDiagramEval: true })
+    renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Review and comment the game' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open annotated game' })).toBeInTheDocument())
+    const first = calls
+    fireEvent.click(screen.getByRole('button', { name: 'Re-analyse and regenerate all comments' }))
+    await waitFor(() => expect(screen.getByText('annotated book')).toBeInTheDocument())
+    expect(calls).toBe(2 * first)
+    const html = useExternalBookStore.getState().chapters[0].html
+    expect(html).toContain('Nf6??')
+    expect(html).toMatch(/<img class="diagram"/)
+    expect(html).toMatch(/class="diagram-eval">[^<]*· Stockfish 10, depth \d+/)
+  })
 })

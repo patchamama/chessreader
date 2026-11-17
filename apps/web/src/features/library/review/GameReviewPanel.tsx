@@ -23,7 +23,7 @@ interface GameReviewPanelProps {
 
 const T: Record<Lang, Record<string, string>> = {
   en: {
-    title: 'Engine review', run: 'Review and comment the game', all: 'Review and comment every game of the chapter', cancel: 'Cancel', lichess: 'Analyse on Lichess',
+    title: 'Engine review', run: 'Review and comment the game', all: 'Review and comment every game of the chapter', cancel: 'Cancel', lichess: 'Analyse on Lichess', regenerate: 'Re-analyse and regenerate all comments',
     analysing: 'Analysing position', accuracy: 'accuracy', white: 'White', black: 'Black', opening: 'Opening',
     moments: 'Key moments', none: 'No turning points: a steady game.', go: 'Go to', line: 'Play the line',
     better: 'Better was', follow: 'There followed', level: 'Commentary level', l1: '1 · marks only', l2: '2 · remarks and better lines',
@@ -35,7 +35,7 @@ const T: Record<Lang, Record<string, string>> = {
     players: 'Players are read from PGN tags, from lines "White: … / Black: …" or from a heading "White – Black".',
   },
   es: {
-    title: 'Revisión con el motor', run: 'Revisar y comentar la partida', all: 'Revisar y comentar todas las partidas del capítulo', cancel: 'Cancelar', lichess: 'Analizar en Lichess',
+    title: 'Revisión con el motor', run: 'Revisar y comentar la partida', all: 'Revisar y comentar todas las partidas del capítulo', cancel: 'Cancelar', lichess: 'Analizar en Lichess', regenerate: 'Reanalizar y regenerar todos los comentarios',
     analysing: 'Analizando posición', accuracy: 'de precisión', white: 'Blancas', black: 'Negras', opening: 'Apertura',
     moments: 'Momentos clave', none: 'Sin puntos de inflexión: una partida pareja.', go: 'Ir a', line: 'Reproducir la línea',
     better: 'Era mejor', follow: 'Siguió', level: 'Nivel de comentario', l1: '1 · solo signos', l2: '2 · comentarios y líneas mejores',
@@ -47,7 +47,7 @@ const T: Record<Lang, Record<string, string>> = {
     players: 'Los jugadores se leen de las etiquetas PGN, de líneas "Blancas: … / Negras: …" o de un encabezado "Blancas – Negras".',
   },
   de: {
-    title: 'Engine-Analyse', run: 'Partie prüfen und kommentieren', all: 'Alle Partien des Kapitels prüfen und kommentieren', cancel: 'Abbrechen', lichess: 'Auf Lichess analysieren',
+    title: 'Engine-Analyse', run: 'Partie prüfen und kommentieren', all: 'Alle Partien des Kapitels prüfen und kommentieren', cancel: 'Abbrechen', lichess: 'Auf Lichess analysieren', regenerate: 'Neu analysieren und alle Kommentare neu schreiben',
     analysing: 'Analysiere Stellung', accuracy: 'Genauigkeit', white: 'Weiß', black: 'Schwarz', opening: 'Eröffnung',
     moments: 'Schlüsselmomente', none: 'Keine Wendepunkte: eine ausgeglichene Partie.', go: 'Gehe zu', line: 'Variante abspielen',
     better: 'Besser war', follow: 'Es folgte', level: 'Kommentarstufe', l1: '1 · nur Zeichen', l2: '2 · Anmerkungen und bessere Varianten',
@@ -93,7 +93,11 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
   /** Moves the reader picked for a diagram (node ids of this game). */
   const [diagramAt, setDiagramAt] = useState<string[]>([])
   const [exportFormat, setExportFormat] = useState<ExportFormat>('pdf')
-  const diagrams = keyDiagrams || diagramAt.length ? { key: keyDiagrams, at: diagramAt, eval: diagramEval } : undefined
+  const stockfishLabel = STOCKFISH_VERSIONS[useSettingsStore((s) => s.stockfishVersion)].label.replace(/\s*\(.*\)\s*$/, '')
+  const cloud = useSettingsStore((s) => s.engineSource) === 'lichess-cloud'
+  // Named under each diagram, as books name the engine they used.
+  const engine = cloud ? `Lichess cloud / ${stockfishLabel}` : stockfishLabel
+  const diagrams = keyDiagrams || diagramAt.length ? { key: keyDiagrams, at: diagramAt, eval: diagramEval, engine, depth } : undefined
   const [database, setDatabase] = useState<{ tree: unknown; eco: string; name: string } | null>(null)
   const [aiBusy, setAiBusy] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
@@ -173,8 +177,8 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
     })
   }
 
-  function annotatedText() {
-    return annotateGame(reviewed!.plies, reviewed!.review, { level, lang, white: players.white, black: players.black, layout, diagrams })
+  function annotatedText(r = reviewed!) {
+    return annotateGame(r.plies, r.review, { level, lang, white: players.white, black: players.black, layout, diagrams })
   }
 
   /** The annotated game as a file (S34): Markdown, EPUB, PDF or HTML. */
@@ -184,10 +188,21 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
     downloadAnnotated(annotatedText(), exportFormat, names, lang)
   }
 
-  function openAnnotated() {
-    if (!reviewed) return
+  /**
+   * Forget the review of this game and every comment written from it, run the
+   * engine again over the whole game and write the comments and diagrams anew.
+   */
+  async function regenerate() {
+    useReviewStore.getState().forget(game.tree)
+    await run([gameIndex])
+    const fresh = useReviewStore.getState().byTree.get(game.tree)
+    if (fresh) openAnnotated(fresh)
+  }
+
+  function openAnnotated(r = reviewed) {
+    if (!r) return
     const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
-    const annotated = annotatedText()
+    const annotated = annotatedText(r)
     const { title, chapters } = textToChapters(annotated, `${names} (${t.title.toLowerCase()})`)
     openBook(title, chapters)
     navigate(`/read/${EXTERNAL_BOOK_ID}`)
@@ -295,6 +310,7 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
             {games.length > 1 && (
               <button className={button} onClick={() => void run(games.map((_, i) => i))}>{t.all}</button>
             )}
+            <button className={button} onClick={() => void regenerate()}><span aria-hidden="true">⟳ </span>{t.regenerate}</button>
             <button className={button} disabled={lichessBusy} onClick={() => void analyseOnLichess()}>{t.lichess}<span aria-hidden="true"> ↗</span></button>
           </>
         )}
@@ -396,7 +412,7 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
             >
               ▦ {t.diagramHere}{diagramAt.length ? ` (${diagramAt.length} ${t.diagramsChosen})` : ''}
             </button>
-            <button className={button} onClick={openAnnotated}>{t.open}</button>
+            <button className={button} onClick={() => openAnnotated()}>{t.open}</button>
             <select aria-label={t.downloadFormat} value={exportFormat} onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
               className="rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px]">
               <option value="pdf">PDF</option>

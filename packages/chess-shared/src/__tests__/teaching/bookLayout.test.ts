@@ -96,3 +96,23 @@ describe('diagrams as a book prints them (S34)', () => {
     expect(lines[i + 1]).toMatch(/semiabierta/)
   })
 })
+
+describe('diagrams like a book: the engine, its next moves and who is better (S9)', () => {
+  // Diagram after 2...Nc6 (ply 3): the engine's line from there is ply 4's best line.
+  const withLines = plies('e4 e5 Qh5 Nc6 Bc4 Nf6 Qxf7#',
+    [{ cp: 20 }, { cp: 25 }, { cp: 20 }, { cp: -40 }, { cp: -30 }, { cp: -35 }, { mate: 1 }, { mate: 1 }],
+    { 4: { san: 'Bc4', line: ['Bc4', 'g6', 'Qf3', 'Nf6'] }, 5: { san: 'g6', line: ['g6', 'Qf3', 'Nf6'] } })
+  withLines[4].second = { san: 'Nf3', line: ['Nf3', 'd6'], score: { cp: -60 } }
+  const r = reviewGame(withLines)
+
+  it('the mark carries the engine with its depth, the evaluation in words, the next moves and an alternative', () => {
+    const text = annotateGame(withLines, r, { level: 2, lang: 'es', layout: 'split', diagrams: { at: ['n3'], eval: true, engine: 'Stockfish 18', depth: 14 } })
+    const mark = text.split('\n').find((l) => l.startsWith('[Diagram fen="r1bqkbnr/pppp1ppp/2n5'))
+    expect(mark).toBe('[Diagram fen="r1bqkbnr/pppp1ppp/2n5/4p2Q/4P3/8/PPPP1PPP/RNB1KBNR w KQkq - 2 3" eval="Evaluación: −0.3 (igualdad) · Stockfish 18, prof. 14" line="3. Ac4 g6 4. Df3 Cf6" alt="3. Cf3 d6 (−0.6)"]')
+  })
+
+  it('the moves of the diagram lines are not read as moves of the game', () => {
+    const text = annotateGame(withLines, r, { level: 2, lang: 'en', layout: 'split', diagrams: { at: ['n3'], eval: true, engine: 'Stockfish 18', depth: 14 } })
+    expect(mainline(text).sans).toEqual(MAIN)
+  })
+})

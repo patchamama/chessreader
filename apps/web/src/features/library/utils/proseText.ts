@@ -37,7 +37,7 @@ function hasOwnText(n: Node): boolean {
   if (n.nodeType === 3) return /\S/.test(n.nodeValue ?? '')
   if (n.nodeType !== 1) return false
   const el = n as Element
-  if (isImage(el) || SKIP_TAGS.has(el.tagName.toUpperCase())) return false
+  if (isImage(el) || SKIP_TAGS.has(el.tagName.toUpperCase()) || el.hasAttribute('data-no-recognition')) return false
   for (let c = el.firstChild; c; c = c.nextSibling) if (hasOwnText(c)) return true
   return false
 }
@@ -91,7 +91,8 @@ export function extractProseText(root: Node): ProseText {
     if (n.nodeType !== 1) return
     const el = n as Element
     const tag = el.tagName.toUpperCase()
-    if (SKIP_TAGS.has(tag)) return
+    // Engine lines under a diagram are not moves of the text.
+    if (SKIP_TAGS.has(tag) || el.hasAttribute('data-no-recognition')) return
     if (isImage(el)) {
       if (!hasOwnText(blockOf(el, root))) {
         want('newline')

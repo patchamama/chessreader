@@ -1,6 +1,7 @@
 import { pgnToChapters } from '../../gamesearch/pgnChapters'
 import type { Chapter } from '../api/libraryApi'
 import { boardSvgDataUrl } from './boardSvg'
+import { parseDiagramMark } from './diagramMark'
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
@@ -22,11 +23,17 @@ export function textToChapters(text: string, title?: string): { title: string; c
   return { title: name, chapters: [{ title: name, html, toc: [{ order: 1, title: name }] }] }
 }
 
-/** A diagram mark written by the commentary (`[Diagram fen="…" eval="…"]`) or a plain paragraph. */
+/**
+ * A diagram mark written by the commentary (`[Diagram fen="…" eval="…" line="…" alt="…"]`)
+ * or a plain paragraph. The engine's lines under a diagram are marked so the
+ * recogniser does not read them as moves of the game.
+ */
 function paragraph(p: string): string {
-  const mark = /^\[Diagram fen="([^"]+)"(?: eval="([^"]*)")?\]$/.exec(p)
+  const mark = parseDiagramMark(p)
   if (!mark) return `<p>${esc(p)}</p>`
-  const [, fen, evaluation] = mark
-  const img = `<img src="${boardSvgDataUrl(fen)}" alt="Diagram" data-fen="${esc(fen)}">`
-  return evaluation ? `${img}\n<p class="diagram-eval">${esc(evaluation)}</p>` : img
+  const out = [`<img class="diagram" src="${boardSvgDataUrl(mark.fen)}" alt="Diagram" data-fen="${esc(mark.fen)}">`]
+  if (mark.eval) out.push(`<p class="diagram-eval">${esc(mark.eval)}</p>`)
+  if (mark.line) out.push(`<p class="diagram-line" data-no-recognition>${esc(mark.line)}</p>`)
+  if (mark.alt) out.push(`<p class="diagram-line diagram-alt" data-no-recognition>${esc(mark.alt)}</p>`)
+  return out.join('\n')
 }

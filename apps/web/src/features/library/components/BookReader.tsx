@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useChapter, useTouchBook } from '../api/libraryApi'
 import { recognizeGames } from '@chess-ebook/chess-shared'
 import type { GameTree, GameNode, IsolatedMove } from '@chess-ebook/chess-shared'
-import ChessBoardThemed from '../../../shared/chess/ChessBoard'
+import { MoveTooltipCard } from './MoveTooltipCard'
 import { StudyBoard } from './StudyBoard'
 import { StudyPanelResizer } from './StudyPanelResizer'
 import { VariationChooser } from './VariationChooser'
@@ -67,6 +67,8 @@ interface MoveTooltip {
   lastMove: { from: string; to: string } | null
   /** A square to mark on the thumbnail (a square the text names). */
   highlight?: string
+  /** The hovered move, to show the engine's view of it. */
+  move?: { tree: GameTree; node: GameNode }
 }
 
 interface ResolvedNode {
@@ -391,6 +393,8 @@ export default function BookReader() {
 
       const mount = document.createElement('span')
       mount.setAttribute('data-diagram-overlay', '1')
+      // A diagram written by the commentary is centred, as in a book.
+      if (img.classList.contains('diagram')) mount.className = 'diagram-host'
       img.replaceWith(mount)
 
       const root = createRoot(mount)
@@ -463,6 +467,7 @@ export default function BookReader() {
       if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
       const from = span.dataset.from
       const to = span.dataset.to
+      const resolved = span.dataset.nodeId ? moveRegistry.current.get(span.dataset.nodeId) : undefined
       tooltipTimer.current = setTimeout(() => {
         const rect = span.getBoundingClientRect()
         setTooltipRef.current({
@@ -470,6 +475,7 @@ export default function BookReader() {
           left: rect.left,
           fen,
           lastMove: from && to ? { from, to } : null,
+          ...(resolved ? { move: { tree: resolved.tree, node: resolved.node } } : {}),
         })
       }, 200)
     }
@@ -552,6 +558,11 @@ export default function BookReader() {
     .epub-content h5 { font-weight: ${epub.h5.bold ? '700' : '400'}; font-style: ${epub.h5.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h5.sizeDelta}px; margin: 0.7em 0 0.2em; }
     .epub-content p  { margin-bottom: ${epub.paragraphSpacing}rem; text-indent: ${epub.paragraphIndent}rem; line-height: 1.7; }
     .epub-content p.diagram-eval { text-align: center; text-indent: 0; font-size: 0.85em; color: #555; margin-top: -0.5rem; }
+    .epub-content p.diagram-line { text-align: center; text-indent: 0; font-size: 0.85em; color: #334155; margin-top: -0.6rem; }
+    .epub-content p.diagram-alt { color: #64748b; font-style: italic; }
+    .epub-content .diagram-host { display: block; text-align: center; margin: 1rem 0 0.75rem; }
+    .epub-content .diagram-host img { margin: 0 auto; }
+    .epub-content img.diagram { margin-left: auto; margin-right: auto; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25); }
     .epub-content hr { border: none; border-top: 1px solid #cbd5e1; margin: 1.5em 0; }
     .epub-content img { max-width: 100%; height: auto; display: block; margin: 1rem ${epub.imageAlign === 'center' ? 'auto' : epub.imageAlign === 'right' ? '0 0 auto' : '0 auto 0 0'}; border-radius: 4px; }
     .epub-content ul { list-style: disc; padding-left: 1.5rem; margin-bottom: ${epub.paragraphSpacing}rem; }
@@ -784,17 +795,13 @@ export default function BookReader() {
           onMouseEnter={() => { if (tooltipTimer.current) clearTimeout(tooltipTimer.current) }}
           onMouseLeave={() => { if (tooltipTimer.current) clearTimeout(tooltipTimer.current); setTooltip(null) }}
         >
-          <div style={{ width: 220 }}>
-            <ChessBoardThemed
-              fen={tooltip.fen}
-              orientation="white"
-              lastMove={tooltip.lastMove}
-              hideLabels
-              customSquareStyles={tooltip.highlight
-                ? { [tooltip.highlight]: { backgroundColor: 'rgba(250, 204, 21, 0.55)', boxShadow: 'inset 0 0 0 3px rgba(202, 138, 4, 0.9)' } }
-                : undefined}
-            />
-          </div>
+          <MoveTooltipCard
+            fen={tooltip.fen}
+            lastMove={tooltip.lastMove}
+            highlight={tooltip.highlight}
+            tree={tooltip.move?.tree}
+            node={tooltip.move?.node}
+          />
         </div>
       )}
 

@@ -29,6 +29,8 @@ interface ReviewState {
   records: ReviewRecord[]
   setReview: (tree: GameTree, reviewed: ReviewedGame, record: ReviewRecord) => void
   clearBook: (bookId: number) => void
+  /** Drop the review of one game (to analyse it again from scratch). */
+  forget: (tree: GameTree) => void
 }
 
 export const useReviewStore = create<ReviewState>()(
@@ -45,6 +47,11 @@ export const useReviewStore = create<ReviewState>()(
           ],
         })),
       clearBook: (bookId) => set((s) => ({ records: s.records.filter((r) => r.bookId !== bookId) })),
+      forget: (tree) => set((s) => {
+        const byTree = new Map(s.byTree)
+        byTree.delete(tree)
+        return { byTree }
+      }),
     }),
     { name: 'chessreader-reviews', partialize: (s) => ({ records: s.records }) },
   ),
