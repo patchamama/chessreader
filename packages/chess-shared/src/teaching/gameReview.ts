@@ -780,21 +780,27 @@ export function motifText(m: Motif, fenAfter: string, lang: Lang): string {
     const p = chess.get(s as Square);
     return p ? `${piece(lang, p.type)} ${lang === 'es' ? 'de' : lang === 'en' ? 'on' : 'auf'} ${s}` : s;
   };
+  // German objects take the accusative ("greift den Bauern auf e4 an").
+  const ACC: Record<string, string> = { p: 'den Bauern', n: 'den Springer', b: 'den Läufer', r: 'den Turm', q: 'die Dame', k: 'den König' };
+  const whom = (s: string) => {
+    const p = chess.get(s as Square);
+    return lang === 'de' && p ? `${ACC[p.type]} auf ${s}` : who(s);
+  };
   const mover = chess.get(m.square as Square);
   const me = mover ? cap(piece(lang, mover.type)) : '';
   switch (m.kind) {
     case 'fork':
       return lang === 'es' ? `Ataque doble: ${me.toLowerCase()} ataca a la vez ${list(m.squares.map(who), lang)}.`
         : lang === 'en' ? `Double attack: ${me.toLowerCase()} attacks ${list(m.squares.map(who), lang)} at once.`
-        : `Doppelangriff: ${me} greift zugleich ${list(m.squares.map(who), lang)} an.`;
+        : `Doppelangriff: ${me} greift zugleich ${list(m.squares.map(whom), lang)} an.`;
     case 'pin':
       return lang === 'es' ? `Clavada: ${who(m.squares[0])} no puede moverse sin exponer ${who(m.squares[1])}.`
         : lang === 'en' ? `Pin: ${who(m.squares[0])} cannot move without exposing ${who(m.squares[1])}.`
-        : `Fesselung: ${who(m.squares[0])} kann nicht ziehen, ohne ${who(m.squares[1])} preiszugeben.`;
+        : `Fesselung: ${who(m.squares[0])} kann nicht ziehen, ohne ${whom(m.squares[1])} preiszugeben.`;
     case 'skewer':
       return lang === 'es' ? `Enfilada: ${who(m.squares[0])} debe apartarse y queda expuesto ${who(m.squares[1])}.`
         : lang === 'en' ? `Skewer: ${who(m.squares[0])} has to step aside, exposing ${who(m.squares[1])}.`
-        : `Spieß: ${who(m.squares[0])} muss ausweichen und gibt ${who(m.squares[1])} preis.`;
+        : `Spieß: ${who(m.squares[0])} muss ausweichen und gibt ${whom(m.squares[1])} preis.`;
     case 'sacrifice':
       return lang === 'es' ? `Sacrificio: ${me.toLowerCase()} se entrega en ${m.square}.`
         : lang === 'en' ? `Sacrifice: ${me.toLowerCase()} is given up on ${m.square}.`
@@ -815,11 +821,11 @@ export function motifText(m: Motif, fenAfter: string, lang: Lang): string {
         const prior = String(m.data.prior).split(',').map(who);
         return lang === 'es' ? `${me} se suma al ataque ${prior.length > 1 ? 'de ' : ''}${list(prior, lang).replace(/^el /, 'del ')} sobre ${who(target)}.`
           : lang === 'en' ? `${me} joins the attack of ${list(prior, lang)} on ${who(target)}.`
-          : `${me} verstärkt den Angriff ${list(prior, lang).replace(/^der /, 'des ')} auf ${who(target)}.`;
+          : `${me} verstärkt den Angriff ${list(prior, lang).replace(/^der (\S+)/, (_x, n: string) => `des ${n === 'Bauer' ? 'Bauern' : n === 'König' ? 'Königs' : n === 'Turm' ? 'Turms' : n + 's'}`)} auf ${whom(target)}.`;
       }
       return lang === 'es' ? `${cap(list(attackers.map(who), lang))} atacan juntos ${who(target)}.`
         : lang === 'en' ? `${cap(list(attackers.map(who), lang))} attack ${who(target)} together.`
-        : `${cap(list(attackers.map(who), lang))} greifen gemeinsam ${who(target)} an.`;
+        : `${cap(list(attackers.map(who), lang))} greifen gemeinsam ${whom(target)} an.`;
     }
     case 'mate-threat':
       return lang === 'es' ? `Amenaza mate en ${m.data?.n}.` : lang === 'en' ? `Threatens mate in ${m.data?.n}.` : `Droht Matt in ${m.data?.n}.`;
@@ -843,7 +849,7 @@ export function motifText(m: Motif, fenAfter: string, lang: Lang): string {
     case 'attack-undefended':
       return lang === 'es' ? `${me} ataca ${list(m.squares.map(who), lang)}, que nadie defiende.`
         : lang === 'en' ? `${me} attacks ${list(m.squares.map(who), lang)}, which nothing defends.`
-        : `${me} greift ${list(m.squares.map(who), lang)} an, ungedeckt.`;
+        : `${me} greift ${list(m.squares.map(whom), lang)} an, ungedeckt.`;
     case 'wins-material':
       return lang === 'es' ? `Gana ${PIECE.es[String(m.data?.piece)] === 'peón' ? 'un peón' : 'material'}.`
         : lang === 'en' ? `Wins ${m.data?.piece === 'p' ? 'a pawn' : 'material'}.`
@@ -878,11 +884,11 @@ export function motifText(m: Motif, fenAfter: string, lang: Lang): string {
     case 'x-ray':
       return lang === 'es' ? `Rayos X: ${me.toLowerCase()} actúa a través de ${who(m.squares[0])} sobre ${who(m.squares[1])}.`
         : lang === 'en' ? `X-ray: ${me.toLowerCase()} acts through ${who(m.squares[0])} on ${who(m.squares[1])}.`
-        : `Röntgenangriff: ${me} wirkt durch ${who(m.squares[0])} hindurch auf ${who(m.squares[1])}.`;
+        : `Röntgenangriff: ${me} wirkt durch ${who(m.squares[0])} hindurch auf ${whom(m.squares[1])}.`;
     case 'leaves-hanging':
       return lang === 'es' ? `Deja sin defensa ${list(m.squares.map(who), lang)}.`
         : lang === 'en' ? `Leaves ${list(m.squares.map(who), lang)} undefended.`
-        : `Lässt ${list(m.squares.map(who), lang)} ungedeckt.`;
+        : `Lässt ${list(m.squares.map(whom), lang)} ungedeckt.`;
     case 'pawn-sacrifice':
       return lang === 'es' ? `Sacrificio de peón en ${m.square}.` : lang === 'en' ? `A pawn sacrifice on ${m.square}.` : `Bauernopfer auf ${m.square}.`;
     case 'aims-at': {
@@ -1079,7 +1085,7 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
       }
     }
     const better = level >= 2 && m.best && (m.quality === 'blunder' || m.quality === 'mistake' || m.quality === 'dubious');
-    if (better) remarks.push(`${t.better}:`);
+    if (better && !given?.includes(t.better)) remarks.push(`${t.better}:`);
     const variation = better
       ? `(${numberLine(m.best!.line.slice(0, 6).length ? m.best!.line.slice(0, 6) : [m.best!.san], p.moveNumber, p.color).split(' ').map(local).join(' ')})`
       : '';

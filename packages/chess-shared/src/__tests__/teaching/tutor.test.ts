@@ -26,3 +26,9 @@ describe('live tutor (S27)', () => {
     expect(explainMove('r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1', 'Nc7+', 'en').join(' ')).toMatch(/double attack/i)
   })
 })
+
+describe('German wording', () => {
+  it('objects in the accusative', () => {
+    expect(explainMove('r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1', 'Nc7+', 'de').join(' ')).toContain('greift zugleich den Turm auf a8 und den König auf e8 an')
+  })
+})

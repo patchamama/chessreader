@@ -17,6 +17,8 @@ export const libraryHandlers = [
     return HttpResponse.json(chapter)
   }),
 
+  // Opening a book records it as recently read; the demo has nothing to record.
+  http.post('/api/library/books/:bookId/touch', () => HttpResponse.json({ ok: true })),
   http.post('/api/library/upload', async () => {
     await delay(800)
     // Demo: pretend the upload succeeded with a new book id

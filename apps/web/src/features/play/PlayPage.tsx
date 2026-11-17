@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Chess, type Square } from 'chess.js'
 import ChessBoard from '../../shared/chess/ChessBoard'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { usePlayStore, type PlayMode } from './playStore'
@@ -19,6 +20,17 @@ export default function PlayPage() {
   const [color, setColor] = useState<'white' | 'black'>('white')
   const [strength, setStrength] = useState(3)
   const [token, setToken] = useState(useSettingsStore.getState().lichessPlayToken)
+  const [selected, setSelected] = useState<string | null>(null)
+  const targets = selected ? new Chess(p.fen).moves({ square: selected as Square, verbose: true }).map((m) => m.to) : []
+  const click = (square: string) => {
+    if (selected && targets.includes(square as Square)) {
+      p.move(selected, square)
+      setSelected(null)
+      return
+    }
+    const piece = new Chess(p.fen).get(square as Square)
+    setSelected(piece && piece.color === p.fen.split(' ')[1] ? square : null)
+  }
   const field = 'rounded border border-slate-300 bg-white px-2 py-1 text-sm'
 
   return (
@@ -29,7 +41,10 @@ export default function PlayPage() {
           orientation={p.mode === 'human' ? 'white' : p.color}
           lastMove={p.lastMove}
           allowDragging={p.status === 'playing'}
-          onPieceDrop={(from, to) => p.move(from, to)}
+          onPieceDrop={(from, to) => { setSelected(null); return p.move(from, to) }}
+          onSquareClick={p.status === 'playing' ? click : undefined}
+          selectedSquare={selected}
+          legalTargets={targets}
         />
         <p className="mt-2 text-sm text-slate-600">{p.sans.map((s, i) => (i % 2 === 0 ? `${i / 2 + 1}. ${s}` : s)).join(' ')}</p>
         {p.status === 'thinking' && <p className="text-xs text-slate-500">{t.thinking}</p>}

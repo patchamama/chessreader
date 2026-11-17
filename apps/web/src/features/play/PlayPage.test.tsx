@@ -4,7 +4,11 @@ import PlayPage from './PlayPage'
 import { usePlayStore, setPlayRuntime } from './playStore'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 
-vi.mock('../../shared/chess/ChessBoard', () => ({ default: ({ fen }: { fen: string }) => <div data-testid="board">{fen}</div> }))
+vi.mock('../../shared/chess/ChessBoard', () => ({
+  default: ({ fen, onSquareClick }: { fen: string; onSquareClick?: (s: string) => void }) => (
+    <div data-testid="board">{fen}{['e2', 'e4'].map((s) => <button key={s} onClick={() => onSquareClick?.(s)}>sq-{s}</button>)}</div>
+  ),
+}))
 
 beforeEach(() => {
   useSettingsStore.setState({ language: 'en' })
@@ -18,6 +22,13 @@ describe('PlayPage', () => {
     fireEvent.change(screen.getByLabelText('Engine strength'), { target: { value: '6' } })
     fireEvent.click(screen.getByRole('button', { name: 'New game' }))
     expect(usePlayStore.getState()).toMatchObject({ status: 'playing', strength: 6, mode: 'engine' })
+  })
+  it('a move can be made by clicking the piece and then its square', async () => {
+    render(<PlayPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'New game' }))
+    fireEvent.click(screen.getByRole('button', { name: 'sq-e2' }))
+    fireEvent.click(screen.getByRole('button', { name: 'sq-e4' }))
+    expect(usePlayStore.getState().sans[0]).toBe('e4')
   })
   it('Lichess needs a token with board:play and shows where to create it', () => {
     render(<PlayPage />)

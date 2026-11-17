@@ -43,9 +43,9 @@ let chess = new Chess()
 let abort: AbortController | null = null
 const START = new Chess().fen()
 const T = {
-  es: { leaves: 'Cuidado: tu jugada permite', your: 'Tu jugada:', chance: 'Oportunidad:', mated: 'Jaque mate.', draw: 'Tablas.', seeking: 'Buscando rival en Lichess…' },
-  en: { leaves: 'Careful: your move allows', your: 'Your move:', chance: 'Chance:', mated: 'Checkmate.', draw: 'Draw.', seeking: 'Looking for an opponent on Lichess…' },
-  de: { leaves: 'Vorsicht: dein Zug erlaubt', your: 'Dein Zug:', chance: 'Chance:', mated: 'Schachmatt.', draw: 'Remis.', seeking: 'Suche Gegner auf Lichess…' },
+  es: { leaves: 'Cuidado, tu jugada le deja al rival esto:', your: 'Tu jugada:', chance: 'Oportunidad:', mated: 'Jaque mate.', draw: 'Tablas.', seeking: 'Buscando rival en Lichess…' },
+  en: { leaves: 'Careful, your move leaves the opponent this:', your: 'Your move:', chance: 'Chance:', mated: 'Checkmate.', draw: 'Draw.', seeking: 'Looking for an opponent on Lichess…' },
+  de: { leaves: 'Vorsicht, dein Zug erlaubt dem Gegner:', your: 'Dein Zug:', chance: 'Chance:', mated: 'Schachmatt.', draw: 'Remis.', seeking: 'Suche Gegner auf Lichess…' },
 }
 
 export const usePlayStore = create<PlayState>((set, get) => {
@@ -70,7 +70,7 @@ export const usePlayStore = create<PlayState>((set, get) => {
     // What the side to move can do now: a warning for the mover, a chance for the other.
     const chances = opportunities(chess.fen(), lang)
     if (chances.length) {
-      if (byUser && !two) note('tutor', `${t.leaves} ${chances[0].text.replace(/^[^:]+: /, '')}`)
+      if (byUser && !two) note('tutor', `${t.leaves} ${chances[0].text}`)
       else if (!byUser || two) note('tutor', chances.map((c) => c.text).join(' '))
     }
     return true

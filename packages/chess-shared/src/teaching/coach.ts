@@ -31,17 +31,17 @@ const PIECE: Record<Lang, Record<string, string>> = {
 const W = {
   es: { blunder: 'Error grave', mistake: 'Error', dubious: 'Imprecisión', good: 'Buena jugada', brilliant: '¡Jugada brillante!',
     better: 'Era mejor', allowsMate: (sq: string) => `Permite el mate en ${sq}.`, allowsWin: (san: string) => `Permite ${san}, que gana material.`,
-    watch: 'Atención: el rival', idea: 'tiene una idea:', title: (side: string) => `Revisión del maestro para las ${side}`,
+    watch: 'Atención: el rival', idea: 'Atención, idea del rival', title: (side: string) => `Revisión del maestro para las ${side}`,
     errs: ['error grave', 'errores graves', 'error', 'errores', 'imprecisión', 'imprecisiones', 'buena jugada', 'buenas jugadas'], move: 'jugada', moves: 'jugadas',
     clean: 'sin errores serios', white: 'blancas', black: 'negras', both: 'blancas y negras' },
   en: { blunder: 'Blunder', mistake: 'Mistake', dubious: 'Inaccuracy', good: 'Good move', brilliant: 'Brilliant move!',
     better: 'Better was', allowsMate: (sq: string) => `It allows mate on ${sq}.`, allowsWin: (san: string) => `It allows ${san}, which wins material.`,
-    watch: 'Careful: the opponent', idea: 'has an idea:', title: (side: string) => `Coach review for ${side}`,
+    watch: 'Careful: the opponent', idea: 'Careful, the opponent has an idea', title: (side: string) => `Coach review for ${side}`,
     errs: ['blunder', 'blunders', 'mistake', 'mistakes', 'inaccuracy', 'inaccuracies', 'good move', 'good moves'], move: 'move', moves: 'moves',
     clean: 'no serious errors', white: 'White', black: 'Black', both: 'both sides' },
   de: { blunder: 'Grober Fehler', mistake: 'Fehler', dubious: 'Ungenauigkeit', good: 'Guter Zug', brilliant: 'Glänzender Zug!',
     better: 'Besser war', allowsMate: (sq: string) => `Erlaubt Matt auf ${sq}.`, allowsWin: (san: string) => `Erlaubt ${san}, das Material gewinnt.`,
-    watch: 'Achtung: der Gegner', idea: 'hat eine Idee:', title: (side: string) => `Trainer-Analyse für ${side}`,
+    watch: 'Achtung: der Gegner', idea: 'Achtung, Idee des Gegners', title: (side: string) => `Trainer-Analyse für ${side}`,
     errs: ['grober Fehler', 'grobe Fehler', 'Fehler', 'Fehler', 'Ungenauigkeit', 'Ungenauigkeiten', 'guter Zug', 'gute Züge'], move: 'Zug', moves: 'Züge',
     clean: 'keine ernsten Fehler', white: 'Weiß', black: 'Schwarz', both: 'beide Seiten' },
 };
@@ -50,6 +50,12 @@ const MISSED = {
   en: (san: string, what: string) => `You let a free capture go: ${san} won ${what}.`,
   de: (san: string, what: string) => `Du hast einen freien Schlag ausgelassen: ${san} gewann ${what}.`,
 };
+const LETTERS: Partial<Record<Lang, Record<string, string>>> = {
+  es: { K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' },
+  de: { K: 'K', Q: 'D', R: 'T', B: 'L', N: 'S' },
+};
+/** A move in the piece letters of the language. */
+const localSan = (san: string, lang: Lang) => (LETTERS[lang] ? san.replace(/^[KQRBN]/, (c) => LETTERS[lang]![c]).replace(/=([QRBN])/, (_m, c: string) => `=${LETTERS[lang]![c]}`) : san);
 const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 /** Motifs worth saying about an opponent's move: what it threatens or prepares. */
 const WARN = new Set<Motif['kind']>(['threat', 'mate-threat', 'fork', 'attack-undefended', 'aims-at', 'pin', 'skewer', 'discovered-attack', 'joint-attack', 'traps', 'combination']);
@@ -95,7 +101,7 @@ export function coachGame(plies: PlyInput[], review: GameReview, options: CoachO
       // A free piece left on the board.
       const free = freeCapture(p.fenBefore);
       const took = free && p.san.replace(/[+#!?]+$/, '') === free.san.replace(/[+#]+$/, '');
-      if (free && !took && m.loss >= 3) said.push(MISSED[lang](free.san, `${PIECE[lang][free.piece]} ${lang === 'es' ? 'de' : lang === 'en' ? 'on' : 'auf'} ${free.square}`));
+      if (free && !took && m.loss >= 3) said.push(MISSED[lang](localSan(free.san, lang), `${PIECE[lang][free.piece]} ${lang === 'es' ? 'de' : lang === 'en' ? 'on' : 'auf'} ${free.square}`));
       // What the better move did.
       if (q && (serious || (level >= 2 && q === 'dubious')) && m.best) {
         const ideas = moveMotifs(p.fenBefore, m.best.san).filter((x) => !PLAIN.has(x.kind));
@@ -103,7 +109,7 @@ export function coachGame(plies: PlyInput[], review: GameReview, options: CoachO
         let after = p.fenBefore;
         try { chess.move(m.best.san); after = chess.fen(); } catch { /* engine line not legal here */ }
         const why = ideas.slice(0, 2).map((x) => motifText(x, after, lang)).filter(Boolean).join(' ');
-        said.push(`${w.better} ${m.best.san}.${why ? ` ${why}` : ''}`);
+        said.push(`${w.better} ${localSan(m.best.san, lang)}.${why ? ` ${why}` : ''}`);
       }
       if (level >= 2 && (q === 'good' || q === 'brilliant')) {
         tally.good.push(at);
@@ -116,10 +122,11 @@ export function coachGame(plies: PlyInput[], review: GameReview, options: CoachO
       }
     } else if (level >= 2) {
       // The opponent: what this move is up to.
-      const warn = m.motifs.filter((x) => WARN.has(x.kind)).slice(0, 2).map((x) => ({ x, t: motifText(x, p.fenAfter, lang) })).filter((y) => y.t);
+      const direct = (k: Motif['kind']) => k === 'threat' || k === 'mate-threat' || k === 'attack-undefended';
+      const warn = m.motifs.filter((x) => WARN.has(x.kind)).sort((a, b) => Number(direct(b.kind)) - Number(direct(a.kind))).slice(0, 2).map((x) => ({ x, t: motifText(x, p.fenAfter, lang) })).filter((y) => y.t);
       if (warn.length) {
         const verb = (k: Motif['kind']) => k === 'threat' || k === 'mate-threat' || k === 'attack-undefended';
-        said.push(warn.map(({ x, t }, k) => (k === 0 ? `${w.watch} ${verb(x.kind) ? lowerFirst(t) : `${w.idea} ${t}`}` : t)).join(' '));
+        said.push(warn.map(({ x, t }, k) => (k === 0 ? (verb(x.kind) ? `${w.watch} ${lowerFirst(t)}` : `${w.idea} — ${t}`) : t)).join(' '));
       }
     }
     if (said.length) remarks[i + 1] = said.join(' ');

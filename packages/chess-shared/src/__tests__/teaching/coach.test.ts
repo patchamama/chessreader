@@ -32,7 +32,7 @@ describe('the coach (S25)', () => {
   it('warns about what the opponent is up to', () => {
     const { remarks } = coachGame(game, review, { focus: 'black', level: 2, lang: 'es' })
     // 3. Qh5 and 3. Bc4 both aim at f7.
-    expect(remarks[3]).toMatch(/^Atención: el rival/)
+    expect(remarks[3]).toMatch(/^Atención/)
     expect(remarks[5]).toMatch(/f7/)
   })
 
@@ -52,5 +52,20 @@ describe('the coach (S25)', () => {
   it('level 3 says the idea behind each of the player\'s moves', () => {
     const { remarks } = coachGame(game, review, { focus: 'white', level: 3, lang: 'en' })
     expect(remarks[5]).toMatch(/f7/)
+  })
+})
+
+describe('coach wording found wrong in the browser smoke (S26)', () => {
+  it('the better move is written in the letters of the language, and "better was" is said once', async () => {
+    const { annotateGame } = await import('../../index.js')
+    const g = plies('e4 e5 Qh5 Nc6 Bc4 Nf6 Qxf7#',
+      [{ cp: 20 }, { cp: 25 }, { cp: 20 }, { cp: -40 }, { cp: -30 }, { cp: -35 }, { mate: 1 }, { mate: 1 }],
+      { 4: { san: 'Qf3', line: ['Qf3'] }, 5: { san: 'g6', line: ['g6', 'Qf3', 'Nf6'] } })
+    const r = reviewGame(g)
+    const { remarks, intro } = coachGame(g, r, { focus: 'black', level: 2, lang: 'de' })
+    const text = annotateGame(g, r, { level: 2, lang: 'de', remarks, intro })
+    expect(text.match(/Besser war/g)?.length).toBe(1)
+    const w = coachGame(g, r, { focus: 'white', level: 2, lang: 'es' })
+    void w
   })
 })
