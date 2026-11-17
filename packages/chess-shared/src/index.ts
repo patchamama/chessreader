@@ -17,3 +17,4 @@ export * from './teaching/positionIdeas.js';
 export * from './teaching/commentaryPrompt.js';
 export * from './teaching/commentAudit.js';
 export * from './teaching/coach.js';
+export * from './teaching/tutor.js';

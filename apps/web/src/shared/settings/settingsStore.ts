@@ -148,6 +148,8 @@ export interface AppSettings {
   /** Diagrams in an annotated game at its key moments, with the engine evaluation under them. */
   commentDiagrams: boolean
   commentDiagramEval: boolean
+  /** Lichess token with the board:play permission (playing from this board). Kept in this browser. */
+  lichessPlayToken: string
   /** Personal Lichess token (the masters explorer needs one). Kept in this browser, sent only to Lichess. */
   lichessToken: string
   boardTheme: BoardTheme
@@ -221,6 +223,7 @@ const DEFAULT: AppSettings = {
   aiKey: '',
   aiModel: '',
   lichessToken: '',
+  lichessPlayToken: '',
   commentLayout: 'inline',
   autoscroll: true,
   commentDiagrams: false,

@@ -10,6 +10,7 @@ import ResetPasswordPage from '../features/auth/components/ResetPasswordPage'
 import BookReader from '../features/library/components/BookReader'
 import WebparserView from '../features/webparser/components/WebparserView'
 import GameSearchPage from '../features/gamesearch/GameSearchPage'
+import PlayPage from '../features/play/PlayPage'
 import { isDemoHost } from '../shared/env/devMode'
 import PendingPage from '../features/auth/components/PendingPage'
 
@@ -43,6 +44,14 @@ const routes = [
         element: (
           <RequireApproved>
             <GameSearchPage />
+          </RequireApproved>
+        ),
+      },
+      {
+        path: '/play',
+        element: (
+          <RequireApproved>
+            <PlayPage />
           </RequireApproved>
         ),
       },
