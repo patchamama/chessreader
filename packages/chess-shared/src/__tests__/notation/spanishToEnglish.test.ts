@@ -124,3 +124,18 @@ describe('language of the notation is decided by majority', () => {
     expect(spanishToEnglish(text)).toBe(text)
   })
 })
+
+describe('piece letters glued to the move number (books print "3.Cc3", "3...Ab4")', () => {
+  it('are translated like spaced ones', async () => {
+    const { spanishToEnglish } = await import('../../notation/spanishToEnglish.js')
+    expect(spanishToEnglish('1.d4 Cf6 2.c4 e6 3.Cc3 Ab4 4.e3 0-0 5.Ad3 d5 6.Cf3 c5 7.0-0 Cc6 8.a3 Axc3'))
+      .toBe('1.d4 Nf6 2.c4 e6 3.Nc3 Bb4 4.e3 O-O 5.Bd3 d5 6.Nf3 c5 7.O-O Nc6 8.a3 Bxc3')
+    expect(spanishToEnglish('12...Dxd5 13.Tf1')).toBe('12...Qxd5 13.Rf1')
+  })
+  it('a whole book game is recognised to the end', async () => {
+    const { recognizeGames } = await import('../../recognition/recognizeGames.js')
+    const [g] = recognizeGames('Partida 11\nKeres-Averbach\n1.d4 Cf6 2.c4 e6 3.Cc3 Ab4 4.e3 0-0 5.Ad3 d5 6.Cf3 c5 7.0-0 Cc6 8.a3 Axc3\nUna inesperada decisión.', { algorithm: 2 })
+    expect(g.tree.mainline.length).toBe(16)
+    expect(g.tree.errors).toEqual([])
+  })
+})

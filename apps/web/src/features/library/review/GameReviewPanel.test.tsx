@@ -91,6 +91,17 @@ describe('GameReviewPanel', () => {
     useSettingsStore.setState({ commentLayout: 'inline', commentDiagrams: false })
   })
 
+  it('opens a coach review for the chosen side (S25)', async () => {
+    renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Review game with the engine' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /Coach review/ })).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Focus on'), { target: { value: 'black' } })
+    fireEvent.click(screen.getByRole('button', { name: /Coach review/ }))
+    const html = useExternalBookStore.getState().chapters[0].html
+    expect(html).toContain('Coach review for Black')
+    expect(html).toMatch(/Blunder\. It allows mate on f7/)
+  })
+
   it('keeps a record per book and chapter and sums players up', async () => {
     renderPanel()
     fireEvent.click(screen.getByRole('button', { name: 'Review game with the engine' }))

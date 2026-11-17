@@ -184,7 +184,7 @@ export function moveMotifs(fenBefore: string, san: string, context: MotifContext
       return p && p.color === foe && p.type !== 'k' && p.type !== 'p' && chess.attackers(s as Square, foe).length === 0
         && !attacksFrom(before, m.from).includes(s);
     });
-    if (targets.length > 0 && safe) add('attack-undefended', targets.sort());
+    if (targets.length > 0 && safe && !lost) add('attack-undefended', targets.sort());
     // Material won on the spot: something taken that cannot be taken back, or worth more than the taker.
     // Taking back what the opponent just took is an exchange, not a gain:
     // count the material across both moves.
@@ -195,7 +195,9 @@ export function moveMotifs(fenBefore: string, san: string, context: MotifContext
         if (balance(prev, me) > balance(before, me)) recapture = balance(chess, me) - balance(prev, me) < 1;
       } catch { /* not a position */ }
     }
-    if (m.captured && !recapture && (chess.attackers(m.to as Square, foe).length === 0 || VALUE[m.captured] > VALUE[moved.type])) {
+    // …nor when the reply takes back as much somewhere else.
+    const regain = bestFreeCapture(chess);
+    if (m.captured && !recapture && regain < VALUE[m.captured] && (chess.attackers(m.to as Square, foe).length === 0 || VALUE[m.captured] > VALUE[moved.type])) {
       add('wins-material', [], { piece: m.captured });
     }
     // Discovered attack: a slider behind the moved piece now hits something worth taking.
@@ -309,6 +311,17 @@ export function moveMotifs(fenBefore: string, san: string, context: MotifContext
     for (const row of chess.board()) for (const p of row) {
       if (!p || p.color !== foe || !'nbrq'.includes(p.type)) continue;
       if (!threatened(chess, p.square, p.type, foe) || threatened(before, p.square, p.type, foe)) continue;
+      // Not trapped if what attacks it can simply be taken.
+      const hunters = chess.attackers(p.square, me);
+      const removes = chess.moves({ verbose: true }).some((mv) => {
+        if (!hunters.includes(mv.to as Square) || mv.from === p.square) return false;
+        if (VALUE[mv.captured!] >= VALUE[mv.piece]) return true;
+        chess.move(mv);
+        const safe = !threatened(chess, mv.to, mv.piece, foe);
+        chess.undo();
+        return safe;
+      });
+      if (removes) continue;
       const escapes = chess.moves({ square: p.square, verbose: true }).some((mv) => {
         if (mv.captured && VALUE[mv.captured] >= VALUE[p.type]) return true;
         chess.move(mv);
@@ -320,6 +333,17 @@ export function moveMotifs(fenBefore: string, san: string, context: MotifContext
     }
   }
   return out;
+}
+
+/** The most the side to move wins with one capture (value taken minus the taker when it is defended). */
+function bestFreeCapture(chess: Chess): number {
+  let best = 0;
+  for (const mv of chess.moves({ verbose: true })) {
+    if (!mv.captured) continue;
+    const defended = chess.attackers(mv.to as Square, chess.turn() === 'w' ? 'b' : 'w').length > 0;
+    best = Math.max(best, VALUE[mv.captured] - (defended ? VALUE[mv.piece] : 0));
+  }
+  return best;
 }
 
 /** The piece of `color` on `square` can be taken for nothing, or by something cheaper. */

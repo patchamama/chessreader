@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Chess } from 'chess.js'
-import { annotateGame, extractPlayers, numberLine, openingName, reviewGame } from '@chess-ebook/chess-shared'
+import { annotateGame, coachGame, extractPlayers, numberLine, openingName, reviewGame } from '@chess-ebook/chess-shared'
 import type { KeyMoment, Lang, MoveQuality, RecognizedGame } from '@chess-ebook/chess-shared'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { useSettingsStore, STOCKFISH_VERSIONS } from '../../../shared/settings/settingsStore'
@@ -29,6 +29,7 @@ const T: Record<Lang, Record<string, string>> = {
     games: 'games', depth: 'Depth', brilliant: 'brilliant', good: 'very good', dubious: 'inaccuracies', mistake: 'mistakes', blunder: 'blunders',
     ai: 'Comment with a language model', aiBusy: 'Writing commentary…', aiSetup: 'To comment with a language model, set its provider, key and model in Settings.',
     layout: 'Layout', inline: 'Remarks in braces', split: 'A line per remark', paragraphs: 'Paragraph after the moves', diagrams: 'Diagrams at key moments', evalUnder: 'Evaluation under diagrams', diagramHere: 'Diagram at this move', diagramsChosen: 'chosen diagrams',
+    coach: 'Coach review: what went well and badly', focus: 'Focus on', focusBoth: 'Both sides',
     players: 'Players are read from PGN tags, from lines "White: … / Black: …" or from a heading "White – Black".',
   },
   es: {
@@ -40,6 +41,7 @@ const T: Record<Lang, Record<string, string>> = {
     games: 'partidas', depth: 'Profundidad', brilliant: 'brillantes', good: 'muy buenas', dubious: 'imprecisiones', mistake: 'errores', blunder: 'errores graves',
     ai: 'Comentar con un modelo de lenguaje', aiBusy: 'Escribiendo comentarios…', aiSetup: 'Para comentar con un modelo de lenguaje, configura proveedor, clave y modelo en Ajustes.',
     layout: 'Formato', inline: 'Comentarios entre llaves', split: 'Una línea por comentario', paragraphs: 'Párrafo tras las jugadas', diagrams: 'Diagramas en momentos clave', evalUnder: 'Evaluación bajo los diagramas', diagramHere: 'Diagrama en esta jugada', diagramsChosen: 'diagramas elegidos',
+    coach: 'Revisión del maestro: qué hice bien y mal', focus: 'Enfocar en', focusBoth: 'Ambos bandos',
     players: 'Los jugadores se leen de las etiquetas PGN, de líneas "Blancas: … / Negras: …" o de un encabezado "Blancas – Negras".',
   },
   de: {
@@ -51,6 +53,7 @@ const T: Record<Lang, Record<string, string>> = {
     games: 'Partien', depth: 'Tiefe', brilliant: 'glänzend', good: 'sehr gut', dubious: 'Ungenauigkeiten', mistake: 'Fehler', blunder: 'grobe Fehler',
     ai: 'Mit einem Sprachmodell kommentieren', aiBusy: 'Kommentar wird geschrieben…', aiSetup: 'Zum Kommentieren mit einem Sprachmodell Anbieter, Schlüssel und Modell in den Einstellungen festlegen.',
     layout: 'Layout', inline: 'Anmerkungen in Klammern', split: 'Eine Zeile pro Anmerkung', paragraphs: 'Absatz nach den Zügen', diagrams: 'Diagramme an Schlüsselstellen', evalUnder: 'Bewertung unter Diagrammen', diagramHere: 'Diagramm bei diesem Zug', diagramsChosen: 'gewählte Diagramme',
+    coach: 'Trainer-Analyse: was gut und schlecht war', focus: 'Fokus auf', focusBoth: 'Beide Seiten',
     players: 'Die Spieler werden aus PGN-Tags, aus Zeilen "Weiß: … / Schwarz: …" oder aus einer Überschrift "Weiß – Schwarz" gelesen.',
   },
 }
@@ -84,6 +87,7 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
   const keyDiagrams = useSettingsStore((s) => s.commentDiagrams)
   const diagramEval = useSettingsStore((s) => s.commentDiagramEval)
   const currentNodeId = useStudyBoardStore((s) => s.currentNodeId)
+  const [focus, setFocus] = useState<'white' | 'black' | 'both'>('white')
   /** Moves the reader picked for a diagram (node ids of this game). */
   const [diagramAt, setDiagramAt] = useState<string[]>([])
   const diagrams = keyDiagrams || diagramAt.length ? { key: keyDiagrams, at: diagramAt, eval: diagramEval } : undefined
@@ -152,6 +156,16 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
     const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
     const annotated = annotateGame(reviewed.plies, reviewed.review, { level, lang, white: players.white, black: players.black, layout, diagrams })
     const { title, chapters } = textToChapters(annotated, `${names} (${t.title.toLowerCase()})`)
+    openBook(title, chapters)
+    navigate(`/read/${EXTERNAL_BOOK_ID}`)
+  }
+
+  function openCoach() {
+    if (!reviewed) return
+    const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
+    const { remarks, intro } = coachGame(reviewed.plies, reviewed.review, { focus, level, lang })
+    const annotated = annotateGame(reviewed.plies, reviewed.review, { level: 2, lang, white: players.white, black: players.black, remarks, intro, layout, diagrams })
+    const { title, chapters } = textToChapters(annotated, `${names} (${t.coach.split(':')[0].toLowerCase()})`)
     openBook(title, chapters)
     navigate(`/read/${EXTERNAL_BOOK_ID}`)
   }
@@ -348,6 +362,16 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
               ▦ {t.diagramHere}{diagramAt.length ? ` (${diagramAt.length} ${t.diagramsChosen})` : ''}
             </button>
             <button className={button} onClick={openAnnotated}>{t.open}</button>
+            <label className="flex items-center gap-1 text-[11px] text-slate-700">
+              {t.focus}
+              <select aria-label={t.focus} value={focus} onChange={(e) => setFocus(e.target.value as 'white' | 'black' | 'both')}
+                className="rounded border border-slate-300 bg-white px-1 py-0.5">
+                <option value="white">{t.white}</option>
+                <option value="black">{t.black}</option>
+                <option value="both">{t.focusBoth}</option>
+              </select>
+            </label>
+            <button className={button} onClick={openCoach}>🎓 {t.coach}</button>
             <button className={button} onClick={() => void openAiAnnotated()} disabled={!aiReady || aiBusy} title={aiReady ? undefined : t.aiSetup}>
               {aiBusy ? t.aiBusy : `✨ ${t.ai}`}
             </button>

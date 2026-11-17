@@ -99,15 +99,15 @@ export function spanishToEnglish(text: string): string {
   const tail = `(?=${SAN_TAIL})`;
   result = result
     // T (Torre/Rook) -> placeholder — must come BEFORE R (Rey/King)
-    .replace(new RegExp(`(?<=^|[\\s(])T${tail}`, 'g'), '\x00ROOK\x00')
+    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.)T${tail}`, 'g'), '\x00ROOK\x00')
     // C (Caballo/Knight) -> N
-    .replace(new RegExp(`(?<=^|[\\s(])C${tail}`, 'g'), 'N')
+    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.)C${tail}`, 'g'), 'N')
     // A (Alfil/Bishop) -> B
-    .replace(new RegExp(`(?<=^|[\\s(])A${tail}`, 'g'), 'B')
+    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.)A${tail}`, 'g'), 'B')
     // D (Dama/Queen) -> Q
-    .replace(new RegExp(`(?<=^|[\\s(])D${tail}`, 'g'), 'Q')
+    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.)D${tail}`, 'g'), 'Q')
     // R (Rey/King) -> K  — only in Spanish context (no English markers present)
-    .replace(new RegExp(`(?<=^|[\\s(])R${tail}`, 'g'), 'K')
+    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.)R${tail}`, 'g'), 'K')
     // Restore Rook placeholder
     .replace(/\x00ROOK\x00/g, 'R')
     // Promotion: the piece the pawn becomes ("bxa8=D" → "bxa8=Q").

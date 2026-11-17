@@ -15,3 +15,5 @@ export * from './teaching/gameReview.js';
 export * from './teaching/narrationTrack.js';
 export * from './teaching/positionIdeas.js';
 export * from './teaching/commentaryPrompt.js';
+export * from './teaching/commentAudit.js';
+export * from './teaching/coach.js';

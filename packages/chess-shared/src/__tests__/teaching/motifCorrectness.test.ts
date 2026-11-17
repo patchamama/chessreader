@@ -64,3 +64,18 @@ describe('lined-up pieces name their line (S8, S14)', () => {
     expect(motifText(m, c.fen(), 'en')).toBe('The rook and the queen on d1 line up on the d-file against the rook on d8.')
   })
 })
+
+describe('remarks the audit found wrong (S26)', () => {
+  it('a piece attacking from a square where a cheaper piece takes it attacks nothing', () => {
+    // 27. Nec5: the knight on c5 can be taken by the pawn on b6.
+    expect(kinds('r7/p1p1npk1/bp4p1/8/2P1N3/1P1N4/P1P2P1P/2K1R3 w - - 6 27', 'Nec5')).not.toContain('attack-undefended')
+  })
+  it('no "trapped" when the attacker itself can be taken', () => {
+    // 5. Nxc6: the queen on d8 has no move, but b7xc6 / d7xc6 removes the knight.
+    expect(kinds('r1bqkb1r/pppp1ppp/2n2n2/8/3NP3/8/PPP2PPP/RNBQKB1R w KQkq - 1 5', 'Nxc6')).not.toContain('traps')
+  })
+  it('no "wins material" when the reply takes back as much elsewhere', () => {
+    // White Bxb7 takes a free pawn while its own queen on d1 hangs to the bishop on g4.
+    expect(kinds('rn1qkbnr/pppppppp/8/8/6b1/8/PPPP1PBP/RNBQK1NR w KQkq - 0 1', 'Bxb7')).not.toContain('wins-material')
+  })
+})
