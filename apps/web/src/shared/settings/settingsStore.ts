@@ -141,6 +141,8 @@ export interface AppSettings {
   /** Its API key (kept in this browser, sent only to that provider) and model id. */
   aiKey: string
   aiModel: string
+  /** Scroll the book so the move being played or narrated stays centred. */
+  autoscroll: boolean
   /** How an annotated game is written: remarks in braces, lines split at each remark, or runs of moves followed by a paragraph. */
   commentLayout: 'inline' | 'split' | 'paragraphs'
   /** Diagrams in an annotated game at its key moments, with the engine evaluation under them. */
@@ -220,6 +222,7 @@ const DEFAULT: AppSettings = {
   aiModel: '',
   lichessToken: '',
   commentLayout: 'inline',
+  autoscroll: true,
   commentDiagrams: false,
   commentDiagramEval: true,
   boardTheme: 'blue',

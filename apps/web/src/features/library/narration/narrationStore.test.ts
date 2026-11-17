@@ -273,3 +273,26 @@ describe('narration fixes', () => {
     expect(useNarrationStore.getState().status).toBe('waiting-move')
   })
 })
+
+describe('variations announced and closed (S19)', () => {
+  it('says a variation starts, and after it names the last move of the game and waits 2 s before going back', async () => {
+    const waits: number[] = []
+    const events: string[] = []
+    setNarrationRuntime({
+      speaker: { speak: async (text) => { events.push(`say:${text}`) }, cancel: () => {} },
+      delay: async (ms) => { waits.push(ms); events.push(`wait:${ms}`) },
+    })
+    const n = useNarrationStore.getState()
+    n.load(script, game.tree, 'es')
+    n.setOption({ simulate: true, mode: 'auto', rate: 1 })
+    n.play()
+    await settle(() => useNarrationStore.getState().status === 'finished')
+    const intro = events.findIndex((e) => /^say:(Analicemos la siguiente variante|Hay una variante interesante|Veamos qué pasaría)/.test(e))
+    const firstMove = events.findIndex((e) => e.startsWith('say:peón e por de 4'))
+    expect(intro).toBeGreaterThan(-1)
+    expect(intro).toBeLessThan(firstMove)
+    const back = events.findIndex((e) => e.startsWith('say:Volvamos a la partida'))
+    expect(events[back]).toBe('say:Volvamos a la partida: la última jugada de las negras fue alfil ge 4.')
+    expect(events[back + 1]).toBe('wait:2000')
+  })
+})

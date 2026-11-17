@@ -22,6 +22,7 @@ import { isDevMode } from '../../../shared/env/devMode'
 import { createRoot, type Root } from 'react-dom/client'
 import { DiagramImage } from './DiagramImage'
 import { inferDiagramFen } from '../utils/inferDiagramFen'
+import { followActiveMove } from '../utils/autoscroll'
 import { NarrationPanel } from '../narration/NarrationPanel'
 import { GameReviewPanel } from '../review/GameReviewPanel'
 import { PositionIdeasPanel } from '../review/PositionIdeasPanel'
@@ -92,6 +93,7 @@ export default function BookReader() {
 
   const loadStudyPosition = useStudyBoardStore((s) => s.loadPosition)
   const setIsolatedHighlight = useStudyBoardStore((s) => s.setIsolatedHighlight)
+  const autoscroll = useSettingsStore((s) => s.autoscroll)
   const epub = useSettingsStore((s) => s.epub)
   const studyPanelWidth = useSettingsStore((s) => s.studyPanelWidth)
   const fontSize = useSettingsStore((s) => s.fontSize)
@@ -415,9 +417,9 @@ export default function BookReader() {
       span.classList.toggle('bg-yellow-300', active)
       // Keep the link colour only while inactive (active is yellow + bold).
       span.classList.toggle('text-blue-700', !active)
-      if (active) span.scrollIntoView?.({ block: 'nearest' })
+      if (active) followActiveMove(span, autoscroll)
     })
-  }, [activeSpanKey, html, games])
+  }, [activeSpanKey, html, games, autoscroll])
 
   // Delegated pointer/click handlers — mounted ONCE on the content container.
   // They read data-* attributes + the registries, so re-wrapping spans (which

@@ -134,6 +134,11 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           </>
         )}
 
+        <label className="mt-3 flex items-center gap-2 text-xs text-gray-700">
+          <input type="checkbox" checked={s.autoscroll} onChange={(e) => s.set({ autoscroll: e.target.checked })} />
+          Autoscroll: keep the move being played or narrated in view
+        </label>
+
         {/* Lichess */}
         <label className={labelClass} htmlFor="lichess-token">Lichess token (masters database; kept in this browser, sent only to Lichess)</label>
         <input id="lichess-token" type="password" autoComplete="off" className={inputClass} value={s.lichessToken} onChange={(e) => s.set({ lichessToken: e.target.value })} />
