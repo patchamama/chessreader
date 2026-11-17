@@ -51,6 +51,12 @@ export interface SanToken {
    * Only meaningful for type === 'move'.
    */
   isolated?: boolean;
+  /**
+   * The move was written in long notation ("e2-e4", "Ng1-f3", "e4xd5"). It is a
+   * move of a line only next to other long moves or right after a move number;
+   * among short moves it is a plan written in prose ("and then d4-d5").
+   */
+  long?: boolean;
 }
 
 /**
@@ -212,6 +218,25 @@ export function tokenize(text: string): SanToken[] {
     }
   }
 
+  // Collect moves in long notation: "e2-e4", "Ng1-f3", "e4xd5", "e7-e8=Q".
+  // Longer than the short moves inside them, so they win the overlap below.
+  {
+    const re = /(?<![a-zA-Z0-9])([KQRBN])?([a-h][1-8])([-\u2013x:])([a-h][1-8])(?:=?([QRBN]))?([+#]?[!?]*)(?=[^a-zA-Z0-9]|$)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      const [, piece, from, sep, to, promo, suffix] = m;
+      const capture = sep === 'x' || sep === ':';
+      const san = piece
+        ? `${piece}${from}${capture ? 'x' : ''}${to}${suffix}`
+        : `${capture ? `${from[0]}x` : ''}${to}${promo ? `=${promo}` : ''}${suffix}`;
+      matches.push({
+        start: m.index,
+        end: m.index + m[0].length,
+        token: { type: 'move', raw: m[0], charStart: m.index, charEnd: m.index + m[0].length, san, long: true },
+      });
+    }
+  }
+
   // Sort by start position, resolve overlaps (prefer longer / earlier)
   matches.sort((a, b) => a.start - b.start || b.end - a.end);
 
@@ -251,6 +276,8 @@ export function tokenize(text: string): SanToken[] {
   let paragraphBreakEnd: number | null = null;
   // Set when a paragraph-leading move-number was seen, to also flag its move.
   let carryParagraphStart = false;
+  // What the live chain ended with: a long move continues only a number or another long move.
+  let chainTail: 'number' | 'long' | 'short' | null = null;
 
   // PGN NAGs ("$14", "$132") annotate the previous move; they are not prose, so
   // they do not count towards the gap: "10. Nd2! $14 O-O-O" is one chain.
@@ -291,6 +318,7 @@ export function tokenize(text: string): SanToken[] {
       paragraphBreakEnd = null;
       // A move-number always seeds/keeps the chain alive.
       chainEnd = token.charEnd;
+      chainTail = 'number';
       tokens.push(token);
     } else if (token.type === 'move') {
       token.moveNumber = currentMoveNumber;
@@ -301,8 +329,11 @@ export function tokenize(text: string): SanToken[] {
       }
       paragraphBreakEnd = null;
       nextColor = nextColor === 'white' ? 'black' : 'white';
-      if (chained(token.charStart)) {
+      // A long move after short ones is a plan in the prose ("…Qxe4 and d4-d5").
+      const plan = token.long && chainTail === 'short';
+      if (chained(token.charStart) && !plan) {
         chainEnd = token.charEnd;
+        chainTail = token.long ? 'long' : 'short';
       } else {
         token.isolated = true;
         chainEnd = null;
