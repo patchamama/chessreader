@@ -159,7 +159,7 @@ export async function lichessMastersByOpening(opening: Opening, token?: string):
 }
 
 export async function lichessMasterPgn(id: string, token?: string): Promise<string> {
-  return cachedPgn(`master:${id}`, () => get(`https://explorer.lichess.ovh/master/pgn/${encodeURIComponent(id)}`, undefined, token))
+  return cachedPgn(`master:${id}`, () => get(`https://explorer.lichess.ovh/masters/pgn/${encodeURIComponent(id)}`, undefined, token))
 }
 
 export interface BroadcastSummary {
