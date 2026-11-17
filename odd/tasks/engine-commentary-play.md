@@ -24,7 +24,7 @@ Delivery: one commit + tag per phase on main, pushed to origin main (user's stan
 - [x] T2 S11–S13 Play tutor: toggles, quality squares + legend, move status (book/tablebase/engine), Lichess players/clocks/ratings, eval bar, voice, engine version, Maia bots — inline — v0.71.0
 - [x] T3 S8–S10 hint eval + deviation + dashed best-move arrow; book-like annotated diagrams; "Reanalizar y regenerar todos los comentarios" — inline — v0.72.0
 - [x] T4 S2 backend Stockfish catalog/install/select + multipv; web admin panel, SF17/18 builds — inline — v0.73.0
-- [ ] T5 S3 diagram evals: per-diagram refresh, evaluate all (add/replace), alternatives, eval bar — inline — v0.74.0
+- [x] T5 S3 diagram evals: per-diagram refresh, evaluate all (add/replace), alternatives, eval bar — inline — v0.74.0
 - [ ] T6 S4, S15 Kasparov error classification + new books analysis + recognition fixes — inline — v0.75.0
 - [ ] T7 S5–S6 commentary DB (positionKey, extractor, build script, SQLite + shards, lookup, insertion) — inline — v0.76.0–v0.77.0
 - [ ] T8 S7 Maia experiment + integration decision — inline — v0.78.0

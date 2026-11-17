@@ -9,6 +9,8 @@ use App\Application\Eval\Command\EvaluatePositionCommand;
 use App\Application\Eval\EvaluateGameHandler;
 use App\Application\Eval\EvaluatePositionHandler;
 use App\Domain\Chess\Fen;
+use App\Application\Eval\Port\ChessEngine;
+use App\Application\Eval\Port\MultiLineEngine;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
@@ -17,6 +19,7 @@ final class EvalController
     public function __construct(
         private readonly EvaluatePositionHandler $positionHandler,
         private readonly EvaluateGameHandler $gameHandler,
+        private readonly ?ChessEngine $engine = null,
     ) {
     }
 
@@ -36,7 +39,14 @@ final class EvalController
             new EvaluatePositionCommand(Fen::fromString((string) $fenStr), $depth)
         );
 
-        $response->getBody()->write(json_encode($eval->toArray()));
+        $data = $eval->toArray();
+        // Several lines (MultiPV) when asked and the engine can give them.
+        $count = isset($body['lines']) ? (int) $body['lines'] : 1;
+        if ($count > 1 && $this->engine instanceof MultiLineEngine) {
+            $data['lines'] = array_map(fn($e) => $e->toArray(), $this->engine->evaluateLines(Fen::fromString((string) $fenStr), $depth > 0 ? $depth : 16, min($count, 5)));
+        }
+
+        $response->getBody()->write(json_encode($data));
         return $response->withHeader('Content-Type', 'application/json');
     }
 

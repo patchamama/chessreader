@@ -168,4 +168,23 @@ final class EvalControllerTest extends TestCase
 
         $this->assertSame(401, $app->handle($req)->getStatusCode());
     }
+
+    public function test_eval_position_returns_several_lines_when_asked(): void
+    {
+        $engine = new class implements \App\Application\Eval\Port\ChessEngine, \App\Application\Eval\Port\MultiLineEngine {
+            public function evaluate(Fen $fen, int $depth): Evaluation { return Evaluation::fromCp(30, 'e2e4', $depth); }
+            public function evaluateLines(Fen $fen, int $depth, int $count): array
+            {
+                return [Evaluation::fromCp(30, 'e2e4', $depth)->withPv(['e2e4', 'e7e5']), Evaluation::fromCp(20, 'd2d4', $depth)->withPv(['d2d4'])];
+            }
+        };
+        [, $token] = $this->seedAndToken('eval_lines@test.com', $engine);
+        $app = $this->createAppWithOverrides([ChessEngine::class => fn() => $engine]);
+        $req = (new ServerRequestFactory())->createServerRequest('POST', '/api/eval/position')
+            ->withParsedBody(['fen' => self::STARTPOS_FEN, 'depth' => 14, 'lines' => 2])
+            ->withHeader('Authorization', "Bearer {$token}");
+        $body = json_decode((string) $app->handle($req)->getBody(), true);
+        self::assertSame(30, $body['scoreCp']);
+        self::assertSame([['e2e4', 'e7e5'], ['d2d4']], array_column($body['lines'], 'pv'));
+    }
 }

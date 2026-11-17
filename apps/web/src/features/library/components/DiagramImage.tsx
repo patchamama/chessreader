@@ -8,12 +8,16 @@ import {
 } from '../../../shared/settings/settingsStore'
 import { regenerateDiagram } from '../../../shared/chess/diagramApi'
 import { formatDiagramEvalFooter, type DiagramEval } from '../../../shared/chess/diagramEvalFooter'
+import { useDiagramEvalStore } from '../diagramEval/diagramEvalStore'
+import { DiagramEvalFooter } from '../diagramEval/DiagramEvalFooter'
 
 interface Props {
   src: string
   alt: string
   /** Position inferred from the preceding mainline (or initial position). */
   fen: string
+  /** Show the engine's evaluation under the diagram (book diagrams; a commented game writes its own). */
+  withEval?: boolean
 }
 
 /**
@@ -22,11 +26,12 @@ interface Props {
  * Stockfish evaluation footer. Right-clicking the generated board opens a config
  * menu (board theme / piece set / coordinates) and a FEN editor.
  */
-export function DiagramImage({ src, alt, fen }: Props) {
+export function DiagramImage({ src, alt, fen, withEval = false }: Props) {
   const boardTheme = useSettingsStore((s) => s.diagramBoardTheme)
   const pieceTheme = useSettingsStore((s) => s.diagramPieceTheme)
   const coordinates = useSettingsStore((s) => s.diagramCoordinates)
   const setSetting = useSettingsStore((s) => s.set)
+  const evalShown = useSettingsStore((s) => s.diagramEvalShow) && withEval
 
   const [mode, setMode] = useState<'original' | 'generated'>('original')
   const [svg, setSvg] = useState<string | null>(null)
@@ -36,6 +41,7 @@ export function DiagramImage({ src, alt, fen }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [editingFen, setEditingFen] = useState(false)
   const [activeFen, setActiveFen] = useState(fen)
+  const hasBookEval = useDiagramEvalStore((s) => !!s.get(activeFen))
   const [fenDraft, setFenDraft] = useState(fen)
 
   const regenerate = useCallback(
@@ -129,7 +135,7 @@ export function DiagramImage({ src, alt, fen }: Props) {
           />
           {loading && <span className="block text-[10px] text-slate-400">Generating…</span>}
           {error && <span className="block text-[10px] text-red-500">{error}</span>}
-          {evalData && !error && (
+          {evalData && !error && !(evalShown && hasBookEval) && (
             <span className="block font-mono text-[10px] leading-tight text-slate-500">
               {formatDiagramEvalFooter(evalData, activeFen)}
             </span>
@@ -173,6 +179,7 @@ export function DiagramImage({ src, alt, fen }: Props) {
           )}
         </span>
       )}
+      {evalShown && <DiagramEvalFooter fen={activeFen} />}
     </span>
   )
 }

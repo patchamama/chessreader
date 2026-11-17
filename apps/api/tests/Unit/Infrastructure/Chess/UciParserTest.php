@@ -134,4 +134,21 @@ class UciParserTest extends TestCase
 
         $this->assertSame('Stockfish 18', $eval->engineName);
     }
+
+    public function test_parses_the_lines_of_a_multipv_search_each_at_its_deepest_depth(): void
+    {
+        $lines = [
+            'info depth 11 seldepth 14 multipv 1 score cp 30 nodes 1 nps 1 time 1 pv e2e4 e7e5',
+            'info depth 11 seldepth 14 multipv 2 score cp 25 nodes 1 nps 1 time 1 pv d2d4 d7d5',
+            'info depth 11 seldepth 14 multipv 3 score cp 20 nodes 1 nps 1 time 1 pv g1f3 g8f6',
+            'info depth 12 seldepth 15 multipv 1 score cp 34 nodes 2 nps 1 time 2 pv e2e4 c7c5 g1f3',
+            'info depth 12 seldepth 15 multipv 2 score mate 7 nodes 2 nps 1 time 2 pv d2d4 g8f6',
+            'bestmove e2e4 ponder c7c5',
+        ];
+        $evals = $this->parser->parseLines(array_merge(['id name Stockfish 19'], $lines));
+        self::assertCount(3, $evals);
+        self::assertSame([20, 11], [$evals[2]->scoreCp, $evals[2]->depth]);
+        self::assertSame([34, 12, ['e2e4', 'c7c5', 'g1f3'], 'Stockfish 19'], [$evals[0]->scoreCp, $evals[0]->depth, $evals[0]->pv, $evals[0]->engineName]);
+        self::assertSame([7, 'd2d4'], [$evals[1]->mate, $evals[1]->bestMove]);
+    }
 }

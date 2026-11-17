@@ -675,7 +675,8 @@ function enginePlans(plies: PlyInput[], moves: ReviewedMove[], add: (i: number, 
 }
 
 /** SAN written with the piece letters of the language ("Nc3" → "Cc3"), in a line of moves. */
-function localLine(text: string, lang: Lang): string {
+/** A line of moves with the piece letters of the language (D, T, A, C in Spanish). */
+export function localLine(text: string, lang: Lang): string {
   const map = lang === 'es' ? { K: 'R', Q: 'D', R: 'T', B: 'A', N: 'C' } as Record<string, string>
     : lang === 'de' ? { K: 'K', Q: 'D', R: 'T', B: 'L', N: 'S' } as Record<string, string> : null;
   return map ? text.replace(/(^|\s)([KQRBN])(?=[a-h1-8x])/g, (_m, sp: string, c: string) => `${sp}${map[c]}`).replace(/=([QRBN])/g, (_m, c: string) => `=${map[c]}`) : text;

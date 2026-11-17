@@ -169,6 +169,13 @@ export interface AppSettings {
   /** Play: colour the destinations of the selected piece by how good each move is. */
   /** The thumbnail of a hovered move shows the engine's evaluation, the loss and the engine's move. */
   hintEval: boolean
+  /** Book diagrams: show the engine's evaluation under each (when it has one). */
+  diagramEvalShow: boolean
+  /** Book diagrams: an evaluation bar above the evaluation. */
+  diagramEvalBar: boolean
+  diagramEvalDepth: number
+  /** How many lines the engine gives for a diagram: the best and the alternatives. */
+  diagramEvalLines: number
   playMoveHints: boolean
   /** Play: say after each move whether it was book, best, good, an inaccuracy, a mistake or a blunder. */
   playMoveStatus: boolean
@@ -257,6 +264,10 @@ const DEFAULT: AppSettings = {
   stockfishVersion: 'sf18-local',
   engineSource: 'local',
   hintEval: true,
+  diagramEvalShow: true,
+  diagramEvalBar: false,
+  diagramEvalDepth: 16,
+  diagramEvalLines: 3,
   playMoveHints: true,
   playMoveStatus: true,
   playEvalBar: false,

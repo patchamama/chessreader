@@ -64,6 +64,39 @@ final class UciParser
         throw new \RuntimeException('Unable to parse score from UCI info line: ' . $lastInfoLine);
     }
 
+    /**
+     * The lines of a MultiPV search, best first: for each `multipv N`, its
+     * deepest info line (a depth cut short by `bestmove` may hold only the
+     * first lines; the others keep the depth before).
+     *
+     * @param string[] $lines
+     * @return list<Evaluation>
+     */
+    public function parseLines(array $lines): array
+    {
+        $engineName = null;
+        $byIdx = [];
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (str_starts_with($line, 'id name ')) {
+                $engineName = trim(substr($line, strlen('id name ')));
+            } elseif (str_starts_with($line, 'info ') && str_contains($line, ' score ') && str_contains($line, ' pv ')) {
+                $byIdx[$this->extractInt($line, 'multipv') ?? 1] = $line;
+            }
+        }
+        if ($byIdx === []) {
+            return [$this->parse($lines)];
+        }
+        ksort($byIdx);
+        $out = [];
+        foreach ($byIdx as $info) {
+            $head = $engineName !== null ? ["id name {$engineName}"] : [];
+            $pv = $this->extractPv($info) ?? [];
+            $out[] = $this->parse([...$head, $info, 'bestmove ' . ($pv[0] ?? '(none)')]);
+        }
+        return $out;
+    }
+
     /** @param string[]|null $pv */
     private function decorate(Evaluation $eval, ?array $pv, ?string $engineName): Evaluation
     {

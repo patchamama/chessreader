@@ -393,6 +393,7 @@ return [
         return new EvalController(
             $c->get(EvaluatePositionHandler::class),
             $c->get(EvaluateGameHandler::class),
+            $c->get(ChessEngine::class),
         );
     },
 
