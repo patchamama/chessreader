@@ -84,10 +84,9 @@ function isEnglishNotation(text: string): boolean {
 }
 
 export function spanishToEnglish(text: string): string {
-  // Normalise ellipsis variants
-  let result = text
-    .replace(/…/g, '...')
-    .replace(/&#8230;/g, '...');
+  // "…" stays as it is: the tokenizer reads it, and every transform here keeps
+  // the text length, so token offsets still point into the source.
+  let result = text.replace(/&#8230;/g, '...');
 
   // Normalise castling zero-based to letter-based (applies to both languages)
   result = result
@@ -108,8 +107,20 @@ export function spanishToEnglish(text: string): string {
 
   // If already English notation, skip piece-letter substitution.
   // This prevents Re1 (Rook e1) from being mangled into Ke1 (King e1).
-  if (isEnglishNotation(result)) return result;
+  // Lines an engine added to the book ("Stockfish 14 eval: [+0.48] 8 cxd5 …")
+  // may still be written in Spanish letters: those lines alone are converted.
+  if (isEnglishNotation(result)) {
+    return result.replace(ENGINE_LINE_RE, (line) => (isEnglishNotation(line) ? line : spanishLetters(line)));
+  }
+  return spanishLetters(result);
+}
 
+/** An engine line inserted in a book: "Stockfish 14 eval: [+0.48] 8 cxd5 exd5 …". */
+export const ENGINE_LINE_RE = /^[ \t]*(?:Stockfish|Komodo|Lc0|Leela|Houdini|Fritz|Engine)\b[^\n]*?eval:[ \t]*\[[^\]\n]*\][^\n]*/gm
+
+/** Spanish piece letters (C, A, T, D, R) that lead a SAN move → English. */
+function spanishLetters(text: string): string {
+  let result = text;
   // Replace Spanish piece letters that start a SAN token.
   // A SAN token starts after whitespace, '(', or beginning of string,
   // and the piece letter must be followed by a FULL SAN move shape
@@ -118,15 +129,15 @@ export function spanishToEnglish(text: string): string {
   const tail = `(?=${SAN_TAIL})`;
   result = result
     // T (Torre/Rook) -> placeholder — must come BEFORE R (Rey/King)
-    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.)T${tail}`, 'g'), '\x00ROOK\x00')
+    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.|\\d\u2026)T${tail}`, 'g'), '\x00ROOK\x00')
     // C (Caballo/Knight) -> N
-    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.)C${tail}`, 'g'), 'N')
+    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.|\\d\u2026)C${tail}`, 'g'), 'N')
     // A (Alfil/Bishop) -> B
-    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.)A${tail}`, 'g'), 'B')
+    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.|\\d\u2026)A${tail}`, 'g'), 'B')
     // D (Dama/Queen) -> Q
-    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.)D${tail}`, 'g'), 'Q')
+    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.|\\d\u2026)D${tail}`, 'g'), 'Q')
     // R (Rey/King) -> K  — only in Spanish context (no English markers present)
-    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.)R${tail}`, 'g'), 'K')
+    .replace(new RegExp(`(?<=^|[\\s([{]|\\d\\.|\\.\\.|\\d\u2026)R${tail}`, 'g'), 'K')
     // Restore Rook placeholder
     .replace(/\x00ROOK\x00/g, 'R')
     // Promotion: the piece the pawn becomes ("bxa8=D" → "bxa8=Q").

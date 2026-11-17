@@ -61,7 +61,7 @@ describe('spanishToEnglish (full text)', () => {
   });
 
   it('converts ellipsis variants', () => {
-    expect(spanishToEnglish('2… Nc6')).toBe('2... Nc6');
+    expect(spanishToEnglish('2… Nc6')).toBe('2… Nc6'); // kept: same length as the source
     expect(spanishToEnglish('2&#8230; Nc6')).toBe('2... Nc6');
   });
 
@@ -155,5 +155,11 @@ describe('German piece letters (S, L, T, D, K)', () => {
   it('English text with a stray S word stays English', async () => {
     const { spanishToEnglish } = await import('../../notation/spanishToEnglish.js')
     expect(spanishToEnglish('1.e4 e5 2.Nf3 Nc6 3.Bb5 a6 4.Ba4 Nf6')).toBe('1.e4 e5 2.Nf3 Nc6 3.Bb5 a6 4.Ba4 Nf6')
+  })
+})
+
+describe('the "…" ellipsis keeps its length (reader offsets stay aligned)', () => {
+  it('converts the move after it and leaves "…" in place', () => {
+    expect(spanishToEnglish('7…Ae6 8 Cf3')).toBe('7…Be6 8 Nf3')
   })
 })

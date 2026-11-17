@@ -393,6 +393,16 @@ function insertVariations(
     const t = tokens[i];
 
     if (t.type === 'variation-open') {
+      // A bracket right after a diagram (only line breaks between) — the engine
+      // line a book prints under it — speaks of the main-line position the
+      // diagram shows: it never nests inside the prose variation before it.
+      let back = i - 1;
+      while (back >= 0 && tokens[back].type === 'paragraph-break') back--;
+      if (back >= 0 && tokens[back].type === 'diagram') {
+        stack.push(null as unknown as VarFrame);
+        cur = null;
+        continue;
+      }
       // A '(' nests a sub-line under the current variation node (or, if no run is
       // active, under the last mainline-ish node — handled when its first move
       // anchors). Push current frame; start a fresh nested frame lazily.

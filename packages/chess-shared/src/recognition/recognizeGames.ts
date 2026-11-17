@@ -13,7 +13,7 @@ import { tokenize, type SanToken } from '../notation/sanTokenizer.js';
 
 export { DIAGRAM_MARK } from '../notation/sanTokenizer.js';
 import { figurineToAscii } from '../notation/figurineToAscii.js';
-import { spanishToEnglish } from '../notation/spanishToEnglish.js';
+import { ENGINE_LINE_RE, spanishToEnglish } from '../notation/spanishToEnglish.js';
 import { buildGameTree } from '../pgn/pgnToTree.js';
 import { buildGameTreeTwoPass } from '../pgn/twoPassBuilder.js';
 import { type GameTree } from '../model/gameTree.js';
@@ -49,7 +49,11 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
   // Normalise figurine glyphs (♘→N) and then Spanish notation (Cf3→Nf3).
   // Both transforms are length-preserving for piece letters, so token offsets
   // stay aligned with the ORIGINAL `text` and we can recover the source token.
-  const normalised = spanishToEnglish(figurineToAscii(text));
+  // An engine line added to the book ("Stockfish 14 eval: [+0.48] 8 cxd5 …") is
+  // an alternative to the next move: its label becomes an unclosed "{", which
+  // the tokenizer closes at the end of the line (same length, offsets kept).
+  const normalised = spanishToEnglish(figurineToAscii(text)).replace(ENGINE_LINE_RE, (line) =>
+    line.replace(/^([ \t]*)[^\]]*\]/, (label, indent: string) => `${indent}{${' '.repeat(label.length - indent.length - 1)}`));
 
   const tokens = tokenize(normalised);
 
@@ -151,6 +155,9 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
       depth = 0;
     } else if (token.type === 'diagram') {
       afterDiagram = true;
+      // Kept in the sequence: the builder reads a bracket right after a
+      // diagram as a line of the main game (see insertVariations).
+      if (current.length > 0) current.push(token);
       continue;
     }
 
