@@ -169,6 +169,8 @@ export interface AppSettings {
   /** Play: colour the destinations of the selected piece by how good each move is. */
   /** The thumbnail of a hovered move shows the engine's evaluation, the loss and the engine's move. */
   hintEval: boolean
+  /** chess.com user name (its API is public and read-only: games and ratings, no play). */
+  chessComUser: string
   /** Desktop page width: normal, wide or the whole window. */
   pageWidth: 'normal' | 'wide' | 'full'
   /** The status bar at the bottom of the window. */
@@ -280,6 +282,7 @@ const DEFAULT: AppSettings = {
   stockfishVersion: 'sf18-local',
   engineSource: 'local',
   hintEval: true,
+  chessComUser: '',
   pageWidth: 'normal',
   statusFooter: true,
   commentDbUrl: '',

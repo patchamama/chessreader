@@ -41,7 +41,7 @@ describe('PlayPage', () => {
     expect(screen.getByRole('link', { name: /Create a token/ }).getAttribute('href')).toContain('board:play')
   })
   it('a Lichess game can be played at the chosen clock', () => {
-    useSettingsStore.setState({ lichessPlayToken: 'tok' })
+    useSettingsStore.setState({ lichessToken: 'tok' })
     const start = vi.spyOn(usePlayStore.getState(), 'start').mockImplementation(() => {})
     render(<PlayPage />)
     fireEvent.change(screen.getByLabelText('Opponent'), { target: { value: 'lichess' } })
@@ -51,7 +51,7 @@ describe('PlayPage', () => {
     start.mockRestore()
   })
   it('the Lichess AI: level and colour, same token', () => {
-    useSettingsStore.setState({ lichessPlayToken: 'tok' })
+    useSettingsStore.setState({ lichessToken: 'tok' })
     const start = vi.spyOn(usePlayStore.getState(), 'start').mockImplementation(() => {})
     render(<PlayPage />)
     fireEvent.change(screen.getByLabelText('Opponent'), { target: { value: 'lichess-ai' } })
@@ -104,7 +104,7 @@ describe('PlayPage', () => {
     expect(screen.getByRole('link', { name: /rapid · casual/ })).toHaveAttribute('href', 'https://lichess.org/g2')
   })
   it('offers the Maia bots of Lichess as human-like opponents (S13)', () => {
-    useSettingsStore.setState({ lichessPlayToken: 'tok' })
+    useSettingsStore.setState({ lichessToken: 'tok' })
     const start = vi.spyOn(usePlayStore.getState(), 'start').mockImplementation(() => {})
     render(<PlayPage />)
     fireEvent.change(screen.getByLabelText('Opponent'), { target: { value: 'lichess-bot' } })

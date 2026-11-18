@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { VoiceSettings } from './VoiceSettings'
 import { LICHESS_TOKEN_URL } from '../lichess/tokenUrl'
+import { lichessAccount } from '../../features/gamesearch/myGames'
 import { APP_LANGUAGES, type AppLanguage } from './settingsStore'
 import { useSettingsStore, BOARD_THEMES, FONT_FAMILIES, STOCKFISH_VERSIONS, APP_THEME_PRESETS, PIECE_THEMES, type BoardTheme, type FontFamily, type EvalBarDirection, type StockfishVersion, type EngineSource,
   type ImageAlign, type HeadingStyle, type EngineVariations, type AppTheme, type PieceTheme } from './settingsStore'
@@ -43,6 +44,18 @@ function Stepper({
 }
 
 /** On/off pill toggle. */
+/** Checks the Lichess token: the account it belongs to. */
+function LichessAccountCheck({ token }: { token: string }) {
+  const [state, setState] = useState<string | null>(null)
+  if (!token) return null
+  return (
+    <p className="mt-1 text-[11px] text-gray-300">
+      <button className="underline" onClick={() => { setState('…'); lichessAccount(token).then((a) => setState(`✓ ${a.username}`), (e: Error) => setState(e.message)) }}>Check the token</button>
+      {state && <span className="ml-2">{state}</span>}
+    </p>
+  )
+}
+
 function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
   return (
     <button
@@ -143,12 +156,17 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
         <label className={labelClass} htmlFor="move-pause">Pause after each move in the narration and the audio: {s.narrationMovePause} s</label>
         <input id="move-pause" type="range" min={0} max={5} step={0.5} className="w-full" value={s.narrationMovePause} onChange={(e) => s.set({ narrationMovePause: Number(e.target.value) })} />
 
-        {/* Lichess */}
-        <label className={labelClass} htmlFor="lichess-token">Lichess token (masters database, your games and playing; kept in this browser, sent only to Lichess)</label>
-        <input id="lichess-token" type="password" autoComplete="off" className={inputClass} value={s.lichessToken} onChange={(e) => s.set({ lichessToken: e.target.value })} />
+        {/* Accounts */}
+        <p className="mt-4 text-xs font-bold uppercase tracking-wider text-amber-400">Accounts</p>
+        <label className={labelClass} htmlFor="lichess-token">Lichess token (masters database, your games, puzzles and playing; kept in this browser, sent only to Lichess)</label>
+        <input id="lichess-token" type="password" autoComplete="off" className={inputClass} value={s.lichessToken} onChange={(e) => s.set({ lichessToken: e.target.value.trim() })} />
+        <LichessAccountCheck token={s.lichessToken} />
         <a className="mt-1 block text-[11px] text-blue-600 underline" href={LICHESS_TOKEN_URL} target="_blank" rel="noreferrer">
           Create a Lichess token ↗
         </a>
+        <label className={labelClass} htmlFor="chesscom-user">Chess.com user name</label>
+        <input id="chesscom-user" autoComplete="off" className={inputClass} value={s.chessComUser} onChange={(e) => s.set({ chessComUser: e.target.value.trim() })} />
+        <p className="mt-1 text-[10px] text-gray-400">Chess.com offers only a public, read-only API: your games and ratings can be read with your user name (no password); playing on chess.com from here is not possible.</p>
 
         {/* Narration */}
         <label className={labelClass}>Narration: repeat an unanswered move after (seconds, 0 = never)</label>

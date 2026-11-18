@@ -181,22 +181,34 @@ describe('Lichess token and offline copies', () => {
   })
 })
 
-describe('my Lichess games', () => {
-  it('lists the games of the token owner and opens one in the reader (to review and comment it)', async () => {
+describe('my games by year and month (S12)', () => {
+  it('lists the years of the account, then the games of a month, and opens one in the reader', async () => {
     useSettingsStore.setState({ lichessToken: 'tok' })
-    s.lichessMyGames.mockResolvedValue({ username: 'me', games: [{ id: 'g1', white: 'me', black: 'Lichess AI level 1', result: '0-1', opening: 'Sicilian Defense', date: '2026-11-17', pgn: '[White "me"]\n[Black "AI"]\n\n1. e4 c5 0-1\n' }] })
+    const created = Date.UTC(new Date().getUTCFullYear(), 0, 1)
+    const line = JSON.stringify({ id: 'g1', createdAt: created, status: 'resign', winner: 'black', speed: 'rapid', moves: 'e4 c5', opening: { name: 'Sicilian Defense' },
+      players: { white: { user: { name: 'me' }, rating: 1500 }, black: { aiLevel: 1 } }, pgn: '[White "me"]\n[Black "AI"]\n\n1. e4 c5 0-1\n' })
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/api/account')
+      ? new Response(JSON.stringify({ username: 'me', createdAt: created }), { status: 200 })
+      : new Response(`${line}\n`, { status: 200 })))
     renderPage()
-    fireEvent.click(screen.getByRole('tab', { name: 'My Lichess games' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'My games (Lichess, chess.com)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Load my games' }))
-    await waitFor(() => expect(screen.getByText(/me — Lichess AI level 1/)).toBeTruthy())
-    expect(s.lichessMyGames).toHaveBeenCalledWith('tok')
-    fireEvent.click(screen.getByRole('button', { name: 'Open me — Lichess AI level 1' }))
+    const year = await screen.findByRole('button', { name: new RegExp(String(new Date().getUTCFullYear())) })
+    fireEvent.click(year)
+    const january = screen.getByText(/^Jan /)
+    fireEvent.click(january)
+    ;(january.parentElement as HTMLDetailsElement).open = true
+    fireEvent(january.parentElement!, new Event('toggle'))
+    await waitFor(() => expect(screen.getByText(/me \(1500\) – Lichess AI level 1/)).toBeTruthy())
+    expect(screen.getByText(/0-1 \(resign\) · 1 moves · Sicilian Defense/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open me (1500) – Lichess AI level 1' }))
     await waitFor(() => expect(screen.getByText('reader open')).toBeTruthy())
+    vi.unstubAllGlobals()
   })
-  it('without a token it asks for one, with the link that ticks the permissions', () => {
+  it('without a token it points to Settings', () => {
     useSettingsStore.setState({ lichessToken: '' })
     renderPage()
-    fireEvent.click(screen.getByRole('tab', { name: 'My Lichess games' }))
-    expect(screen.getByRole('link', { name: /Create a Lichess token/ }).getAttribute('href')).toContain('scopes[]=board:play')
+    fireEvent.click(screen.getByRole('tab', { name: 'My games (Lichess, chess.com)' }))
+    expect(screen.getByText(/Set your Lichess token in Settings/)).toBeTruthy()
   })
 })

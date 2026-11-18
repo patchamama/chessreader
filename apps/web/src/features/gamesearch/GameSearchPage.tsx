@@ -15,8 +15,6 @@ import {
   cachedLichessEntries,
   LichessAuthError,
   LICHESS_TOKEN_URL,
-  lichessMyGames,
-  type MyLichessGame,
   type BroadcastSummary,
   type ChessComGame,
   type MasterGame,
@@ -28,6 +26,7 @@ import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../shared/externalBoo
 import { saveProgress } from '../library/store/readingStore'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { PuzzlePanel } from './PuzzlePanel'
+import { MyGamesBrowser } from './MyGamesBrowser'
 import { usePageWidth } from '../../shared/layout/pageWidth'
 
 type Tab = 'recommended' | 'studies' | 'masters' | 'broadcasts' | 'chesscom' | 'mine' | 'puzzles'
@@ -38,7 +37,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'masters', label: 'Master games by opening' },
   { id: 'broadcasts', label: 'Tournaments' },
   { id: 'chesscom', label: 'Chess.com player' },
-  { id: 'mine', label: 'My Lichess games' },
+  { id: 'mine', label: 'My games (Lichess, chess.com)' },
   { id: 'puzzles', label: 'Lichess puzzles' },
 ]
 
@@ -88,7 +87,6 @@ export default function GameSearchPage() {
   const [query, setQuery] = useState('')
   const [broadcasts, setBroadcasts] = useState<BroadcastSummary[] | null>(null)
 
-  const [mine, setMine] = useState<{ username: string; games: MyLichessGame[] } | null>(null)
   const [player, setPlayer] = useState('')
   const [games, setGames] = useState<{ month: string; games: ChessComGame[] } | null>(null)
 
@@ -214,7 +212,8 @@ export default function GameSearchPage() {
                   <li key={g.id} className={row}>
                     <span>
                       <span className="font-medium text-slate-800">{g.title}</span>{' '}
-                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-600">{g.level}</span>
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-600">{g.level}</span>{' '}
+                      <span className="text-xs text-slate-500">{Math.ceil(g.plies / 2)} moves</span>
                       <span className="block text-xs text-slate-500">{g.lesson}</span>
                     </span>
                     <button className={openBtn} aria-label={`Open ${g.title}`} onClick={() => read(g.title, g.pgn)}>Open</button>
@@ -430,9 +429,7 @@ export default function GameSearchPage() {
         )}
 
         {tab === 'mine' && (
-          <MyGames busy={busy} mine={mine}
-            load={() => { const tk = useSettingsStore.getState().lichessToken; void run(() => lichessMyGames(tk), () => {}).then((r) => r && setMine(r)) }}
-            open={read} />
+          <MyGamesBrowser open={read} />
         )}
 
         {tab === 'puzzles' && <PuzzlePanel />}
@@ -482,49 +479,5 @@ export default function GameSearchPage() {
         )}
       </div>
     </div>
-  )
-}
-
-/** The games of the token's owner on Lichess: open one to replay it, review and comment it. */
-function MyGames(p: {
-  busy: boolean
-  mine: { username: string; games: MyLichessGame[] } | null
-  load: () => void; open: (title: string, pgn: string) => void
-}) {
-  const token = useSettingsStore((s) => s.lichessToken)
-  const [draft, setDraft] = useState('')
-  if (!token) {
-    return (
-      <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); useSettingsStore.getState().set({ lichessToken: draft.trim() }) }}>
-        <p className="w-full text-xs text-slate-500">Your games on Lichess need your personal token (kept in this browser, sent only to Lichess).</p>
-        <label className="flex flex-col text-xs text-slate-700">
-          Lichess token
-          <input className={input} type="password" autoComplete="off" value={draft} onChange={(e) => setDraft(e.target.value)} />
-        </label>
-        <button className={primary} disabled={!draft.trim()}>Save token</button>
-        <a className="text-xs text-blue-700 underline" href={LICHESS_TOKEN_URL} target="_blank" rel="noreferrer">Create a Lichess token ↗</a>
-      </form>
-    )
-  }
-  return (
-    <>
-      <p className="text-xs text-slate-500">Your last 20 games on Lichess. Open one, then “Review and comment the game” for a coach review.</p>
-      <div><button className={primary} disabled={p.busy} onClick={p.load}>Load my games</button></div>
-      {p.mine && (
-        <ul className="flex flex-col gap-1.5">
-          {p.mine.games.length === 0 && <li className="text-sm text-slate-500">No games found for {p.mine.username}.</li>}
-          {p.mine.games.map((g) => {
-            const title = `${g.white} — ${g.black}`
-            return (
-              <li key={g.id} className={row}>
-                <span>{title} <span className="text-slate-500">({g.date}, {g.result}{g.opening ? `, ${g.opening}` : ''})</span></span>
-                <a className={`${openBtn} ml-auto`} href={`https://lichess.org/${g.id}`} target="_blank" rel="noreferrer" aria-label={`${title} on Lichess`}>Lichess ↗</a>
-                <button className={openBtn} aria-label={`Open ${title}`} onClick={() => p.open(title, g.pgn)}>Open</button>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </>
   )
 }
