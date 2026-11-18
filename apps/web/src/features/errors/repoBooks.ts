@@ -22,9 +22,14 @@ export function textBookChapters(text: string, title: string): { title: string; 
   return { title, chapters: chapters.map((c) => ({ ...c, toc })) }
 }
 
+/** Read the text of a repository book as the chapters the reader opens. */
+export async function loadRepoBookChapters(book: Pick<RepoBook, 'id' | 'title'>): Promise<ExternalChapter[]> {
+  return textBookChapters(await getText(`books/text/${encodeURIComponent(book.id)}.txt`), book.title).chapters
+}
+
 /** Read a repository book and recognise every chapter: its games with their errors. */
 export async function repoBookErrors(book: RepoBook, onProgress?: (done: number, total: number) => void, signal?: AbortSignal): Promise<{ games: GameErrors[]; chapters: ExternalChapter[] }> {
-  const { chapters } = textBookChapters(await getText(`books/text/${encodeURIComponent(book.id)}.txt`), book.title)
+  const chapters = await loadRepoBookChapters(book)
   const games: GameErrors[] = []
   for (let i = 0; i < chapters.length; i++) {
     if (signal?.aborted) break
@@ -37,7 +42,7 @@ export async function repoBookErrors(book: RepoBook, onProgress?: (done: number,
 }
 
 /** Open a game of a repository book in the reader (as the browser's own book), at that game. */
-export function openRepoGame(book: RepoBook, chapters: ExternalChapter[], game: GameErrors): void {
+export function openRepoGame(book: RepoBook, chapters: ExternalChapter[], game: Pick<GameErrors, 'chapter' | 'gameIndex'>): void {
   useExternalBookStore.getState().open(book.title, chapters)
   saveProgress(EXTERNAL_BOOK_ID, game.chapter)
   saveBoardMemory(EXTERNAL_BOOK_ID, { chapter: game.chapter, gameIndex: game.gameIndex, nodeId: null, annotations: {} })
@@ -45,7 +50,7 @@ export function openRepoGame(book: RepoBook, chapters: ExternalChapter[], game: 
 
 /** Open a whole repository book in the reader (as the browser's own book), at its first chapter. */
 export async function openRepoBook(book: Pick<RepoBook, 'id' | 'title'>): Promise<void> {
-  const { chapters } = textBookChapters(await getText(`books/text/${encodeURIComponent(book.id)}.txt`), book.title)
+  const chapters = await loadRepoBookChapters(book)
   useExternalBookStore.getState().open(book.title, chapters)
   saveProgress(EXTERNAL_BOOK_ID, 1)
   saveBoardMemory(EXTERNAL_BOOK_ID, { chapter: 1, gameIndex: 0, nodeId: null, annotations: {} })

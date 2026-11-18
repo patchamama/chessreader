@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.98.0 — 2026-11-18
+
+- feat: the Errors page is filled from the start — precomputed errors of the resources books (books/errors.json, built by apps/web/scripts/build-errors.ts), remembered analyses of library books and background analysis of the missing ones
+
 ## v0.97.0 — 2026-11-18
 
 - feat: Settings links to GitHub to create a read-only token for the resources repository
