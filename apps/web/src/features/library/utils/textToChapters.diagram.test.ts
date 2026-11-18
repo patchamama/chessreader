@@ -11,7 +11,7 @@ describe('diagram marks in a commented game (S18)', () => {
     const { chapters } = textToChapters(`Title\n1. e4 e5\n[Diagram fen="${FEN}" eval="White mates in 1"]\n2. Nf3`)
     const html = chapters[0].html
     expect(html).toMatch(/<img [^>]*src="data:image\/svg\+xml[^"]*"[^>]*data-fen="r1bqkb1r\/pppp1Qpp/)
-    expect(html).toContain('<p class="diagram-eval">White mates in 1</p>')
+    expect(html).toContain('<p class="diagram-eval">White mates in 1 <button type="button" class="line-to-board" data-no-recognition')
     expect(html).toContain('<p>2. Nf3</p>')
     expect(html).not.toContain('[Diagram')
   })
@@ -40,7 +40,7 @@ describe('diagram marks in a commented game (S18)', () => {
   it('names the engine, its next moves and an alternative under the diagram; those moves are not read as game moves (S9)', () => {
     const { chapters } = textToChapters(`T\n1. e4 e5\n[Diagram fen="${FEN}" eval="White mates in 1 · Stockfish 18, depth 14" line="5. Qxf7#" alt="5. Bxf7+ Kxf7 (+0.4)"]`)
     const html = chapters[0].html
-    expect(html).toContain('<p class="diagram-eval">White mates in 1 · Stockfish 18, depth 14</p>')
+    expect(html).toContain('<p class="diagram-eval">White mates in 1 · Stockfish 18, depth 14 <button type="button" class="line-to-board"')
     expect(html).toContain('<p class="diagram-line" data-no-recognition>5. Qxf7#</p>')
     expect(html).toContain('<p class="diagram-line diagram-alt" data-no-recognition>5. Bxf7+ Kxf7 (+0.4)</p>')
     const div = document.createElement('div')

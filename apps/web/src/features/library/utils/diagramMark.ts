@@ -24,13 +24,22 @@ export function parseDiagramMark(line: string): DiagramMark | null {
   }
 }
 
-/** A remark borrowed from a book: `[Comment source="…" text="…"]`. */
-export interface CommentMark { text: string; source: string }
+/**
+ * A remark borrowed from a book: `[Comment source="…" text="…" fen="…" game="…" ply="…"]`
+ * (`fen`: the position it speaks of; `game`/`ply`: where it is in the commentary database).
+ */
+export interface CommentMark { text: string; source: string; fen?: string; gameId?: string; ply?: number }
 
 export function parseCommentMark(line: string): CommentMark | null {
   const m = /^\[Comment((?:\s+\w+="[^"]*")+)\s*\]$/.exec(line.trim())
   if (!m) return null
   const attrs: Record<string, string> = {}
   for (const [, k, v] of m[1].matchAll(/(\w+)="([^"]*)"/g)) attrs[k] = v
-  return attrs.text ? { text: attrs.text, source: attrs.source ?? '' } : null
+  if (!attrs.text) return null
+  return {
+    text: attrs.text, source: attrs.source ?? '',
+    ...(attrs.fen ? { fen: attrs.fen } : {}),
+    ...(attrs.game ? { gameId: attrs.game } : {}),
+    ...(attrs.ply && Number(attrs.ply) > 0 ? { ply: Number(attrs.ply) } : {}),
+  }
 }

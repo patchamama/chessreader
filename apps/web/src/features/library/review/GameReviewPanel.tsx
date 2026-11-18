@@ -15,7 +15,9 @@ import { lichessOpening } from '../../gamesearch/sources'
 import { reviewEngine, summarise, useReviewStore } from './reviewStore'
 import { downloadAnnotated, type ExportFormat } from './export/annotatedExport'
 import { lichessImportGame } from '../../../shared/lichess/lichessImport'
-import { hasCommentSource, humanCommentsForGame } from '../commentdb/commentLookup'
+import { hasCommentSource } from '../commentdb/commentLookup'
+import { humanCommentsWithLinks, type LinkedHumanComment } from './humanCommentLinks'
+import { withBusy } from '../../../shared/layout/busyStore'
 
 interface GameReviewPanelProps {
   games: RecognizedGame[]
@@ -208,25 +210,29 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
     })
   }
 
-  function writeAnnotated(r: NonNullable<typeof reviewed>, human?: Record<number, { text: string; source: string }>) {
+  function writeAnnotated(r: NonNullable<typeof reviewed>, human?: Record<number, LinkedHumanComment>) {
     return annotateGame(r.plies, r.review, { level, lang, white: players.white, black: players.black, layout, diagrams, ...(human ? { human } : {}) })
   }
 
   /**
    * The annotated game, with the remarks of the books on the same positions
    * when chosen in Settings and a commentary database can be asked (written at
-   * once otherwise).
+   * once otherwise), each linked to where it comes from.
    */
-  function annotatedText(r = reviewed!, done: (text: string) => void) {
-    if (!useSettingsStore.getState().humanComments || !hasCommentSource()) return done(writeAnnotated(r))
-    void humanCommentsForGame(r.plies, lang).catch(() => ({})).then((found) => done(writeAnnotated(r, Object.keys(found).length ? found : undefined)))
+  async function annotatedText(r = reviewed!): Promise<string> {
+    if (!useSettingsStore.getState().humanComments || !hasCommentSource()) return writeAnnotated(r)
+    const found = await humanCommentsWithLinks(r.plies, lang).catch(() => ({}))
+    return writeAnnotated(r, Object.keys(found).length ? found : undefined)
   }
 
   /** The annotated game as a file (S34): Markdown, EPUB, PDF or HTML. */
   function downloadGame() {
     if (!reviewed) return
     const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
-    annotatedText(reviewed, (text) => downloadAnnotated(text, exportFormat, names, lang))
+    const save = (text: string) => downloadAnnotated(text, exportFormat, names, lang)
+    // Written at once when no commentary database is asked.
+    if (!useSettingsStore.getState().humanComments || !hasCommentSource()) return save(writeAnnotated(reviewed))
+    void annotatedText(reviewed).then(save)
   }
 
   /**
@@ -239,43 +245,41 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
    * text is replaced by the new commentary; the other games of the text stay
    * as they are. The board then shows the first move of that game.
    */
-  async function regenerate() {
+  const regenerate = () => withBusy(t.regenerate, async () => {
     useReviewStore.getState().forget(game.tree)
     await run([gameIndex])
     const fresh = useReviewStore.getState().byTree.get(game.tree)
     if (!fresh) return
-    annotatedText(fresh, (annotated) => {
-      // From the line of its first move to the line of its last one.
-      const main = game.tree.mainline.map((id) => game.tree.nodes.get(id)!)
-      const first = main.find((n) => n.charStart !== undefined)?.charStart ?? game.charStart
-      const last = [...main].reverse().find((n) => n.charEnd !== undefined)?.charEnd ?? game.charEnd
-      const lineStart = text.lastIndexOf('\n', first - 1) + 1
-      const nl = text.indexOf('\n', last)
-      const lineEnd = nl < 0 ? text.length : nl
-      // The annotated text opens with a title line: the text already names the game.
-      const body = annotated.split('\n').slice(1).join('\n')
-      const rewritten = `${text.slice(0, lineStart)}${body}${text.slice(lineEnd)}`
-        .split('\n').filter((l) => l.trim() !== '\uFFFC').join('\n')
-      const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
-      const { title, chapters } = textToChapters(rewritten, names)
-      useStudyBoardStore.getState().clearGame()
-      saveBoardMemory(EXTERNAL_BOOK_ID, { chapter: 1, gameIndex, nodeId: null, annotations: {} })
-      saveProgress(EXTERNAL_BOOK_ID, 1)
-      openBook(title, chapters)
-      navigate(`/read/${EXTERNAL_BOOK_ID}`)
-    })
-  }
+    const annotated = await annotatedText(fresh)
+    // From the line of its first move to the line of its last one.
+    const main = game.tree.mainline.map((id) => game.tree.nodes.get(id)!)
+    const first = main.find((n) => n.charStart !== undefined)?.charStart ?? game.charStart
+    const last = [...main].reverse().find((n) => n.charEnd !== undefined)?.charEnd ?? game.charEnd
+    const lineStart = text.lastIndexOf('\n', first - 1) + 1
+    const nl = text.indexOf('\n', last)
+    const lineEnd = nl < 0 ? text.length : nl
+    // The annotated text opens with a title line: the text already names the game.
+    const body = annotated.split('\n').slice(1).join('\n')
+    const rewritten = `${text.slice(0, lineStart)}${body}${text.slice(lineEnd)}`
+      .split('\n').filter((l) => l.trim() !== '\uFFFC').join('\n')
+    const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
+    const { title, chapters } = textToChapters(rewritten, names)
+    useStudyBoardStore.getState().clearGame()
+    saveBoardMemory(EXTERNAL_BOOK_ID, { chapter: 1, gameIndex, nodeId: null, annotations: {} })
+    saveProgress(EXTERNAL_BOOK_ID, 1)
+    openBook(title, chapters)
+    navigate(`/read/${EXTERNAL_BOOK_ID}`)
+  })
 
-  function openAnnotated(r = reviewed) {
+  const openAnnotated = (r = reviewed) => withBusy(t.open, async () => {
     if (!r) return
     const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
-    annotatedText(r, (annotated) => {
-      const { title, chapters } = textToChapters(annotated, `${names} (${t.title.toLowerCase()})`)
-      saveProgress(EXTERNAL_BOOK_ID, 1)
-      openBook(title, chapters)
-      navigate(`/read/${EXTERNAL_BOOK_ID}`)
-    })
-  }
+    const annotated = await annotatedText(r)
+    const { title, chapters } = textToChapters(annotated, `${names} (${t.title.toLowerCase()})`)
+    saveProgress(EXTERNAL_BOOK_ID, 1)
+    openBook(title, chapters)
+    navigate(`/read/${EXTERNAL_BOOK_ID}`)
+  })
 
   function openCoach() {
     if (!reviewed) return
@@ -483,7 +487,7 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
             >
               ▦ {t.diagramHere}{diagramAt.length ? ` (${diagramAt.length} ${t.diagramsChosen})` : ''}
             </button>
-            <button className={button} onClick={() => openAnnotated()}>{t.open}</button>
+            <button className={button} onClick={() => void openAnnotated()}>{t.open}</button>
             <select aria-label={t.downloadFormat} value={exportFormat} onChange={(e) => setExportFormat(e.target.value as ExportFormat)}
               className="rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px]">
               <option value="pdf">PDF</option>

@@ -8,6 +8,7 @@ import { useStudyBoardStore } from '../store/studyBoardStore'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
 import * as exporter from './export/annotatedExport'
+import { useBusyStore } from '../../../shared/layout/busyStore'
 
 const TEXT = 'Tutor – Novice, 2024\n1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#'
 const games = recognizeGames(TEXT, { algorithm: 2 })
@@ -69,11 +70,39 @@ describe('GameReviewPanel', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Open annotated game' })).toBeInTheDocument())
     fireEvent.change(screen.getByLabelText('Commentary level'), { target: { value: '3' } })
     fireEvent.click(screen.getByRole('button', { name: 'Open annotated game' }))
-    expect(screen.getByText('annotated book')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('annotated book')).toBeInTheDocument())
     const html = useExternalBookStore.getState().chapters[0].html
     expect(html).toContain('Nf6??')
     expect(html).toContain('Blunder')
-    expect(html).toContain('(3... g6 4. Qf3 Nf6)')
+    const div = document.createElement('div')
+    div.innerHTML = html
+    expect(div.textContent).toContain('(3... g6 4. Qf3 Nf6)')
+    // The better line is a playable line (S5).
+    expect(div.querySelector('.chess-line[data-line-moves="g6 Qf3 Nf6"]')).not.toBeNull()
+  })
+
+  it('shows the spinner while the annotated game opens (S3)', async () => {
+    const labels: string[] = []
+    const unsubscribe = useBusyStore.subscribe((s) => labels.push(...s.tasks.map((x) => x.label)))
+    renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Review and comment the game' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open annotated game' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Open annotated game' }))
+    await waitFor(() => expect(screen.getByText('annotated book')).toBeInTheDocument())
+    expect(labels).toContain('Open annotated game')
+    unsubscribe()
+    expect(useBusyStore.getState().tasks).toEqual([])
+  })
+
+  it('the regenerate action runs under the spinner (S3)', async () => {
+    const labels: string[] = []
+    const unsubscribe = useBusyStore.subscribe((s) => labels.push(...s.tasks.map((x) => x.label)))
+    renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: /Re-analyse and regenerate all comments/ }))
+    await waitFor(() => expect(screen.getByText('annotated book')).toBeInTheDocument())
+    expect(labels).toContain('Re-analyse and regenerate all comments')
+    unsubscribe()
+    expect(useBusyStore.getState().tasks).toEqual([])
   })
 
   it('downloads the annotated game as Markdown, EPUB, PDF or HTML (S34)', async () => {
@@ -215,6 +244,30 @@ describe('GameReviewPanel', () => {
     const html = useExternalBookStore.getState().chapters[0].html
     expect(html).toContain('<blockquote class="human-comment" data-no-recognition><p>La dama sale demasiado pronto.</p><footer>— Kasparov, Mis geniales predecesores I, Partida 3</footer></blockquote>')
     spy.mockRestore()
+    useSettingsStore.setState({ commentDbUrl: '' })
+  })
+
+  it('a borrowed comment links to the commentary database game and ply it comes from (S5)', async () => {
+    const lookup = await import('../commentdb/commentLookup')
+    const text = 'La dama sale demasiado pronto.'
+    const spy = vi.spyOn(lookup, 'humanCommentsForGame').mockResolvedValue({ 4: { text, source: 'Kasparov, Partida 3' } })
+    const spyPos = vi.spyOn(lookup, 'lookupPositionComments').mockResolvedValue([
+      { text: 'Otra cosa.', lang: 'es', ply: 3, san: 'Nc6', gameId: 'g1', label: null, source: { kind: 'book', title: 'X', author: null } },
+      { text, lang: 'es', ply: 7, san: 'Nc6', gameId: 'g42', label: 'Partida 3', source: { kind: 'book', title: 'MGP I', author: 'Kasparov' } },
+    ])
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Review and comment the game' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open annotated game' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Open annotated game' }))
+    await waitFor(() => expect(screen.getByText('annotated book')).toBeInTheDocument())
+    const div = document.createElement('div')
+    div.innerHTML = useExternalBookStore.getState().chapters[0].html
+    const link = div.querySelector('blockquote.human-comment a.comment-source')!
+    expect(link.getAttribute('data-comment-game')).toBe('g42')
+    expect(link.getAttribute('data-comment-ply')).toBe('7')
+    spy.mockRestore()
+    spyPos.mockRestore()
     useSettingsStore.setState({ commentDbUrl: '' })
   })
 })

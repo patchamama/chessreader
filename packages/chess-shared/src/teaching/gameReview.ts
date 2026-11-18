@@ -1098,14 +1098,17 @@ export interface AnnotateOptions {
   /**
    * What an author wrote about the position a move reaches, borrowed from the
    * commentary database (per ply, 1-based), with where it comes from. Written
-   * as a `[Comment source="…" text="…"]` line after the move.
+   * as a `[Comment source="…" text="…" fen="…"]` line after the move (`fen`:
+   * the position the comment speaks of), with `game="…" ply="…"` when the
+   * commentary database game it comes from is known.
    */
-  human?: Record<number, { text: string; source: string }>;
+  human?: Record<number, { text: string; source: string; gameId?: string; ply?: number }>;
   /**
    * How remarks sit among the moves: 'inline' { in braces } (default),
    * 'split' (the line of moves breaks after a commented move, the remark is its
-   * own paragraph), 'paragraphs' (runs of moves, each followed by one paragraph
-   * with the remarks of those moves) — the last two as chess books print them.
+   * own paragraph), 'paragraphs' (move by move: each full move on its own line,
+   * broken after every commented move, each remark right under its move) —
+   * the last two as chess books print them.
    */
   layout?: 'inline' | 'split' | 'paragraphs';
   /** Diagram marks (`[Diagram fen="…" eval="…"]`, one line each): after the key moments, after chosen moves (node ids), with the evaluation. */
@@ -1222,18 +1225,13 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
     const q = review.moves[i].quality;
     return q === 'blunder' || q === 'mistake' || q === 'brilliant' || q === 'good' || plies[i].san.includes('#');
   };
-  const side = (c: 'white' | 'black') => (lang === 'es' ? (c === 'white' ? 'blancas' : 'negras') : lang === 'en' ? (c === 'white' ? 'White' : 'Black') : (c === 'white' ? 'Weiß' : 'Schwarz'));
-
   const out: string[] = []; // lines (split/paragraphs) or chunks (inline)
   let line: string[] = [];
-  let pending: string[] = []; // 'paragraphs': remarks waiting for the end of the run
   let needNumber = true;
   let lastDiagram = -1;
   const flush = () => {
     if (line.length) out.push(line.join(' '));
     line = [];
-    if (pending.length) out.push(pending.join(' '));
-    pending = [];
   };
   plies.forEach((p, i) => {
     const m = review.moves[i];
@@ -1286,7 +1284,8 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
     if (diagram) lastDiagram = i;
     const borrowed = options.human?.[i + 1];
     const quote = (x: string) => x.replace(/"/g, '”');
-    const human = borrowed ? `[Comment source="${quote(borrowed.source)}" text="${quote(borrowed.text)}"]` : '';
+    const link = borrowed?.gameId ? ` game="${quote(borrowed.gameId)}"${borrowed.ply ? ` ply="${borrowed.ply}"` : ''}` : '';
+    const human = borrowed ? `[Comment source="${quote(borrowed.source)}" text="${quote(borrowed.text)}" fen="${p.fenAfter}"${link}]` : '';
 
     if (layout === 'inline') {
       let chunk = move;
@@ -1300,28 +1299,18 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
       return;
     }
     line.push(move);
-    if (layout === 'split') {
-      if (remarks.length || variation || diagram || human) {
-        flush();
-        if (remarks.length) out.push(remarks.join(' '));
-        if (human) out.push(human);
-        if (variation) out.push(variation);
-        if (betterIdea) out.push(betterIdea);
-        if (diagram) out.push(diagram);
-        needNumber = true;
-      }
-      return;
-    }
-    // 'paragraphs': remarks wait for the end of the run; a variation or a
-    // diagram ends the run (a variation must follow the move it replaces).
-    if (remarks.length) pending.push(`${lang === 'es' ? 'Jugada' : lang === 'en' ? 'Move' : 'Zug'} ${p.moveNumber} (${side(p.color)}): ${remarks.join(' ')}`);
-    if (variation || diagram || human || line.length >= 10) {
+    const commented = remarks.length > 0 || !!variation || !!diagram || !!human;
+    // 'split': the line of moves breaks after a commented move. 'paragraphs':
+    // move by move — it also breaks after every Black move, so each full move
+    // (or a lone Black move after a remark) stands on its own line.
+    if (commented || (layout === 'paragraphs' && !white)) {
       flush();
+      if (remarks.length) out.push(remarks.join(' '));
       if (human) out.push(human);
       if (variation) out.push(variation);
       if (betterIdea) out.push(betterIdea);
       if (diagram) out.push(diagram);
-      needNumber = true;
+      if (commented) needNumber = true;
     }
   });
   if (layout === 'inline') {
