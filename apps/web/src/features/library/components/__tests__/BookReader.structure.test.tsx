@@ -143,7 +143,9 @@ describe('layout switch placement (S7)', () => {
     const nav = screen.getByRole('navigation')
     const buttons = within(nav).getAllByRole('button')
     const board = buttons.findIndex((b) => b.title === 'Hide study board')
-    expect(buttons[board - 1]).toHaveAccessibleName('Show the comments as paragraphs')
+    // The book comments switch sits right before the board button since S4 (reader-errata-round).
+    expect(buttons[board - 1]).toHaveAccessibleName('Hide book comments')
+    expect(buttons[board - 2]).toHaveAccessibleName('Show the comments as paragraphs')
     const aside = document.querySelector('aside[data-study-pane]') as HTMLElement
     expect(within(aside).queryByRole('button', { name: /show the comments/i })).toBeNull()
   })

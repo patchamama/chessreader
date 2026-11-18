@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { matchChapterLetters } from './regenerateNotation'
+import { commentedGameText } from './recommentGame'
+import { gameLineRange } from '../utils/gameRewrite'
+import { rewriteKey, useGameRewriteStore } from '../store/gameRewriteStore'
+import { clearGameLayout, loadGameLayouts } from '../store/gameLayoutStore'
 import { useNavigate } from 'react-router-dom'
 import { Chess } from 'chess.js'
 import { annotateGame, coachGame, extractPlayers, numberLine, openingName, reviewGame, treeToPgn } from '@chess-ebook/chess-shared'
@@ -90,14 +93,16 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
   const openBook = useExternalBookStore((s) => s.open)
   const navigate = useNavigate()
   const [progress, setProgress] = useState<{ done: number; total: number; game: number } | null>(null)
-  const [level, setLevel] = useState<1 | 2 | 3>(2)
+  const level = useReviewStore((s) => s.level)
+  const setLevel = useReviewStore((s) => s.setLevel)
   const layout = useSettingsStore((s) => s.commentLayout)
   const keyDiagrams = useSettingsStore((s) => s.commentDiagrams)
   const diagramEval = useSettingsStore((s) => s.commentDiagramEval)
   const currentNodeId = useStudyBoardStore((s) => s.currentNodeId)
   const [focus, setFocus] = useState<'white' | 'black' | 'both'>('white')
   /** Moves the reader picked for a diagram (node ids of this game). */
-  const [diagramAt, setDiagramAt] = useState<string[]>([])
+  const diagramAt = useReviewStore((s) => s.diagramAt)
+  const setDiagramAt = useReviewStore((s) => s.setDiagramAt)
   const [exportFormat, setExportFormat] = useState<ExportFormat>('pdf')
   const stockfishLabel = STOCKFISH_VERSIONS[useSettingsStore((s) => s.stockfishVersion)].label.replace(/\s*\(.*\)\s*$/, '')
   const cloud = useSettingsStore((s) => s.engineSource) === 'lichess-cloud'
@@ -237,36 +242,32 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
   }
 
   /**
-   * Forget the review of this game and every comment written from it, run the
-   * engine again over the whole game and write the comments and diagrams anew.
-   */
-  /**
    * Forget the review of the active game, run the engine again over it and
-   * write its comments anew IN PLACE: from its first move to its last, the
-   * text is replaced by the new commentary; the other games of the text stay
-   * as they are. The board then shows the first move of that game.
+   * write its main line anew with the options selected here. In a library book
+   * the new text replaces the game IN PLACE (kept per book, chapter and game,
+   * restored from the game's marker, S3); the external book is opened anew.
    */
   const regenerate = () => withBusy(t.regenerate, async () => {
     useReviewStore.getState().forget(game.tree)
     await run([gameIndex])
     const fresh = useReviewStore.getState().byTree.get(game.tree)
     if (!fresh) return
-    const annotated = await annotatedText(fresh)
-    // From the line of its first move to the line of its last one.
-    const main = game.tree.mainline.map((id) => game.tree.nodes.get(id)!)
-    const first = main.find((n) => n.charStart !== undefined)?.charStart ?? game.charStart
-    const last = [...main].reverse().find((n) => n.charEnd !== undefined)?.charEnd ?? game.charEnd
-    const lineStart = text.lastIndexOf('\n', first - 1) + 1
-    const nl = text.indexOf('\n', last)
-    const lineEnd = nl < 0 ? text.length : nl
-    // The annotated text opens with a title line: the text already names the game.
-    // In the chapter's own piece letters, so the whole game is read again (S6).
-    const body = matchChapterLetters(annotated.split('\n').slice(1).join('\n'), lang, text.slice(lineStart, lineEnd))
-    const rewritten = `${text.slice(0, lineStart)}${body}${text.slice(lineEnd)}`
-      .split('\n').filter((l) => l.trim() !== '\uFFFC').join('\n')
+    const humanComments = useSettingsStore.getState().humanComments && hasCommentSource()
+    const body = await commentedGameText(fresh, games, gameIndex, text, { lang, level, layout, diagrams, humanComments })
+    useStudyBoardStore.getState().clearGame()
+    if (bookId !== EXTERNAL_BOOK_ID) {
+      const store = useGameRewriteStore.getState()
+      const previous = store.rewrites[rewriteKey(bookId, chapter)]?.[gameIndex]
+      const layoutBefore = previous ? previous.layout : loadGameLayouts(bookId, chapter)[gameIndex]
+      clearGameLayout(bookId, chapter, gameIndex)
+      store.save(bookId, chapter, gameIndex, { text: body, ...(layoutBefore ? { layout: layoutBefore } : {}) })
+      saveBoardMemory(bookId, { chapter, gameIndex, nodeId: null, annotations: {} })
+      return
+    }
+    const { start, end } = gameLineRange(text, game)
+    const rewritten = `${text.slice(0, start)}${body}${text.slice(end)}`
     const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
     const { title, chapters } = textToChapters(rewritten, names)
-    useStudyBoardStore.getState().clearGame()
     saveBoardMemory(EXTERNAL_BOOK_ID, { chapter: 1, gameIndex, nodeId: null, annotations: {} })
     saveProgress(EXTERNAL_BOOK_ID, 1)
     openBook(title, chapters)
@@ -485,7 +486,7 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
               className={button}
               disabled={!currentNodeId || !reviewed.plies.some((p) => p.nodeId === currentNodeId)}
               aria-pressed={!!currentNodeId && diagramAt.includes(currentNodeId)}
-              onClick={() => currentNodeId && setDiagramAt((d) => (d.includes(currentNodeId) ? d.filter((x) => x !== currentNodeId) : [...d, currentNodeId]))}
+              onClick={() => currentNodeId && setDiagramAt(diagramAt.includes(currentNodeId) ? diagramAt.filter((x) => x !== currentNodeId) : [...diagramAt, currentNodeId])}
             >
               ▦ {t.diagramHere}{diagramAt.length ? ` (${diagramAt.length} ${t.diagramsChosen})` : ''}
             </button>

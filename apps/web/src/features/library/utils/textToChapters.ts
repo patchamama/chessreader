@@ -1,7 +1,7 @@
 import { pgnToChapters } from '../../gamesearch/pgnChapters'
 import type { Chapter } from '../api/libraryApi'
 import { boardSvgDataUrl } from './boardSvg'
-import { parseCommentMark, parseDiagramMark } from './diagramMark'
+import { parseCommentMark, parseDiagramMark, type CommentMark } from './diagramMark'
 import { Chess } from 'chess.js'
 import { guessPieceLangs, lineSans, lineToBoardButton, markLine, markProseMoves, resolveSan, type PieceLang } from './lineMarkup'
 
@@ -22,9 +22,31 @@ export function textToChapters(text: string, title?: string): { title: string; c
   }
   const paragraphs = clean.split(/\n+/).map((p) => p.trim()).filter(Boolean)
   const name = title?.trim() || paragraphs[0].slice(0, 80)
-  const book = new Book(guessPieceLangs(clean))
-  const html = paragraphs.map((p) => book.paragraph(p)).join('\n')
+  const html = textToHtml(clean)
   return { title: name, chapters: [{ title: name, html, toc: [{ order: 1, title: name }] }] }
+}
+
+/**
+ * Text (commentary, a game) as the HTML of a chapter: one paragraph per line,
+ * variations as playable lines, diagram and book comment marks rendered.
+ */
+export function textToHtml(text: string): string {
+  const clean = text.replace(/\r/g, '').trim()
+  const book = new Book(guessPieceLangs(clean))
+  return clean.split(/\n+/).map((p) => p.trim()).filter(Boolean).map((p) => book.paragraph(p)).join('\n')
+}
+
+/**
+ * The inside of a book comment quote: its text (with the moves it quotes
+ * playable from `fen`) and a footer with its source and a link to it.
+ */
+export function humanCommentInner(quote: Pick<CommentMark, 'text' | 'source' | 'fen' | 'gameId' | 'ply'>): string {
+  const text = quote.fen ? markProseMoves(quote.text, quote.fen, guessPieceLangs(quote.text)) : esc(quote.text)
+  const link = quote.gameId
+    ? ` <a class="comment-source" data-comment-game="${attr(quote.gameId)}" data-comment-ply="${quote.ply ?? ''}" href="#" aria-label="Open the source of this comment" title="Open the source of this comment">↗</a>`
+    : ''
+  const footer = quote.source || link ? `<footer>${quote.source ? `— ${esc(quote.source)}` : ''}${link}</footer>` : ''
+  return `<p>${text}</p>${footer}`
 }
 
 // A paragraph made only of move numbers, moves and glyphs: a line of the game.
@@ -77,12 +99,11 @@ function paragraph(p: string, langs: PieceLang[]): string {
   // A remark borrowed from a book: a quote with its source (its moves are not the game's).
   const quote = parseCommentMark(p)
   if (quote) {
-    const text = quote.fen ? markProseMoves(quote.text, quote.fen, guessPieceLangs(quote.text)) : esc(quote.text)
-    const link = quote.gameId
-      ? ` <a class="comment-source" data-comment-game="${attr(quote.gameId)}" data-comment-ply="${quote.ply ?? ''}" href="#" aria-label="Open the source of this comment" title="Open the source of this comment">↗</a>`
+    // Every remark of the position is kept, so the reader can pick another one (S4).
+    const alternatives = quote.alternatives
+      ? ` data-comment-alternatives="${attr(JSON.stringify(quote.alternatives))}"${quote.fen ? ` data-comment-fen="${attr(quote.fen)}"` : ''}`
       : ''
-    const footer = quote.source || link ? `<footer>${quote.source ? `— ${esc(quote.source)}` : ''}${link}</footer>` : ''
-    return `<blockquote class="human-comment" data-no-recognition><p>${text}</p>${footer}</blockquote>`
+    return `<blockquote class="human-comment" data-no-recognition${alternatives}>${humanCommentInner(quote)}</blockquote>`
   }
   const mark = parseDiagramMark(p)
   if (!mark) return `<p>${esc(p)}</p>`

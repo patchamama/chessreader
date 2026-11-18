@@ -28,12 +28,27 @@ export function saveGameLayout(bookId: number, chapter: number, gameIndex: numbe
   const all = readAll()
   const key = chapterKey(bookId, chapter)
   all[key] = { ...(all[key] ?? {}), [gameIndex]: layout }
+  writeAll(all)
+  return loadGameLayoutsFrom(all[key])
+}
+
+/** Forget the layout chosen for one game (its text is written anew, S3). */
+export function clearGameLayout(bookId: number, chapter: number, gameIndex: number): void {
+  const all = readAll()
+  const key = chapterKey(bookId, chapter)
+  if (!all[key] || !(String(gameIndex) in all[key])) return
+  const rest = { ...all[key] }
+  delete rest[String(gameIndex)]
+  all[key] = rest
+  writeAll(all)
+}
+
+function writeAll(all: All): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(all))
   } catch {
     /* not kept: storage full or blocked */
   }
-  return loadGameLayoutsFrom(all[key])
 }
 
 function loadGameLayoutsFrom(stored: Record<string, CommentLayout>): Record<number, CommentLayout> {

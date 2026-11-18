@@ -127,3 +127,19 @@ describe('the reported game, regenerated as "Párrafo tras las jugadas" (S9)', (
     expect(dom(html).querySelector('.chess-line[data-line-moves="Nf6 Nxe5 d6 Nf3"]')!.getAttribute('data-line-start')).toBe(plies[3].fenBefore)
   })
 })
+
+describe('book comments with alternatives (S4)', () => {
+  it('keeps every remark of the position on the quote, so the reader can pick another one', async () => {
+    const { commentAlternativesAttr } = await import('./diagramMark')
+    const alts = [{ text: 'Idea one.', source: 'A' }, { text: 'Idea two.', source: 'B', gameId: 'g2', ply: 3 }]
+    const html = textToChapters(`T\n[Comment source="A" text="Idea one."${commentAlternativesAttr(alts)}]`).chapters[0].html
+    const quote = new DOMParser().parseFromString(html, 'text/html').querySelector('blockquote.human-comment')!
+    expect(quote.querySelector('p')!.textContent).toBe('Idea one.')
+    expect(JSON.parse(quote.getAttribute('data-comment-alternatives')!)).toEqual(alts)
+  })
+
+  it('textToHtml renders text as the paragraphs of a chapter', async () => {
+    const { textToHtml } = await import('./textToChapters')
+    expect(textToHtml('1. e4 e5\nA remark.')).toBe('<p>1. e4 e5</p>\n<p>A remark.</p>')
+  })
+})

@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.107.0 — 2026-11-18
+
+- feat: comment one game again in place (main line only, with the panel's options) and restore the book's text with the same button; show/hide the book comments in the text (picking among several remarks at random when shown again); reading width control in the reader bar
+
 ## v0.106.6 — 2026-11-18
 
 - fix: in the database, a game's book link opens the book at that game

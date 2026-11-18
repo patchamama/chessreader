@@ -9,6 +9,8 @@ import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
 import * as exporter from './export/annotatedExport'
 import { useBusyStore } from '../../../shared/layout/busyStore'
+import { useGameRewriteStore } from '../store/gameRewriteStore'
+import { textToHtml } from '../utils/textToChapters'
 
 // These tests run without a server (jsdom's host is localhost, where the app would ask it).
 vi.mock('../../../shared/api/serverSession', () => ({ hasServerSession: () => false }))
@@ -37,7 +39,9 @@ beforeEach(() => {
   // No network in tests: the opening database answers nothing.
   vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 200 })))
   useStudyBoardStore.getState().reset()
-  useReviewStore.setState({ byTree: new Map(), records: [] })
+  useReviewStore.setState({ byTree: new Map(), records: [], level: 2, diagramAt: [] })
+  useGameRewriteStore.setState({ rewrites: {} })
+  localStorage.clear()
   useSettingsStore.setState({ language: 'en' })
   setReviewEngine(async (fen) => {
     if (fen === afterNf6) return [{ idx: 1, depth: 8, mate: 1, pv: ['h5f7'] }]
@@ -103,7 +107,8 @@ describe('GameReviewPanel', () => {
     const unsubscribe = useBusyStore.subscribe((s) => labels.push(...s.tasks.map((x) => x.label)))
     renderPanel()
     fireEvent.click(screen.getByRole('button', { name: /Re-analyse and regenerate all comments/ }))
-    await waitFor(() => expect(screen.getByText('annotated book')).toBeInTheDocument())
+    await waitFor(() => expect(useBusyStore.getState().tasks).toEqual([]))
+    await waitFor(() => expect(useGameRewriteStore.getState().rewrites['7:1']?.[0]).toBeDefined())
     expect(labels).toContain('Re-analyse and regenerate all comments')
     unsubscribe()
     expect(useBusyStore.getState().tasks).toEqual([])
@@ -186,15 +191,17 @@ describe('GameReviewPanel', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Open annotated game' })).toBeInTheDocument())
     const first = calls
     fireEvent.click(screen.getByRole('button', { name: 'Re-analyse and regenerate all comments' }))
-    await waitFor(() => expect(screen.getByText('annotated book')).toBeInTheDocument())
+    await waitFor(() => expect(useGameRewriteStore.getState().rewrites['7:1']?.[0]).toBeDefined())
     expect(calls).toBe(2 * first)
-    const html = useExternalBookStore.getState().chapters[0].html
+    // In a library book the game is written anew in place: the book is not replaced (S3).
+    expect(screen.queryByText('annotated book')).toBeNull()
+    const html = textToHtml(useGameRewriteStore.getState().rewrites['7:1'][0].text)
     expect(html).toContain('Nf6??')
     expect(html).toMatch(/<img class="diagram"/)
     expect(html).toMatch(/class="diagram-eval">[^<]*· Stockfish 18 lite, depth \d+/)
   })
 
-  it('regenerating rewrites only the active game, in place, and selects its first move (S8)', async () => {
+  it('regenerating rewrites only the active game, in place, and selects its first move (S8, S3)', async () => {
     const MULTI = 'Immortals\nAnderssen – Kieseritzky\n1. e4 e5 2. Qh5\nA wild queen sortie.\n2... Nc6 3. Bc4 Nf6 4. Qxf7#\nSecond game\n1. d4 d5 2. c4 e6'
     const multi = recognizeGames(MULTI, { algorithm: 2 })
     useSettingsStore.setState({ commentDiagrams: false })
@@ -202,6 +209,27 @@ describe('GameReviewPanel', () => {
       <MemoryRouter initialEntries={['/read/7']}>
         <Routes>
           <Route path="/read/7" element={<GameReviewPanel games={multi} text={MULTI} bookId={7} chapter={1} />} />
+          <Route path="/read/-1" element={<p>annotated book</p>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Re-analyse and regenerate all comments' }))
+    await waitFor(() => expect(useGameRewriteStore.getState().rewrites['7:1']?.[0]).toBeDefined())
+    const body = useGameRewriteStore.getState().rewrites['7:1'][0].text
+    expect(body).not.toContain('A wild queen sortie.')
+    expect(body).not.toContain('Second game')
+    expect(body).toContain('Qxf7#')
+    expect(JSON.parse(localStorage.getItem('chessreader-board-v1') ?? '{}')['7']).toMatchObject({ chapter: 1, gameIndex: 0, nodeId: null })
+  })
+
+  it('regenerating a game of the external book still opens it anew, with only that game rewritten (S8)', async () => {
+    const MULTI = 'Immortals\nAnderssen – Kieseritzky\n1. e4 e5 2. Qh5\nA wild queen sortie.\n2... Nc6 3. Bc4 Nf6 4. Qxf7#\nSecond game\n1. d4 d5 2. c4 e6'
+    const multi = recognizeGames(MULTI, { algorithm: 2 })
+    useSettingsStore.setState({ commentDiagrams: false })
+    render(
+      <MemoryRouter initialEntries={['/read/7']}>
+        <Routes>
+          <Route path="/read/7" element={<GameReviewPanel games={multi} text={MULTI} bookId={-1} chapter={1} />} />
           <Route path="/read/-1" element={<p>annotated book</p>} />
         </Routes>
       </MemoryRouter>,

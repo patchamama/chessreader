@@ -8,7 +8,14 @@ import { loadBoardMemory, saveBoardMemory } from '../store/boardMemory'
 import { dashedPair, squareLine } from '../utils/squareLine'
 import { applyGameLayouts, clearGameDecorations, decorateGames, describeGames, gameAnchorId, layoutToggleLabel } from '../utils/gameMarkers'
 import { detectHeadings } from '../utils/headingDetect'
-import { loadGameLayouts, saveGameLayout } from '../store/gameLayoutStore'
+import { clearGameLayout, loadGameLayouts, saveGameLayout } from '../store/gameLayoutStore'
+import { rewriteKey, useGameRewriteStore } from '../store/gameRewriteStore'
+import { useReaderViewStore } from '../store/readerViewStore'
+import { applyGameRewrites, pickBookComments } from '../utils/gameRewrite'
+import { recommentGame } from '../review/recommentGame'
+import { withBusy } from '../../../shared/layout/busyStore'
+import { BookCommentsToggle } from './ReaderToolbar'
+import { WidthControl } from './WidthControl'
 import { ReaderToc } from './toc/ReaderToc'
 import { FOOTER_HEIGHT } from '../../../shared/layout/StatusFooter'
 import { StudyBoard } from './StudyBoard'
@@ -62,6 +69,11 @@ const ProseContent = memo(
     )
   }),
 )
+
+/** Unmount overlay roots after the current render (React refuses to unmount a root while rendering). */
+function unmountLater(roots: Root[]) {
+  if (roots.length) setTimeout(() => roots.forEach((r) => r.unmount()), 0)
+}
 
 /** Whether the desktop table-of-contents panel is open (kept per browser). */
 const TOC_OPEN_KEY = 'reader-toc-open'
@@ -273,6 +285,43 @@ export default function BookReader() {
   }
   const toggleLayoutRef = useRef(toggleLayout)
   useEffect(() => { toggleLayoutRef.current = toggleLayout })
+  /**
+   * Comment one game again, in place (S3): its comments, variations and images
+   * from its first move to its last are replaced by its main line commented
+   * with the options selected in the review panel; the book's text is kept and
+   * a second click on the same icon restores it exactly as it was.
+   */
+  const toggleRecomment = (gameIndex: number) => {
+    const store = useGameRewriteStore.getState()
+    const book = id
+    const chapter = currentChapter
+    const resetBoard = () => {
+      saveBoardMemory(book, { chapter, gameIndex, nodeId: null, annotations: {} })
+      useStudyBoardStore.getState().clearGame()
+    }
+    if (store.rewrites[rewriteKey(book, chapter)]?.[gameIndex]) {
+      const previous = store.clear(book, chapter, gameIndex)
+      if (previous?.layout) saveGameLayout(book, chapter, gameIndex, previous.layout)
+      resetBoard()
+      setLayoutVersion((v) => v + 1)
+      return
+    }
+    if (!games[gameIndex]) return
+    const chapterGames = games
+    const text = plainText
+    void withBusy('Commenting the game again', async () => {
+      const body = await recommentGame(chapterGames, gameIndex, text)
+      if (!body.trim()) return
+      // The layout chosen before is given back on restore; the new text shows as the panel writes it.
+      const layoutBefore = loadGameLayouts(book, chapter)[gameIndex]
+      clearGameLayout(book, chapter, gameIndex)
+      useGameRewriteStore.getState().save(book, chapter, gameIndex, { text: body, ...(layoutBefore ? { layout: layoutBefore } : {}) })
+      resetBoard()
+      setLayoutVersion((v) => v + 1)
+    }).catch((e: unknown) => console.warn('[BookReader] could not comment the game again', e))
+  }
+  const toggleRecommentRef = useRef(toggleRecomment)
+  useEffect(() => { toggleRecommentRef.current = toggleRecomment })
   const showMentionRef = useRef(showMention)
   useEffect(() => { showMentionRef.current = showMention })
 
@@ -308,14 +357,38 @@ export default function BookReader() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [id, currentChapter, layoutVersion],
   )
-  const shownHtml = useMemo(() => applyGameLayouts(html, baseGames, layouts), [html, baseGames, layouts])
+  // Games commented again are put back in place first (S3), then the layouts are applied to them.
+  const chapterRewrites = useGameRewriteStore((s) => s.rewrites[rewriteKey(id, currentChapter)])
+  const rewrittenHtml = useMemo(
+    () => (chapterRewrites ? applyGameRewrites(html, baseGames, chapterRewrites) : html),
+    [html, baseGames, chapterRewrites],
+  )
+  const rewrittenText = useMemo(
+    () => (rewrittenHtml === html ? basePlainText : htmlToProseText(rewrittenHtml)),
+    [rewrittenHtml, html, basePlainText],
+  )
+  const rewrittenGames = useMemo(
+    () => (rewrittenText === basePlainText ? baseGames : recognizeGames(rewrittenText, { algorithm: recognitionAlgorithm })),
+    [rewrittenText, basePlainText, baseGames, recognitionAlgorithm],
+  )
+  const layoutHtml = useMemo(
+    () => applyGameLayouts(rewrittenHtml, rewrittenGames, layouts),
+    [rewrittenHtml, rewrittenGames, layouts],
+  )
+  // Book comments shown again: one remark per position picked anew (S4).
+  const bookComments = useReaderViewStore((s) => s.bookComments)
+  const commentPick = useReaderViewStore((s) => s.commentPick)
+  const textWidth = useReaderViewStore((s) => s.textWidth)
+  const shownHtml = useMemo(() => pickBookComments(layoutHtml, commentPick), [layoutHtml, commentPick])
   const plainText = useMemo(
-    () => (shownHtml === html ? basePlainText : htmlToProseText(shownHtml)),
-    [shownHtml, html, basePlainText],
+    () => (shownHtml === html ? basePlainText : shownHtml === rewrittenHtml ? rewrittenText : htmlToProseText(shownHtml)),
+    [shownHtml, html, basePlainText, rewrittenHtml, rewrittenText],
   )
   const games = useMemo(
-    () => (plainText === basePlainText ? baseGames : recognizeGames(plainText, { algorithm: recognitionAlgorithm })),
-    [plainText, basePlainText, baseGames, recognitionAlgorithm],
+    () => (plainText === basePlainText ? baseGames
+      : plainText === rewrittenText ? rewrittenGames
+        : recognizeGames(plainText, { algorithm: recognitionAlgorithm })),
+    [plainText, basePlainText, baseGames, rewrittenText, rewrittenGames, recognitionAlgorithm],
   )
   /** Each game's heading, label and anchor (S9, S15). */
   const gameSummaries = useMemo(() => describeGames(plainText, games), [plainText, games])
@@ -437,6 +510,21 @@ export default function BookReader() {
       // Frame every game (start/end markers, heading, hidden region) before the
       // text nodes are split into move spans: the frames only move whole blocks.
       decorateGames(container, prose, games, gameSummaries, { chapter: currentChapter })
+      // Right after each game's layout switch: comment the game again / restore the book's text (S3).
+      const rewritten = useGameRewriteStore.getState().rewrites[rewriteKey(id, currentChapter)] ?? {}
+      container.querySelectorAll<HTMLElement>('[data-game-marker="start"] [data-layout-toggle]').forEach((toggle) => {
+        const index = Number(toggle.dataset.layoutToggle)
+        const done = !!rewritten[index]
+        const label = done ? 'Restore the book\'s text' : 'Comment this game again'
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.className = 'game-recomment-toggle'
+        button.setAttribute('data-recomment', String(index))
+        button.setAttribute('aria-label', label)
+        button.setAttribute('aria-pressed', String(done))
+        button.title = label
+        toggle.after(button)
+      })
       const targets = planMoveTargets(prose.text, games)
       const pieces = piecesByTextNode(prose.map, targets)
 
@@ -499,7 +587,7 @@ export default function BookReader() {
     }
     // Heading-like paragraphs of the EPUB (classes, its stylesheet, inline CSS) as headings (S8).
     detectHeadings(container)
-  }, [shownHtml, games, plainText, gameSummaries, currentChapter, bookConfig.moveLineIndent.zeroIndent])
+  }, [shownHtml, games, plainText, gameSummaries, currentChapter, id, bookConfig.moveLineIndent.zeroIndent])
 
   // Wrap each book diagram <img> with an interactive DiagramImage overlay
   // (original ↔ autogenerated board toggle + eval footer + config menu). The
@@ -511,8 +599,9 @@ export default function BookReader() {
     const container = contentRef.current
     if (!container) return
 
-    // Tear down any previously-mounted overlays before re-mounting.
-    diagramRoots.current.forEach((r) => r.unmount())
+    // Tear down any previously-mounted overlays before re-mounting (deferred:
+    // a store update can flush this effect while React is still rendering).
+    unmountLater(diagramRoots.current)
     diagramRoots.current = []
 
     // Images in table cells (rating icons, symbols) and small icons are not
@@ -554,7 +643,7 @@ export default function BookReader() {
     setDiagramFens(bookDiagrams)
 
     return () => {
-      diagramRoots.current.forEach((r) => r.unmount())
+      unmountLater(diagramRoots.current)
       diagramRoots.current = []
     }
   }, [shownHtml, games])
@@ -703,6 +792,8 @@ export default function BookReader() {
     const onClick = (e: Event) => {
       const toggle = (e.target as HTMLElement | null)?.closest?.('[data-layout-toggle]') as HTMLElement | null
       if (toggle) { toggleLayoutRef.current(Number(toggle.dataset.layoutToggle)); return }
+      const recomment = (e.target as HTMLElement | null)?.closest?.('[data-recomment]') as HTMLElement | null
+      if (recomment) { toggleRecommentRef.current(Number(recomment.dataset.recomment)); return }
       const target = e.target as HTMLElement | null
       // A comment's line to a NEW analysis board; the study board is kept (S5).
       const toBoard = target?.closest?.('button.line-to-board') as HTMLElement | null
@@ -819,6 +910,10 @@ export default function BookReader() {
     .epub-content .game-layout-toggle { order: 2; border: 1px solid #cbd5e1; border-radius: 0.25rem; background: #fff; padding: 0 0.35rem; font-size: 0.7rem; color: #475569; line-height: 1.4; }
     .epub-content .game-layout-toggle::before { content: attr(data-glyph); }
     .epub-content .game-layout-toggle:hover { background: #f1f5f9; }
+    .epub-content .game-recomment-toggle { order: 3; width: 1.6rem; height: 1.15rem; border: 1px solid #cbd5e1; border-radius: 0.25rem; background: #fff center / 0.9rem no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.6 8.6 0 0 1-3.9-.9L3 21l1.9-5.6A8.4 8.4 0 0 1 12.5 3c2.4 0 4.6 1 6.1 2.6'/%3E%3Cpath d='M21 3v5h-5'/%3E%3C/svg%3E"); }
+    .epub-content .game-recomment-toggle:hover { background-color: #f1f5f9; }
+    .epub-content .game-recomment-toggle[aria-pressed="true"] { border-color: #f59e0b; background-color: #fffbeb; }
+    .hide-book-comments .epub-content blockquote.human-comment { display: none; }
     .epub-content .game-heading-line { text-indent: 0; margin-bottom: 0.1rem; padding: 0 0.75rem; background: #f8fafc; border-left: 3px solid #2563eb; color: #1e293b; }
     .epub-content .game-heading-first { padding-top: 0.4rem; font-weight: 700; font-size: 1.05em; }
     .epub-content .game-heading-last { padding-bottom: 0.4rem; margin-bottom: ${epub.paragraphSpacing}rem; font-style: italic; }
@@ -903,6 +998,9 @@ export default function BookReader() {
 
         <div className="mx-1 h-5 w-px bg-slate-200" />
 
+        {/* Width of the text column (S9). */}
+        <WidthControl />
+
         {/* Comment layout of the active game: braces ⇄ paragraphs (S7). */}
         {activeSummary && (
           <button
@@ -914,6 +1012,9 @@ export default function BookReader() {
             <span aria-hidden="true">{activeSummary.braces ? '¶' : '{ }'}</span>
           </button>
         )}
+
+        {/* Book comments in the text, shown or hidden: just before the board button (S4). */}
+        <BookCommentsToggle />
 
         {/* Study board toggle — chessboard grid icon */}
         <button
@@ -997,10 +1098,12 @@ export default function BookReader() {
             // While a problem is being solved the text would give the move away: it is veiled.
             <div
               data-testid="prose-veil"
-              className={solvingProblem ? 'pointer-events-none select-none blur-sm transition' : 'transition'}
+              className={`${solvingProblem ? 'pointer-events-none select-none blur-sm transition' : 'transition'}${bookComments ? '' : ' hide-book-comments'}`}
               aria-hidden={solvingProblem || undefined}
             >
-              <ProseContent ref={contentRef} html={shownHtml} />
+              <div data-testid="reader-column" className="mx-auto" style={textWidth ? { maxWidth: `${textWidth}px` } : undefined}>
+                <ProseContent ref={contentRef} html={shownHtml} />
+              </div>
             </div>
           )}
           {/* Previous / next chapter at the end of the chapter too (S13). */}

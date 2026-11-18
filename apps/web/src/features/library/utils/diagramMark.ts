@@ -28,7 +28,31 @@ export function parseDiagramMark(line: string): DiagramMark | null {
  * A remark borrowed from a book: `[Comment source="…" text="…" fen="…" game="…" ply="…"]`
  * (`fen`: the position it speaks of; `game`/`ply`: where it is in the commentary database).
  */
-export interface CommentMark { text: string; source: string; fen?: string; gameId?: string; ply?: number }
+export interface CommentMark {
+  text: string; source: string; fen?: string; gameId?: string; ply?: number
+  /** Every remark the database holds on the same position (this one included), for the reader to pick another one (S4). */
+  alternatives?: CommentAlternative[]
+}
+
+/** One remark of a position, as kept in a comment mark's `alts` attribute. */
+export interface CommentAlternative { text: string; source: string; gameId?: string; ply?: number }
+
+/** The ` alts="…"` attribute of a comment mark (URI-encoded JSON); empty for fewer than two remarks. */
+export function commentAlternativesAttr(alternatives: CommentAlternative[]): string {
+  return alternatives.length > 1 ? ` alts="${encodeURIComponent(JSON.stringify(alternatives))}"` : ''
+}
+
+function readAlternatives(raw: string | undefined): CommentAlternative[] | undefined {
+  if (!raw) return undefined
+  try {
+    const list = JSON.parse(decodeURIComponent(raw)) as unknown
+    if (!Array.isArray(list)) return undefined
+    const alts = list.filter((a): a is CommentAlternative => !!a && typeof a.text === 'string' && typeof a.source === 'string')
+    return alts.length > 1 ? alts : undefined
+  } catch {
+    return undefined
+  }
+}
 
 export function parseCommentMark(line: string): CommentMark | null {
   const m = /^\[Comment((?:\s+\w+="[^"]*")+)\s*\]$/.exec(line.trim())
@@ -41,5 +65,6 @@ export function parseCommentMark(line: string): CommentMark | null {
     ...(attrs.fen ? { fen: attrs.fen } : {}),
     ...(attrs.game ? { gameId: attrs.game } : {}),
     ...(attrs.ply && Number(attrs.ply) > 0 ? { ply: Number(attrs.ply) } : {}),
+    ...(readAlternatives(attrs.alts) ? { alternatives: readAlternatives(attrs.alts) } : {}),
   }
 }

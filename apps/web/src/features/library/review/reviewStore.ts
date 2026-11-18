@@ -31,6 +31,12 @@ interface ReviewState {
   clearBook: (bookId: number) => void
   /** Drop the review of one game (to analyse it again from scratch). */
   forget: (tree: GameTree) => void
+  /** Commentary level chosen in the review panel (persisted): also used to comment a game again from its marker (S3). */
+  level: 1 | 2 | 3
+  setLevel: (level: 1 | 2 | 3) => void
+  /** Moves the reader picked for a diagram (node ids), chosen in the review panel. */
+  diagramAt: string[]
+  setDiagramAt: (ids: string[]) => void
 }
 
 export const useReviewStore = create<ReviewState>()(
@@ -47,13 +53,17 @@ export const useReviewStore = create<ReviewState>()(
           ],
         })),
       clearBook: (bookId) => set((s) => ({ records: s.records.filter((r) => r.bookId !== bookId) })),
+      level: 2,
+      setLevel: (level) => set({ level }),
+      diagramAt: [],
+      setDiagramAt: (diagramAt) => set({ diagramAt }),
       forget: (tree) => set((s) => {
         const byTree = new Map(s.byTree)
         byTree.delete(tree)
         return { byTree }
       }),
     }),
-    { name: 'chessreader-reviews', partialize: (s) => ({ records: s.records }) },
+    { name: 'chessreader-reviews', partialize: (s) => ({ records: s.records, level: s.level }) },
   ),
 )
 
