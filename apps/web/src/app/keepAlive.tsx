@@ -8,7 +8,7 @@ import { useStatusStore } from '../shared/layout/statusStore'
  * coming back shows them as they were: inputs, results, open sections, sub-tab
  * and scroll. Other routes (the reader, login…) mount and unmount as usual.
  */
-export const KEEP_ALIVE_TABS = ['library', 'search', 'play', 'training', 'database', 'errors', 'webparser', 'admin'] as const
+export const KEEP_ALIVE_TABS = ['library', 'analysis', 'search', 'play', 'training', 'database', 'errors', 'webparser', 'admin'] as const
 
 type LocationCtx = ContextType<typeof UNSAFE_LocationContext>
 interface KeptTab { element: ReactNode; location: LocationCtx }

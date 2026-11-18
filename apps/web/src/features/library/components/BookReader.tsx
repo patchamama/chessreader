@@ -3,7 +3,8 @@ import { diagramFenOf } from '../utils/diagramFiles'
 import { DiagramToolsPanel } from './DiagramToolsPanel'
 import { formatChapterTitle, prepareChapterHtml } from '../utils/epubContent'
 import { useParams } from 'react-router-dom'
-import { useChapter, useTouchBook } from '../api/libraryApi'
+import { useChapter, useTouchBook, type Book } from '../api/libraryApi'
+import { useQueryClient } from '@tanstack/react-query'
 import { numberLine, recognizeGames } from '@chess-ebook/chess-shared'
 import type { GameTree, GameNode, IsolatedMove } from '@chess-ebook/chess-shared'
 import { MoveTooltipCard } from './MoveTooltipCard'
@@ -52,6 +53,7 @@ import { demoTrackFor } from '../../../demo/demoTracks'
 import { CorrectionWorkbench } from '../correction/CorrectionWorkbench'
 import { extractProseText, htmlToProseText, planMoveTargets, piecesByTextNode, nodeBeforeOffset } from '../utils/proseText'
 import { playLine } from '../../../shared/chess/playLine'
+import { formatMoveSpans } from '../../../shared/chess/notation'
 import { openAnalysisBoard } from '../analysis/analysisBoards'
 import { CommentSourceMenu, type CommentSourceTarget } from './CommentSourceMenu'
 
@@ -176,6 +178,8 @@ export default function BookReader() {
   const epub = useSettingsStore((s) => s.epub)
   const studyPanelWidth = useSettingsStore((s) => s.studyPanelWidth)
   const fontSize = useSettingsStore((s) => s.fontSize)
+  const notationLang = useSettingsStore((s) => s.language)
+  const notationStyle = useSettingsStore((s) => s.notationStyle)
   const { config: bookConfig } = useBookConfig(id)
   const isAdmin = useAuthStore((s) => s.user?.role === 'admin')
   // The recognition debug tooling shows for admins OR in any developer context
@@ -310,6 +314,11 @@ export default function BookReader() {
       await nextPaint()
     })
   }
+  // The book's name, for the tab of an analysis board opened from its text (S11).
+  const queryClient = useQueryClient()
+  const bookName = () => queryClient.getQueryData<Book[]>(['library', 'books'])?.find((b) => b.id === id)?.title
+  const bookNameRef = useRef(bookName)
+  useEffect(() => { bookNameRef.current = bookName })
   const toggleLayoutRef = useRef(toggleLayout)
   useEffect(() => { toggleLayoutRef.current = toggleLayout })
   /**
@@ -517,7 +526,8 @@ export default function BookReader() {
     container.querySelectorAll('span[data-san], span[data-iso-square]').forEach((el) => {
       const parent = el.parentNode
       if (parent) {
-        parent.replaceChild(document.createTextNode(el.textContent ?? ''), el)
+        // The book's own spelling (S12: the span may show another notation).
+        parent.replaceChild(document.createTextNode(el.getAttribute('data-raw') ?? el.textContent ?? ''), el)
         parent.normalize()
       }
     })
@@ -624,6 +634,13 @@ export default function BookReader() {
     // Heading-like paragraphs of the EPUB (classes, its stylesheet, inline CSS) as headings (S8).
     detectHeadings(container)
   }, [shownHtml, games, plainText, gameSummaries, currentChapter, id, bookConfig.moveLineIndent.zeroIndent])
+
+  // Moves in the text written with the chosen notation (S12): figurines or the
+  // letters of the language. The book's spelling stays in data-raw.
+  useEffect(() => {
+    const container = contentRef.current
+    if (container) formatMoveSpans(container, notationLang, notationStyle)
+  }, [shownHtml, games, plainText, gameSummaries, currentChapter, id, bookConfig.moveLineIndent.zeroIndent, notationLang, notationStyle])
 
   // A game just rewritten in place (S6): back where it was on screen, then flashed.
   // Again after a paint, once the diagrams around it have taken their size.
@@ -867,7 +884,7 @@ export default function BookReader() {
       const toBoard = target?.closest?.('button.line-to-board') as HTMLElement | null
       if (toBoard) {
         const line = lineOf(toBoard)
-        if (line) openAnalysisBoard({ title: line.title, startFen: line.startFen, moves: line.moves, ply: 0 })
+        if (line) openAnalysisBoard({ title: line.title, startFen: line.startFen, moves: line.moves, ply: 0, source: bookNameRef.current() })
         return
       }
       const lineMove = findLineMove(target)
@@ -875,7 +892,7 @@ export default function BookReader() {
         if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
         setTooltipRef.current(null)
         const line = lineOf(lineMove.closest('span.chess-line') as HTMLElement ?? lineMove)
-        if (line) openAnalysisBoard({ title: line.title, startFen: line.startFen, moves: line.moves, ply: Number(lineMove.dataset.ply) || 0 })
+        if (line) openAnalysisBoard({ title: line.title, startFen: line.startFen, moves: line.moves, ply: Number(lineMove.dataset.ply) || 0, source: bookNameRef.current() })
         return
       }
       // The source of a book comment: open its game in a new tab or a new analysis board (S5).

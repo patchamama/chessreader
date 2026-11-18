@@ -1,6 +1,7 @@
 import { useState, type MouseEvent } from 'react'
 import ChessBoardThemed from './ChessBoard'
 import { useSettingsStore } from '../settings/settingsStore'
+import { useNotation } from './notation'
 
 import type { LinePosition } from './playLine'
 
@@ -10,19 +11,27 @@ import type { LinePosition } from './playLine'
  * A written line whose moves show their position on hover (when move
  * thumbnails are on in Settings). Number tokens ("3." "3...") are skipped; the
  * other tokens map, in order, to `positions`. With `onPick`, each move is a
- * button and `current` marks the move shown on a replay board.
+ * button and `current` marks the move shown on a replay board. Each move is
+ * written with the chosen notation (figurines or the language's letters),
+ * whatever language the text came in: its position says which piece moved.
  */
 export function HoverLine({ text, positions, className, testId, suffix, current, onPick }: {
   text: string; positions: LinePosition[]; className?: string; testId?: string; suffix?: string
   current?: number; onPick?: (i: number) => void
 }) {
   const thumbs = useSettingsStore((s) => s.diagramEvalThumbs)
+  const notation = useNotation()
   const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null)
-  if (!thumbs && !onPick) return <span data-testid={testId} className={className}>{text}{suffix}</span>
   let k = -1
-  const parts = text.split(/(\s+)/).map((tok, j) => {
-    if (!tok || /^\s+$/.test(tok) || /^\d+\.(\.\.)?$/.test(tok)) return <span key={j}>{tok}</span>
+  const isMove = (tok: string) => !!tok && !/^\s+$/.test(tok) && !/^\d+\.(\.\.)?$/.test(tok)
+  if (!thumbs && !onPick) {
+    const shownText = text.split(/(\s+)/).map((tok) => (isMove(tok) ? notation.token(tok, positions[++k]?.san) : tok)).join('')
+    return <span data-testid={testId} className={className}>{shownText}{suffix}</span>
+  }
+  const parts = text.split(/(\s+)/).map((raw, j) => {
+    if (!isMove(raw)) return <span key={j}>{raw}</span>
     const at = ++k
+    const tok = notation.token(raw, positions[at]?.san)
     const handlers = thumbs
       ? { onMouseEnter: (e: MouseEvent) => setHover({ i: at, x: e.clientX, y: e.clientY }), onMouseLeave: () => setHover(null) }
       : {}

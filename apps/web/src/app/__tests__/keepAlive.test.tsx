@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { useEffect, useState } from 'react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import AppLayout from '../AppLayout'
+import { KEEP_ALIVE_TABS } from '../keepAlive'
 import { useAuthStore } from '../../features/auth/store/authStore'
 import { useStatusStore } from '../../shared/layout/statusStore'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
@@ -105,5 +106,11 @@ describe('the main tabs keep their content when you leave and come back (S8)', (
     act(() => useAuthStore.setState({ token: 'tok', user: { email: 'a@b.com', role: 'user', status: 'approved' } }))
     nav('Game search')
     expect(screen.getByRole('textbox', { name: 'Search games' })).toHaveValue('')
+  })
+})
+
+describe('the analysis board tab is kept alive (S11)', () => {
+  it('lists analysis among the kept tabs', () => {
+    expect(KEEP_ALIVE_TABS).toContain('analysis')
   })
 })

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { localLine, numberLine } from '@chess-ebook/chess-shared'
+import { numberLine } from '@chess-ebook/chess-shared'
 import ChessBoardThemed from './ChessBoard'
 import { HoverLine } from './HoverLine'
 import { playLine } from './playLine'
@@ -16,7 +16,7 @@ const STEP_MS = 1000
 
 /**
  * A line of moves (SAN or UCI) from a position: written with move numbers and
- * the piece letters of the language, each move showing its position on hover,
+ * the chosen piece notation (figurines or the language's letters), each move showing its position on hover,
  * with a small board to replay it (first, previous, next, last, play/pause).
  * A line that cannot be played from the position is written as plain text.
  */
@@ -41,7 +41,8 @@ export function LinePlayer({ fen, moves, orientation, initiallyOpen = true, test
   if (!ok || total === 0) return <span data-testid={`${testId}-text`} className={className}>{moves.join(' ')}</span>
 
   const [, turn, , , , moveNo] = fen.split(' ')
-  const text = localLine(numberLine(positions.map((p) => p.san), Number(moveNo) || 1, turn === 'b' ? 'black' : 'white'), lang)
+  // English SAN: HoverLine writes each move with the chosen notation.
+  const text = numberLine(positions.map((p) => p.san), Number(moveNo) || 1, turn === 'b' ? 'black' : 'white')
   const shown = ply > 0 ? positions[ply - 1] : null
   const go = (n: number) => { setPlaying(false); setPly(Math.max(0, Math.min(total, n))) }
   const button = 'rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40'

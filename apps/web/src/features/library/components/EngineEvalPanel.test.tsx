@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import type { EngineLinesState } from '../../../shared/stockfish/useEngineLines'
 import { EngineEvalPanel } from './EngineEvalPanel'
+import { useSettingsStore } from '../../../shared/settings/settingsStore'
 
 let mockState: EngineLinesState
 
@@ -9,6 +10,7 @@ const FEN_WHITE = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 
 describe('EngineEvalPanel', () => {
   beforeEach(() => {
+    useSettingsStore.setState({ language: 'en', notationStyle: 'figurine' })
     mockState = {
       lines: [
         {
@@ -60,5 +62,12 @@ describe('EngineEvalPanel', () => {
     render(<EngineEvalPanel fen={FEN_WHITE} onPlayUci={vi.fn()} engine={mockState} />)
     expect(screen.getByText(/Stockfish 18 lite:/i)).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('writes the PV with the letters of the language when letters are chosen (S12)', () => {
+    useSettingsStore.setState({ language: 'es', notationStyle: 'letters' })
+    render(<EngineEvalPanel fen={FEN_WHITE} onPlayUci={vi.fn()} engine={mockState} />)
+    expect(screen.getByRole('button', { name: '2. Cf3' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /♞/ })).toBeNull()
   })
 })

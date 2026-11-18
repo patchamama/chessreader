@@ -21,6 +21,8 @@ import { EngineEvalPanel } from './EngineEvalPanel'
 import { useEngineLines } from '../../../shared/stockfish/useEngineLines'
 import { buildBoardArrows, ENGINE_ARROW_COLOR, PREMOVE_ARROW_COLOR } from '../utils/engineArrows'
 import { useMoveSound } from '../../../shared/chess/useMoveSound'
+import { formatSan } from '../../../shared/chess/notation'
+import { NotationToggle } from '../../../shared/chess/NotationToggle'
 import { GuessTheMove } from './GuessTheMove'
 import { PositionTrainer } from './PositionTrainer'
 import { usePracticeStore } from '../store/practiceStore'
@@ -100,6 +102,8 @@ export function StudyBoard() {
   const showEval = useSettingsStore((s) => s.showEval)
   const showEngineArrow = useSettingsStore((s) => s.showEngineArrow)
   const autoplayDelay = useSettingsStore((s) => s.autoplayDelay)
+  const lang = useSettingsStore((s) => s.language)
+  const notationStyle = useSettingsStore((s) => s.notationStyle)
   const playMoveSound = useMoveSound()
 
   const activeGame = useStudyBoardStore((s) => s.activeGame)
@@ -159,12 +163,12 @@ export function StudyBoard() {
   useEffect(() => {
     const st = useStatusStore.getState()
     const node = nav.node
-    st.setStatus('reader.move', 'Move', node ? `${node.moveNumber}${node.color === 'white' ? '.' : '...'} ${node.san}` : '')
+    st.setStatus('reader.move', 'Move', node ? `${node.moveNumber}${node.color === 'white' ? '.' : '...'} ${formatSan(node.san, lang, notationStyle)}` : '')
     st.setStatus('reader.fen', 'FEN', fen)
     const best = engine.lines[0]
     const sign = fen.split(' ')[1] === 'b' ? -1 : 1
     st.setStatus('reader.eval', 'Eval', best ? `${best.mate !== undefined ? `#${sign * best.mate}` : ((sign * (best.scoreCp ?? 0)) / 100).toFixed(2)} (d${engine.depth})` : '')
-  }, [fen, nav.node, engine.lines, engine.depth])
+  }, [fen, nav.node, engine.lines, engine.depth, lang, notationStyle])
   useEffect(() => () => useStatusStore.getState().clearStatus('reader.'), [])
 
   // The tree's next move (premove arrow when the engine is off).
@@ -440,6 +444,8 @@ export function StudyBoard() {
           </svg>
         </NavButton>
         {fullScreen && <BoardModal onClose={() => setFullScreen(false)} />}
+
+        <NotationToggle />
 
         <NavButton onClick={flip} title="Flip board">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

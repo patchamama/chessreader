@@ -4,6 +4,7 @@ import { shortScore, winPercent, numberLine, type GameNode, type GameTree, type 
 import ChessBoardThemed from '../../../shared/chess/ChessBoard'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { lichessThemes } from '../../../shared/chess/lichessThemes'
+import { formatLine } from '../../../shared/chess/notation'
 import { reviewEngine, useReviewStore } from '../review/reviewStore'
 import { uciLineToSan } from '../review/reviewEngine'
 import type { EngineLine } from '../../../shared/stockfish/useEngineLines'
@@ -99,6 +100,7 @@ export function MoveTooltipCard(p: {
   arrow?: [string, string]
 }) {
   const lang = useSettingsStore((s) => s.language)
+  const notationStyle = useSettingsStore((s) => s.notationStyle)
   const on = useSettingsStore((s) => s.hintEval)
   const t = T[lang]
   const judged = useMoveEval(p.tree ?? EMPTY_TREE, p.node ?? EMPTY_NODE, on && !!p.tree && !!p.node)
@@ -133,7 +135,7 @@ export function MoveTooltipCard(p: {
           {themes.length > 0 && <p data-testid="hint-themes" className="text-slate-600">🧩 {themes.join(', ')}</p>}
           {judged.best && (
             <p data-testid="hint-best" className="text-emerald-800">
-              {t.engine}: {sameAsBest ? t.same : numberLine([judged.best.san], node.moveNumber, node.color)}
+              {t.engine}: {sameAsBest ? t.same : formatLine(numberLine([judged.best.san], node.moveNumber, node.color), lang, notationStyle)}
             </p>
           )}
         </div>

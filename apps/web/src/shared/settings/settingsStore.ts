@@ -118,11 +118,17 @@ export function browserLanguage(): AppLanguage {
   return code === 'es' || code === 'de' ? code : 'en'
 }
 
+/** How pieces are written in notation: figurines (♞f3) or the letters of the language (Cf3, Sf3, Nf3). */
+export type NotationStyle = 'figurine' | 'letters'
+export const NOTATION_STYLES: Record<NotationStyle, string> = { letters: 'Letters of the language (Cf3, Sf3, Nf3)', figurine: 'Figurines (♞f3)' }
+
 export type VoiceProvider = 'browser' | 'system' | 'piper' | 'openai' | 'elevenlabs'
 
 export interface AppSettings {
   /** Language of the commentary the app writes and of the narration voice. */
   language: AppLanguage
+  /** Pieces in every notation shown: figurines or the letters of `language`. */
+  notationStyle: NotationStyle
   /** Narration: say "White:" / "Black:" before every move. */
   narrationSayColor: boolean
   /** Narration: say the move number on White's moves, on both sides' or never. */
@@ -261,6 +267,7 @@ const DEFAULT_EPUB: EpubLayout = {
 
 const DEFAULT: AppSettings = {
   language: browserLanguage(),
+  notationStyle: 'letters',
   narrationSayColor: false,
   narrationSayNumber: 'white',
   narrationRepeatSeconds: 5,
@@ -348,7 +355,10 @@ export function mergeWithDefaults(
   current: SettingsStore,
   persisted: unknown,
 ): SettingsStore {
-  return { ...current, ...(persisted as Partial<SettingsStore> | undefined) }
+  const merged = { ...current, ...(persisted as Partial<SettingsStore> | undefined) }
+  // A missing or unknown notation (older or hand-edited state) falls back to the default.
+  if (!(merged.notationStyle in NOTATION_STYLES)) merged.notationStyle = DEFAULT.notationStyle
+  return merged
 }
 
 /**

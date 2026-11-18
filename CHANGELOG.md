@@ -2,6 +2,11 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.114.0 — 2026-11-19
+
+- feat: "Analysis board" tab after Library — the current study board, live, and one closable tab per extra board named after its book
+- feat: pieces in notation as figurines or as the letters of the selected language, with a toggle on the boards and a Settings option (letters by default)
+
 ## v0.113.1 — 2026-11-19
 
 - feat: each trap of Lococo's book knows its chapter and opens the book there

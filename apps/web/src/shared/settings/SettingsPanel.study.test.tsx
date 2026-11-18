@@ -36,3 +36,13 @@ describe('SettingsPanel study options', () => {
     expect(panel.className).toContain('w-80')
   })
 })
+
+describe('SettingsPanel piece notation (S12)', () => {
+  it('chooses figurines or the letters of the language', () => {
+    render(<SettingsPanel onClose={() => {}} />)
+    const select = screen.getByLabelText('Piece notation')
+    expect((select as HTMLSelectElement).value).toBe('letters')
+    fireEvent.change(select, { target: { value: 'figurine' } })
+    expect(useSettingsStore.getState().notationStyle).toBe('figurine')
+  })
+})

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { VoiceSettings } from './VoiceSettings'
 import { LICHESS_TOKEN_URL } from '../lichess/tokenUrl'
 import { lichessAccount } from '../../features/gamesearch/myGames'
-import { APP_LANGUAGES, DEFAULT_RESOURCES_URL, type AppLanguage } from './settingsStore'
+import { APP_LANGUAGES, DEFAULT_RESOURCES_URL, NOTATION_STYLES, type AppLanguage, type NotationStyle } from './settingsStore'
 import { checkResources, resourcesTokenUrl } from '../../features/library/commentdb/commentLookup'
 import { useSettingsStore, BOARD_THEMES, FONT_FAMILIES, STOCKFISH_VERSIONS, APP_THEME_PRESETS, PIECE_THEMES, type BoardTheme, type FontFamily, type EvalBarDirection, type StockfishVersion, type EngineSource,
   type ImageAlign, type HeadingStyle, type EngineVariations, type AppTheme, type PieceTheme } from './settingsStore'
@@ -136,6 +136,19 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
         >
           {(Object.keys(APP_LANGUAGES) as AppLanguage[]).map((l) => (
             <option key={l} value={l}>{APP_LANGUAGES[l]}</option>
+          ))}
+        </select>
+
+        {/* Piece notation: figurines or the letters of the language, everywhere moves are written */}
+        <label className={labelClass} htmlFor="settings-notation">Piece notation</label>
+        <select
+          id="settings-notation"
+          className={inputClass}
+          value={s.notationStyle}
+          onChange={(e) => s.set({ notationStyle: e.target.value as NotationStyle })}
+        >
+          {(Object.keys(NOTATION_STYLES) as NotationStyle[]).map((n) => (
+            <option key={n} value={n}>{NOTATION_STYLES[n]}</option>
           ))}
         </select>
 

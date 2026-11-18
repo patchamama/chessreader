@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import AppLayout from '../AppLayout'
 import { APP_VERSION } from '../../version'
@@ -7,6 +7,7 @@ import { useAuthStore } from '../../features/auth/store/authStore'
 import { isLocalhostHost } from '../../shared/env/devMode'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { FOOTER_HEIGHT } from '../../shared/layout/StatusFooter'
+import { openAnalysisBoard, useAnalysisBoards } from '../../features/library/analysis/analysisBoards'
 
 vi.mock('../../shared/env/devMode', () => ({
   isLocalhostHost: vi.fn(() => false),
@@ -104,5 +105,39 @@ describe('AppLayout fits the reader to the window (S4)', () => {
     expect(root.dataset.layout).toBe('page')
     expect(root.style.height).toBe('')
     expect(root.className).toContain('min-h-screen')
+  })
+})
+
+describe('AppLayout analysis board tab (S11)', () => {
+  const renderAt = (path: string) => render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route path="/library" element={<div>Page Content</div>} />
+          <Route path="/analysis" element={<div>Analysis page</div>} />
+        </Route>
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  beforeEach(() => {
+    useAuthStore.setState({ token: null, user: null })
+    useAnalysisBoards.setState({ boards: [], active: null })
+  })
+
+  it('shows "Analysis board" right after "Library" in the main navigation', () => {
+    renderAt('/library')
+    const links = within(screen.getByRole('navigation', { name: 'Main' })).getAllByRole('link').map((a) => a.textContent?.trim())
+    expect(links.slice(0, 2)).toEqual(['Library', 'Analysis board'])
+    expect(screen.getByRole('link', { name: 'Analysis board' })).toHaveAttribute('href', '/analysis')
+  })
+
+  it('hides the floating analysis boards on the analysis board tab, which shows them itself', () => {
+    act(() => { openAnalysisBoard({ title: 'Line', startFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', moves: ['e4'] }) })
+    renderAt('/library')
+    expect(screen.getByRole('complementary', { name: 'Analysis boards' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('link', { name: 'Analysis board' }))
+    expect(screen.getByText('Analysis page')).toBeVisible()
+    expect(screen.queryByRole('complementary', { name: 'Analysis boards' })).toBeNull()
   })
 })

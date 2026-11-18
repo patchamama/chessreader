@@ -3,6 +3,8 @@ import type { Arrow } from 'react-chessboard'
 import { analyseComment, commentToSpeechParts } from '@chess-ebook/chess-shared'
 import ChessBoardThemed from '../../../shared/chess/ChessBoard'
 import { playLine } from '../../../shared/chess/playLine'
+import { useNotation } from '../../../shared/chess/notation'
+import { NotationToggle } from '../../../shared/chess/NotationToggle'
 import { useSettingsStore, type AppLanguage } from '../../../shared/settings/settingsStore'
 import { analysisVoice as voice } from './analysisSpeaker'
 import { cuesToBoard } from '../narration/cueStyles'
@@ -37,6 +39,7 @@ interface NarrationView {
 export function AnalysisBoardView({ board }: { board: AnalysisBoardInput }) {
   const lang = useSettingsStore((s) => s.language)
   const t = T[lang] ?? T.en
+  const notation = useNotation()
   const { startFen, moves } = useMemo(() => boardLine(board), [board])
   const { positions } = useMemo(() => playLine(startFen, moves), [startFen, moves])
   const total = positions.length
@@ -137,6 +140,7 @@ export function AnalysisBoardView({ board }: { board: AnalysisBoardInput }) {
         {playing
           ? <button type="button" className={button} aria-label={t.pause} onClick={() => setPlaying(false)}>⏸</button>
           : <button type="button" className={button} aria-label={t.play} disabled={total === 0} onClick={() => { setView(null); if (ply >= total) setPly(0); setPlaying(true) }}>▶ {t.play}</button>}
+        <NotationToggle className={button} />
       </div>
       {total > 0 && (
         <div aria-label={t.moves} className="flex flex-wrap gap-x-1 font-mono text-xs text-slate-700">
@@ -147,7 +151,7 @@ export function AnalysisBoardView({ board }: { board: AnalysisBoardInput }) {
             return (
               <span key={i} className="inline-flex items-center gap-0.5">
                 {prefix && <span className="text-slate-400">{prefix}</span>}
-                <button type="button" className={`rounded px-0.5 hover:bg-amber-100${i === ply - 1 ? ' bg-amber-200 font-semibold' : ''}`} onClick={() => go(i + 1)}>{p.san}</button>
+                <button type="button" className={`rounded px-0.5 hover:bg-amber-100${i === ply - 1 ? ' bg-amber-200 font-semibold' : ''}`} onClick={() => go(i + 1)}>{notation.san(p.san)}</button>
               </span>
             )
           })}

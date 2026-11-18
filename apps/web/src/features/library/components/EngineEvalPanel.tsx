@@ -7,6 +7,7 @@ import {
   formatTime,
   pvToFigurineSegments,
 } from '../../../shared/stockfish/engineFormat'
+import { useNotation } from '../../../shared/chess/notation'
 
 interface EngineEvalPanelProps {
   fen: string
@@ -38,6 +39,8 @@ export function EngineEvalPanel({ fen, onPlayUci, engine }: EngineEvalPanelProps
   const name = engineName(STOCKFISH_VERSIONS[stockfishVersion].label)
 
   const { lines, loading } = engine
+  // The PV comes as figurines; it is shown with the chosen notation (S12).
+  const notation = useNotation()
 
   return (
     <div className="rounded-md border border-slate-200 bg-slate-50/70 px-2.5 py-2 font-mono text-[11px] text-slate-700">
@@ -49,7 +52,7 @@ export function EngineEvalPanel({ fen, onPlayUci, engine }: EngineEvalPanelProps
       ) : (
         lines.map((line) => {
           const score = formatScore(line)
-          const segments = pvToFigurineSegments(fen, line.pv)
+          const segments = pvToFigurineSegments(fen, line.pv).map((s) => ({ ...s, label: notation.line(s.label) }))
           const meta =
             `d=${line.depth}` +
             (line.nodes !== undefined ? ` n=${formatNodes(line.nodes)}` : '') +

@@ -176,3 +176,18 @@ describe('settingsStore — chapter title separator', () => {
     expect(useSettingsStore.getState().chapterTitleSeparator).toBe(': ')
   })
 })
+
+describe('settingsStore — piece notation (S12)', () => {
+  beforeEach(() => useSettingsStore.getState().reset())
+
+  it('defaults to the letters of the selected language', () => {
+    expect(useSettingsStore.getState().notationStyle).toBe('letters')
+  })
+
+  it('keeps a saved choice and repairs a missing or unknown one', () => {
+    const current = useSettingsStore.getState()
+    expect(mergeWithDefaults(current, { notationStyle: 'figurine' }).notationStyle).toBe('figurine')
+    expect(mergeWithDefaults(current, { fontSize: 18 }).notationStyle).toBe('letters')
+    expect(mergeWithDefaults(current, { notationStyle: 'emoji' }).notationStyle).toBe('letters')
+  })
+})

@@ -33,7 +33,10 @@ export default function AppLayout() {
   const settings = useSettingsStore()
   // The reader fits the window: its panes scroll inside, the page itself never
   // grows past the window, so the status footer always stays at the bottom (S4).
-  const fit = useLocation().pathname.startsWith('/read/')
+  const { pathname } = useLocation()
+  const fit = pathname.startsWith('/read/')
+  // The analysis board tab shows the analysis boards itself: no floating copy over it (S11).
+  const onAnalysis = pathname === '/analysis' || pathname.startsWith('/analysis/')
 
   const handleLogout = () => {
     clear()
@@ -67,6 +70,9 @@ export default function AppLayout() {
           <nav className="flex flex-1 items-center gap-1" aria-label="Main">
             <NavLink to="/library" className={navLinkClass}>
               Library
+            </NavLink>
+            <NavLink to="/analysis" className={navLinkClass}>
+              Analysis board
             </NavLink>
             <NavLink to="/search" className={navLinkClass}>
               Game search
@@ -150,7 +156,7 @@ export default function AppLayout() {
         <KeepAliveOutlet />
       </main>
 
-      <AnalysisBoardsPanel />
+      {!onAnalysis && <AnalysisBoardsPanel />}
       <BusyOverlay />
       <StatusFooter />
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}

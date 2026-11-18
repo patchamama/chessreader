@@ -51,7 +51,7 @@ describe('BookReader variation underline + chooser', () => {
   beforeEach(() => {
     useStudyBoardStore.getState().reset()
     // This fixture is single-line post-result analysis → legacy algorithm.
-    useSettingsStore.getState().set({ recognitionAlgorithm: 2 })
+    useSettingsStore.getState().set({ recognitionAlgorithm: 2, notationStyle: 'figurine' })
   })
 
   it('underlines a move that has alternatives ahead (Rd8+)', async () => {

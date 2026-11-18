@@ -7,6 +7,8 @@ import BookReader from '../BookReader'
 import { useStudyBoardStore } from '../../store/studyBoardStore'
 import { useSettingsStore } from '../../../../shared/settings/settingsStore'
 
+// These tests read the book's figurines in the move spans: the figurine notation keeps them (S12).
+
 // Two Fischer games in one chapter, each with prose alternatives, to verify the
 // number-authoritative resolver: "9... ♘b6" in prose must map to the move-9 node
 // (not the "11... ♘b6" variation), and a prose-only "9. e5" must not be painted
@@ -66,7 +68,7 @@ for (const algorithm of [1, 2] as const) {
   describe(`BookReader two-game recognition (algorithm ${algorithm})`, () => {
     beforeEach(() => {
       useStudyBoardStore.getState().reset()
-      useSettingsStore.getState().set({ recognitionAlgorithm: algorithm })
+      useSettingsStore.getState().set({ recognitionAlgorithm: algorithm, notationStyle: 'figurine' })
     })
 
     it('"9... ♘b6" maps to a move-9 node (game index, not the 11... variation)', async () => {
@@ -128,7 +130,7 @@ for (const algorithm of [1, 2] as const) {
 describe('BookReader algorithm 1: prose-only variation move is NOT painted', () => {
   beforeEach(() => {
     useStudyBoardStore.getState().reset()
-    useSettingsStore.getState().set({ recognitionAlgorithm: 1 })
+    useSettingsStore.getState().set({ recognitionAlgorithm: 1, notationStyle: 'figurine' })
   })
 
   it('"9. e5" (a prose variation, absent from the alg-1 mainline tree) is not a move span', async () => {
@@ -150,7 +152,7 @@ describe('BookReader algorithm 1: prose-only variation move is NOT painted', () 
 describe('BookReader marks a wrong move and plays its correction', () => {
   it('the misprinted "6. ♗c5" span carries the proposed move', async () => {
     useStudyBoardStore.getState().reset()
-    useSettingsStore.getState().set({ recognitionAlgorithm: 2 })
+    useSettingsStore.getState().set({ recognitionAlgorithm: 2, notationStyle: 'figurine' })
     const { container } = render(<BookReader />, { wrapper })
     await waitFor(() => {
       expect(container.querySelector('span[data-corrected-to]')).not.toBeNull()

@@ -17,6 +17,7 @@ import ErrorsPage from '../features/errors/ErrorsPage'
 import { isDemoHost } from '../shared/env/devMode'
 import PendingPage from '../features/auth/components/PendingPage'
 import CommentGamePage from '../features/library/analysis/CommentGamePage'
+import AnalysisPage from '../features/library/analysis/AnalysisPage'
 
 const routes = [
   {
@@ -32,6 +33,14 @@ const routes = [
         element: (
           <RequireApproved>
             <LibraryGrid />
+          </RequireApproved>
+        ),
+      },
+      {
+        path: '/analysis',
+        element: (
+          <RequireApproved>
+            <AnalysisPage />
           </RequireApproved>
         ),
       },

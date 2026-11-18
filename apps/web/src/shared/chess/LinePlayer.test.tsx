@@ -14,7 +14,7 @@ const AFTER_NF3 = 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 
 
 const board = () => screen.getByTestId('line-player-board')
 
-beforeEach(() => useSettingsStore.setState({ language: 'en', diagramEvalThumbs: true }))
+beforeEach(() => useSettingsStore.setState({ language: 'en', notationStyle: 'letters', diagramEvalThumbs: true }))
 afterEach(() => vi.useRealTimers())
 
 describe('LinePlayer (S5)', () => {
@@ -75,5 +75,13 @@ describe('LinePlayer (S5)', () => {
     expect(screen.queryByTestId('line-player-board')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Replay the line' }))
     expect(board()).toHaveTextContent(START)
+  })
+})
+
+describe('LinePlayer notation (S12)', () => {
+  it('writes the pieces as figurines when chosen, also without thumbnails', () => {
+    useSettingsStore.setState({ language: 'es', notationStyle: 'figurine', diagramEvalThumbs: false })
+    render(<LinePlayer fen={START} moves={['e4', 'e5', 'Nf3']} initiallyOpen={false} />)
+    expect(screen.getByTestId('line-player-moves')).toHaveTextContent('1. e4 e5 2. ♞f3')
   })
 })
