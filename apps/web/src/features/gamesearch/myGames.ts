@@ -41,11 +41,12 @@ export function moveCount(moves: string): number {
   return Math.ceil(sans.length / 2)
 }
 
-const auth = (token: string) => ({ Authorization: `Bearer ${token}` })
+/** Authorization header for a Lichess token. */
+export const lichessAuth = (token: string) => ({ Authorization: `Bearer ${token}` })
 
 /** The account behind a Lichess token. */
 export async function lichessAccount(token: string): Promise<{ username: string; createdAt: number }> {
-  const res = await fetch('https://lichess.org/api/account', { headers: auth(token) })
+  const res = await fetch('https://lichess.org/api/account', { headers: lichessAuth(token) })
   if (!res.ok) throw new Error(res.status === 401 ? 'Lichess rejected the token (401).' : `lichess.org answered ${res.status}`)
   const a = (await res.json()) as { username: string; createdAt: number }
   return { username: a.username, createdAt: a.createdAt }
@@ -53,23 +54,30 @@ export async function lichessAccount(token: string): Promise<{ username: string;
 
 interface LichessPlayer { user?: { name: string }; aiLevel?: number; rating?: number }
 
+const lichessName = (p: LichessPlayer) => p.user?.name ?? (p.aiLevel ? `Lichess AI level ${p.aiLevel}` : '?')
+
+/** One line of a Lichess ndjson game export as a game row. */
+export function parseLichessGame(line: string): MyGame {
+  const g = JSON.parse(line) as { id: string; createdAt: number; status: string; winner?: string; speed: string; moves?: string; opening?: { name: string }; players: { white: LichessPlayer; black: LichessPlayer }; pgn: string }
+  return {
+    id: g.id, source: 'lichess' as const, url: `https://lichess.org/${g.id}`, date: new Date(g.createdAt).toISOString().slice(0, 10),
+    white: lichessName(g.players.white), black: lichessName(g.players.black),
+    ...(g.players.white.rating ? { whiteElo: g.players.white.rating } : {}), ...(g.players.black.rating ? { blackElo: g.players.black.rating } : {}),
+    result: g.winner === 'white' ? '1-0' : g.winner === 'black' ? '0-1' : ['draw', 'stalemate'].includes(g.status) ? '½-½' : '*',
+    ending: g.status, opening: g.opening?.name ?? '', moves: moveCount(g.moves ?? ''), speed: g.speed, pgn: g.pgn,
+  }
+}
+
+/** Query of a Lichess game export: PGN inside each JSON line, with the opening. */
+export const LICHESS_EXPORT_PARAMS = 'pgnInJson=true&opening=true&clocks=false&evals=false'
+
 /** One month of a Lichess user's games. */
 export async function lichessGamesOfMonth(token: string, user: string, year: number, month: number): Promise<MyGame[]> {
   const since = Date.UTC(year, month - 1, 1), until = Date.UTC(year, month, 1)
-  const url = `https://lichess.org/api/games/user/${encodeURIComponent(user)}?since=${since}&until=${until}&pgnInJson=true&opening=true&clocks=false&evals=false`
-  const res = await fetch(url, { headers: { Accept: 'application/x-ndjson', ...auth(token) } })
+  const url = `https://lichess.org/api/games/user/${encodeURIComponent(user)}?since=${since}&until=${until}&${LICHESS_EXPORT_PARAMS}`
+  const res = await fetch(url, { headers: { Accept: 'application/x-ndjson', ...lichessAuth(token) } })
   if (!res.ok) throw new Error(`lichess.org answered ${res.status}`)
-  const name = (p: LichessPlayer) => p.user?.name ?? (p.aiLevel ? `Lichess AI level ${p.aiLevel}` : '?')
-  return (await res.text()).split('\n').filter((l) => l.trim()).map((l) => {
-    const g = JSON.parse(l) as { id: string; createdAt: number; status: string; winner?: string; speed: string; moves?: string; opening?: { name: string }; players: { white: LichessPlayer; black: LichessPlayer }; pgn: string }
-    return {
-      id: g.id, source: 'lichess' as const, url: `https://lichess.org/${g.id}`, date: new Date(g.createdAt).toISOString().slice(0, 10),
-      white: name(g.players.white), black: name(g.players.black),
-      ...(g.players.white.rating ? { whiteElo: g.players.white.rating } : {}), ...(g.players.black.rating ? { blackElo: g.players.black.rating } : {}),
-      result: g.winner === 'white' ? '1-0' : g.winner === 'black' ? '0-1' : ['draw', 'stalemate'].includes(g.status) ? '½-½' : '*',
-      ending: g.status, opening: g.opening?.name ?? '', moves: moveCount(g.moves ?? ''), speed: g.speed, pgn: g.pgn,
-    }
-  })
+  return (await res.text()).split('\n').filter((l) => l.trim()).map(parseLichessGame)
 }
 
 const LOSS = new Set(['checkmated', 'resigned', 'timeout', 'abandoned', 'lose'])
