@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.110.1 — 2026-11-18
+
+- fix: a game commented again keeps the book heading (the summary line goes after the first line of moves)
+
 ## v0.110.0 — 2026-11-18
 
 - fix: game headings are found after the previous game (its span no longer swallows the next heading); a FEN line starts a new game numbered from the first move that follows it; engine lines are no longer lost to a stray bracket; hyphenated surnames in headings

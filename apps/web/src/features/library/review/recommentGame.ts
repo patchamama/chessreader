@@ -1,4 +1,5 @@
 import { annotateGame, extractPlayers, reviewGame } from '@chess-ebook/chess-shared'
+import { introAfterFirstMove } from './introPlacement'
 import type { GameReview, Lang, PlyInput, RecognizedGame } from '@chess-ebook/chess-shared'
 import { useSettingsStore, STOCKFISH_VERSIONS } from '../../../shared/settings/settingsStore'
 import { hasCommentSource } from '../commentdb/commentLookup'
@@ -73,7 +74,7 @@ export async function commentedGameText(
   const { start, end } = gameLineRange(text, game)
   // The annotated text opens with a title line: the chapter already names the game.
   const body = matchChapterLetters(annotated.split('\n').slice(1).join('\n'), options.lang, text.slice(start, end))
-  return withCommentAlternatives(body, human ?? {}, reviewed.plies)
+  return withCommentAlternatives(introAfterFirstMove(body), human ?? {}, reviewed.plies)
     .split('\n').filter((l) => l.trim() !== '' && l.trim() !== '￼').join('\n')
 }
 
