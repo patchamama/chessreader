@@ -2,6 +2,11 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.97.0 — 2026-11-18
+
+- feat: Settings links to GitHub to create a read-only token for the resources repository
+- feat(shared): parse the heading lines books print before a game
+
 ## v0.96.0 — 2026-11-18
 
 - feat: Lichess games open in the study too — the game of a puzzle, Lichess tournaments, and the game played in Play

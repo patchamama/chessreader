@@ -48,6 +48,20 @@ export function resourcesApiUrl(url: string): string {
   return gh ? `https://api.github.com/repos/${gh[1]}/${gh[2]}/contents` : u
 }
 
+/**
+ * GitHub's page to create a fine-grained token, prefilled for the repository's
+ * owner with read-only contents (the repository itself is chosen there under
+ * "Only select repositories"). Null when the URL is not a GitHub repository.
+ */
+export function resourcesTokenUrl(url: string): string | null {
+  const m = /^https:\/\/api\.github\.com\/repos\/([\w.-]+)\/([\w.-]+)\/contents$/.exec(resourcesApiUrl(url))
+  if (!m) return null
+  const q = new URLSearchParams({
+    name: `ChessReader ${m[2]}`, description: `Read ${m[2]} from ChessReader`, target_name: m[1], expires_in: '365', contents: 'read',
+  })
+  return `https://github.com/settings/personal-access-tokens/new?${q}`
+}
+
 /** Whether the static database can be read: a URL, and a token when it is on GitHub (the repository is private). */
 export function resourcesConfigured(): boolean {
   const { commentDbUrl, commentDbToken } = useSettingsStore.getState()

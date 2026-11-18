@@ -3,7 +3,7 @@ import { VoiceSettings } from './VoiceSettings'
 import { LICHESS_TOKEN_URL } from '../lichess/tokenUrl'
 import { lichessAccount } from '../../features/gamesearch/myGames'
 import { APP_LANGUAGES, DEFAULT_RESOURCES_URL, type AppLanguage } from './settingsStore'
-import { checkResources } from '../../features/library/commentdb/commentLookup'
+import { checkResources, resourcesTokenUrl } from '../../features/library/commentdb/commentLookup'
 import { useSettingsStore, BOARD_THEMES, FONT_FAMILIES, STOCKFISH_VERSIONS, APP_THEME_PRESETS, PIECE_THEMES, type BoardTheme, type FontFamily, type EvalBarDirection, type StockfishVersion, type EngineSource,
   type ImageAlign, type HeadingStyle, type EngineVariations, type AppTheme, type PieceTheme } from './settingsStore'
 
@@ -425,6 +425,12 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               onChange={(e) => s.set({ commentDbToken: e.target.value.trim() })}
               className={inputClass}
             />
+            {resourcesTokenUrl(s.commentDbUrl) && (
+              <p className="text-[11px] text-gray-300">
+                <a className="underline" href={resourcesTokenUrl(s.commentDbUrl)!} target="_blank" rel="noreferrer">Create a token for this repository ↗</a>
+                {' '}— on GitHub choose "Only select repositories" and pick it; Contents: read-only is already set.
+              </p>
+            )}
             <ResourcesCheck url={s.commentDbUrl} token={s.commentDbToken} />
             {s.hiddenExamples.length > 0 && (
               <button className="self-start text-[11px] text-gray-300 underline" onClick={() => s.set({ hiddenExamples: [] })}>

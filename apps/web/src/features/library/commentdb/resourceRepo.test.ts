@@ -46,3 +46,16 @@ describe('private resources repository in Settings', () => {
     expect((await checkResources()).message).toBe('Could not reach the repository: Failed to fetch')
   })
 })
+
+describe('token for the resources repository (S1)', () => {
+  it('links to GitHub with a fine-grained token prefilled for that repository owner, read-only contents', async () => {
+    const { resourcesTokenUrl } = await import('./commentLookup')
+    const url = new URL(resourcesTokenUrl('https://github.com/patchamama/chessreader-resources')!)
+    expect(url.origin + url.pathname).toBe('https://github.com/settings/personal-access-tokens/new')
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      name: 'ChessReader chessreader-resources', description: 'Read chessreader-resources from ChessReader',
+      target_name: 'patchamama', expires_in: '365', contents: 'read',
+    })
+    expect(resourcesTokenUrl('https://example.org/db')).toBeNull()
+  })
+})
