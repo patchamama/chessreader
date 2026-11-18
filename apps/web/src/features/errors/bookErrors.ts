@@ -5,7 +5,8 @@ import type { Chapter } from '../library/api/libraryApi'
 
 /** The recognition errors of one game of a book. */
 export interface GameErrors {
-  bookId: number
+  /** A library book (number) or a book of the resources repository (its id). */
+  bookId: number | string
   chapter: number
   gameIndex: number
   /** The first moves of the game, to tell it apart. */
@@ -15,7 +16,7 @@ export interface GameErrors {
 }
 
 /** Recognise one chapter's text and list its games with their errors. */
-export function chapterErrors(bookId: number, chapter: number, html: string, algorithm: 1 | 2 = 2): GameErrors[] {
+export function chapterErrors(bookId: number | string, chapter: number, html: string, algorithm: 1 | 2 = 2): GameErrors[] {
   const text = htmlToProseText(html)
   return recognizeGames(text, { algorithm }).map((g, gameIndex) => {
     const main = g.tree.mainline.map((id) => g.tree.nodes.get(id)!)

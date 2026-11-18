@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.91.0 — 2026-11-18
+
+- feat: errors page in the deployed app reads every book of the private resources repository (GitHub token in Settings) and opens its games in the reader
+
 ## v0.90.1 — 2026-11-18
 
 - fix: start.sh updates pnpm older than 9; GitHub token passed by environment, never in argv or .git/config; engines always killed after their move

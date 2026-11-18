@@ -29,6 +29,15 @@ export function clearCommentCache() {
 
 /** A file of the static database: public URL, or the GitHub contents API of a private repository with a token. */
 export function getJson<T>(path: string): Promise<T> {
+  return getResource(path).then((r) => r.json() as Promise<T>)
+}
+
+/** A text file of the static database (a book text), read like getJson. */
+export function getText(path: string): Promise<string> {
+  return getResource(path).then((r) => r.text())
+}
+
+function getResource(path: string): Promise<Response> {
   const { commentDbUrl, commentDbToken } = useSettingsStore.getState()
   const url = `${commentDbUrl.replace(/\/+$/, '')}/${path}`
   const headers: Record<string, string> = {}
@@ -37,7 +46,7 @@ export function getJson<T>(path: string): Promise<T> {
   if (host === 'api.github.com') headers.Accept = 'application/vnd.github.raw+json'
   // The token is for GitHub: it never goes to any other host.
   if (commentDbToken && (host === 'api.github.com' || host === 'raw.githubusercontent.com')) headers.Authorization = `Bearer ${commentDbToken}`
-  return fetch(url, Object.keys(headers).length ? { headers } : undefined).then((r) => (r.ok ? (r.json() as Promise<T>) : Promise.reject(new Error(String(r.status)))))
+  return fetch(url, Object.keys(headers).length ? { headers } : undefined).then((r) => (r.ok ? r : Promise.reject(new Error(String(r.status)))))
 }
 
 /**
