@@ -6,6 +6,7 @@ import { setReviewEngine } from '../review/reviewStore'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { useAuthStore } from '../../auth/store/authStore'
 
+vi.mock('../../../shared/chess/ChessBoard', () => ({ default: ({ fen }: { fen: string }) => <div data-testid="thumb">{fen}</div> }))
 vi.mock('../../viewer/components/EvalBar', () => ({ default: ({ score }: { score?: { scoreCp?: number } }) => <div data-testid="evalbar">{score?.scoreCp}</div> }))
 
 // After 1. e4 e5 2. Nf3 Nc6: White to move.
@@ -65,6 +66,15 @@ describe('DiagramEvalFooter (S3)', () => {
     expect(screen.getByTestId('diagram-eval-words')).toHaveTextContent('Evaluación: +0.4 (igualdad) · Stockfish 19, prof. 16')
     expect(screen.getByTestId('diagram-eval-line')).toHaveTextContent('3. d4 exd4 4. Cxd4')
     expect(screen.getAllByTestId('diagram-eval-alt').map((e) => e.textContent)).toEqual(['3. Ab5 a6 (+0.4)', '3. Cc3 Cf6 (+0.2)'])
+  })
+
+  it('each move of the engine line shows its position on hover (S7)', () => {
+    useDiagramEvalStore.getState().put(FEN, { engine: 'Stockfish 19', depth: 16, lines: LINES.map(({ pv, scoreCp }) => ({ pv, scoreCp })), at: 1 })
+    render(<DiagramEvalFooter fen={FEN} />)
+    const moves = document.querySelectorAll('[data-testid="diagram-eval-line"] [data-move-thumb]')
+    expect([...moves].map((m) => m.textContent)).toEqual(['d4', 'exd4', 'Cxd4'])
+    fireEvent.mouseEnter(moves[2])
+    expect(screen.getByTestId('thumb')).toHaveTextContent('r1bqkbnr/pppp1ppp/2n5/8/3NP3/8/PPP2PPP/RNBQKB1R b KQkq - 0 4')
   })
 
   it('a refresh button evaluates the diagram again and replaces its evaluation', async () => {

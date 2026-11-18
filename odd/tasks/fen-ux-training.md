@@ -36,7 +36,7 @@ Delivery: one commit + tag per phase on main, pushed (user's standing instructio
 ## Tasks
 - [x] T1 S1–S2 FEN fragments + algorithm choice — inline — v0.78.0
 - [x] T2 S8–S9, S11 persistence, hover restore, scroll to board, coloured arrows/marks — inline — v0.79.0
-- [ ] T3 S10, S7 fullscreen board modal; thumbnails in diagram eval footers — inline — v0.80.0
+- [x] T3 S10, S7 fullscreen board modal; thumbnails in diagram eval footers — inline — v0.80.0
 - [ ] T4 S5 width setting + status footer — inline — v0.81.0
 - [ ] T5 S12–S13 accounts in Settings, my games by year/month, move counts — inline — v0.82.0
 - [ ] T6 S3, S6 Play random colour, ideas, targets, traps — inline — v0.83.0

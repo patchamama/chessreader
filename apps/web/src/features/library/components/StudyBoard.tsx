@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
+import { BoardModal } from './BoardModal'
 import { Chess } from 'chess.js'
 import ChessBoard from '../../../shared/chess/ChessBoard'
 import { useNarrationStore } from '../narration/narrationStore'
@@ -121,6 +122,7 @@ export function StudyBoard() {
 
   const nav = useStudyNavigation()
   const [showChooser, setShowChooser] = useState(false)
+  const [fullScreen, setFullScreen] = useState(false)
   const [fenInput, setFenInput] = useState(INITIAL_FEN)
 
   const practiceActive = usePracticeStore((s) => s.active)
@@ -473,6 +475,13 @@ export function StudyBoard() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
         </NavButton>
+
+        <NavButton onClick={() => setFullScreen(true)} title="Full screen">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+          </svg>
+        </NavButton>
+        {fullScreen && <BoardModal onClose={() => setFullScreen(false)} />}
 
         <NavButton onClick={flip} title="Flip board">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

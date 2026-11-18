@@ -179,6 +179,8 @@ export interface AppSettings {
   diagramEvalShow: boolean
   /** Book diagrams: an evaluation bar above the evaluation. */
   diagramEvalBar: boolean
+  /** Book diagrams: hovering a move of the engine line shows its position. */
+  diagramEvalThumbs: boolean
   diagramEvalDepth: number
   /** How many lines the engine gives for a diagram: the best and the alternatives. */
   diagramEvalLines: number
@@ -279,6 +281,7 @@ const DEFAULT: AppSettings = {
   humanComments: true,
   diagramEvalShow: true,
   diagramEvalBar: false,
+  diagramEvalThumbs: true,
   diagramEvalDepth: 16,
   diagramEvalLines: 3,
   playMoveHints: true,
