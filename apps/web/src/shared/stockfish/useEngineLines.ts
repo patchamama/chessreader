@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { engineSafeFen } from './safeFen'
 import { createStockfishWorker } from './stockfishWorker'
 import { useSettingsStore, STOCKFISH_VERSIONS } from '../settings/settingsStore'
 import { lichessCloudEval } from '../lichess/cloudEval'
@@ -84,9 +85,11 @@ export function useEngineLines(fen: string): EngineLinesState {
         setState(deriveState(data.lines, !data.final))
       }
       workerRef.current = worker
-      worker.postMessage({ type: 'lines', fen, depth, count })
+      if (engineSafeFen(fen)) worker.postMessage({ type: 'lines', fen, depth, count })
     }
 
+    // An impossible position would crash the engine: no analysis for it.
+    if (!engineSafeFen(fen)) { setState(EMPTY); return }
     setState({ ...EMPTY, loading: true })
     if (source === 'lichess-cloud') {
       // The cloud answers at once with a deep search when it knows the position.

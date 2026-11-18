@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { engineSafeFen } from './safeFen'
 import { createStockfishWorker } from './stockfishWorker'
 import { useSettingsStore, STOCKFISH_VERSIONS } from '../settings/settingsStore'
 
@@ -50,6 +51,7 @@ export function useStockfishEval(fen: string, enabled = true): EvalResult {
     }
     workerRef.current = worker
 
+    if (!engineSafeFen(fenRef.current)) { setResult({ loading: false }); return () => { worker.terminate(); workerRef.current = null } }
     setResult({ loading: true })
     workerRef.current.postMessage({ type: 'evaluate', fen: fenRef.current })
 
@@ -69,6 +71,8 @@ export function useStockfishEval(fen: string, enabled = true): EvalResult {
       return
     }
 
+    // An impossible position would crash the engine: no evaluation for it.
+    if (!engineSafeFen(fen)) { setResult({ loading: false }); return }
     setResult({ loading: true })
     workerRef.current.postMessage({ type: 'evaluate', fen })
   }, [fen])

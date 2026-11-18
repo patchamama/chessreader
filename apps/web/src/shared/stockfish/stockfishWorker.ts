@@ -23,9 +23,9 @@ export function engineScript(sfUrl: string, base: string = typeof location !== '
   return { url: url.href, sameOrigin: url.origin === new URL(base).origin }
 }
 
-export function createStockfishWorker(sfUrl: string = SF_DEFAULT_URL): Worker {
-  const script = engineScript(sfUrl)
-  const wrapperCode = `
+/** The code of the outer worker that drives the engine (exported for tests). */
+export function wrapperSource(script: { url: string; sameOrigin: boolean }): string {
+  return `
 const SF_URL = '${script.url}';
 // An engine on this site runs straight from its address, so it finds its
 // WebAssembly file next to it; a CDN script is fetched into a blob instead.
@@ -45,11 +45,25 @@ const pvMap       = new Map();
 
 function send(cmd) { if (sf) sf.postMessage(cmd); }
 
+let searching     = false;  // a 'go' is running until its bestmove
+let restart       = false;  // a new position is waiting for that bestmove
+
+// Changing options or the position while the engine still searches makes the
+// WebAssembly Stockfish abort ("unreachable"): stop, wait for bestmove, then start.
 function analyze() {
+  if (searching) {
+    restart = true;
+    send('stop');
+    return;
+  }
+  start();
+}
+
+function start() {
   pvMap.clear();
   lastEmitDepth = 0;
   lastEmitAt = 0;
-  send('stop');
+  searching = true;
   send('setoption name MultiPV value ' + (currentMode === 'lines' ? currentCount : 1));
   send('ucinewgame');
   send('position fen ' + currentFen);
@@ -85,12 +99,22 @@ function attachSf(worker) {
     }
 
     if (line.startsWith('bestmove')) {
+      searching = false;
+      if (restart) {
+        // The stopped search belonged to the previous position: start the new one.
+        restart = false;
+        pvMap.clear();
+        start();
+        return;
+      }
       if (currentMode === 'lines') emitLines(true);
       pvMap.clear();
       return;
     }
 
     if (!line.startsWith('info') || !line.includes(' score ')) return;
+    // Lines of the search being stopped belong to the previous position.
+    if (restart) return;
 
     const depthM = line.match(/\\bdepth\\s+(\\d+)/);
     const cpM    = line.match(/\\bscore cp\\s+(-?\\d+)/);
@@ -182,6 +206,10 @@ self.onmessage = function(e) {
 };
 `
 
+}
+
+export function createStockfishWorker(sfUrl: string = SF_DEFAULT_URL): Worker {
+  const wrapperCode = wrapperSource(engineScript(sfUrl))
   const blob   = new Blob([wrapperCode], { type: 'application/javascript' })
   const url    = URL.createObjectURL(blob)
   const worker = new Worker(url)

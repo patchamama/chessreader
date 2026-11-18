@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js'
+import { engineSafeFen } from '../../../shared/stockfish/safeFen'
 import { winPercent } from '@chess-ebook/chess-shared'
 import type { GameTree, PlyInput, Score } from '@chess-ebook/chess-shared'
 import { createStockfishWorker } from '../../../shared/stockfish/stockfishWorker'
@@ -12,7 +13,8 @@ export function createEngineAnalyser(sfUrl?: string): { analyse: AnalysePosition
   let worker: Worker | null = null
   let queue: Promise<unknown> = Promise.resolve()
   const ask = (fen: string, depth: number, count: number) =>
-    new Promise<EngineLine[]>((resolve) => {
+    // An impossible position would crash the engine for every later question.
+    !engineSafeFen(fen) ? Promise.resolve<EngineLine[]>([]) : new Promise<EngineLine[]>((resolve) => {
       if (!worker) worker = createStockfishWorker(sfUrl)
       const w = worker
       let last: EngineLine[] = []
