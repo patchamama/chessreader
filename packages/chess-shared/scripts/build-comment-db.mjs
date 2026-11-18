@@ -2,13 +2,21 @@
 // writers) said about each position of their games.
 //
 // Usage:
-//   node scripts/build-comment-db.mjs <manifest.json> <out-dir>
+//   node scripts/build-comment-db.mjs <manifest.json> <out-dir> [--errata <errata-dir>]
 //
 // manifest.json: [{ "file": "kasparov3.txt", "title": "Mis geniales predecesores III",
 //                   "author": "Garry Kasparov", "lang": "es", "kind": "book" },
 //                 { "file": "studies.pgn", "title": "Lichess studies", "lang": "en", "kind": "lichess" }]
+// An entry may give an "id" instead of a "file": the book is text/<id>.txt next
+// to the manifest, so a resources repository's books/manifest.json works as it is.
+// "kind" defaults to "book". Paths are relative to the manifest.
 // Text files are books converted to plain text (chapters separated by form
 // feeds); .pgn files are games with {comments}.
+//
+// --errata <dir>: the errata/ folder of a resources repository. Each entry's
+// corrected moves replace the printed ones in its game's main line (chapter =
+// the n-th non-empty form-feed part, as the reader counts) before the comments
+// are extracted, so the comments sit on the positions the game really reached.
 //
 // Writes, under <out-dir>:
 //   comments.sqlite       the database (schema: apps/api/migrations/005_position_comments.sql)
@@ -20,17 +28,23 @@
 // Book texts and comments are third-party works: never commit the output.
 // Publish it only to a private place (see README).
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { recognizeGames, extractPositionComments, extractPlayers, treeToPgn, spanishToEnglish } from '../dist/index.js';
+import { applyErrata, errataFor, loadErrata } from './errata.mjs';
 
-const [manifestPath, outDir] = process.argv.slice(2);
-if (!manifestPath || !outDir) {
-  console.error('usage: node scripts/build-comment-db.mjs <manifest.json> <out-dir>');
+const args = process.argv.slice(2);
+const errataAt = args.indexOf('--errata');
+const errataDir = errataAt >= 0 ? args.splice(errataAt, 2)[1] : null;
+const [manifestPath, outDir] = args;
+if (!manifestPath || !outDir || (errataAt >= 0 && !errataDir)) {
+  console.error('usage: node scripts/build-comment-db.mjs <manifest.json> <out-dir> [--errata <errata-dir>]');
   process.exit(1);
 }
+const errata = errataDir ? loadErrata(errataDir) : new Map();
+let errataApplied = 0;
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-const base = manifestPath.replace(/[^/]*$/, '');
+const base = manifestPath.replace(/[^/]*$/, '') || '.';
 const MIN_PLY = 8; // opening moves get generic remarks: kept, but the lookup may skip them
 
 rmSync(outDir, { recursive: true, force: true });
@@ -64,16 +78,44 @@ function chunksOf(entry, text) {
   return text.split(/\f|\n(?=(?:Partida|Game|Partie)\s+\d+\s*\n)/).map((body) => ({ header: '', body }));
 }
 
+/**
+ * The chapters of a book text with its errata applied, in English letters. A
+ * chapter is a non-empty form-feed part, numbered from 1 as the reader does.
+ */
+function correctedChapters(entry, text) {
+  let chapter = 0;
+  return text.replace(/\r/g, '').split('\f').map((part) => {
+    const body = entry.lang === 'es' ? spanishToEnglish(part) : part;
+    if (!part.trim()) return body;
+    chapter++;
+    const entries = errataFor(errata, { title: entry.title, id: entry.id }, chapter);
+    if (!entries.length) return body;
+    try {
+      const out = applyErrata(body, entries, { lang: entry.lang });
+      errataApplied += out.applied;
+      return out.text;
+    } catch {
+      return body;
+    }
+  });
+}
+
 manifest.forEach((entry, sourceIndex) => {
   const sourceId = sourceIndex + 1;
-  const priority = entry.kind === 'book' ? 1 : 2;
-  insSource.run(sourceId, entry.kind, entry.title, entry.author ?? null, entry.lang, priority);
-  sources[sourceId] = { kind: entry.kind, title: entry.title, author: entry.author ?? null, lang: entry.lang, priority };
-  const raw = readFileSync(join(base, entry.file), 'utf8');
+  const kind = entry.kind ?? 'book';
+  const file = entry.file ?? `text/${entry.id}.txt`;
+  const priority = kind === 'book' ? 1 : 2;
+  insSource.run(sourceId, kind, entry.title, entry.author ?? null, entry.lang, priority);
+  sources[sourceId] = { kind, title: entry.title, author: entry.author ?? null, lang: entry.lang, priority };
+  const raw = readFileSync(resolve(base, file), 'utf8');
+  // Books: chapters in English letters with their errata applied, then cut as before.
+  const chunks = file.endsWith('.pgn')
+    ? chunksOf({ file }, raw).map((c) => ({ ...c, body: entry.lang === 'es' ? spanishToEnglish(c.body) : c.body }))
+    : correctedChapters(entry, raw).flatMap((chapter) => chunksOf({ file }, chapter));
   let gameNo = 0;
   let count = 0;
-  for (const chunk of chunksOf(entry, raw)) {
-    const body = entry.lang === 'es' ? spanishToEnglish(chunk.body) : chunk.body;
+  for (const chunk of chunks) {
+    const body = chunk.body;
     let games;
     try { games = recognizeGames(body, { algorithm: 2 }); } catch { continue; }
     let prevEnd = 0;
@@ -112,6 +154,6 @@ manifest.forEach((entry, sourceIndex) => {
 });
 
 for (const [prefix, shard] of shards) writeFileSync(join(outDir, 'p', `${prefix}.json`), JSON.stringify(shard));
-writeFileSync(join(outDir, 'index.json'), JSON.stringify({ version: 1, built: new Date().toISOString(), hash: 'fnv1a64(fen without move counters)', shard: 'p/<first 2 hex>.json', games: 'g/<id>.json', minPly: MIN_PLY, total, sources }, null, 1));
+writeFileSync(join(outDir, 'index.json'), JSON.stringify({ version: 1, built: new Date().toISOString(), hash: 'fnv1a64(fen without move counters)', shard: 'p/<first 2 hex>.json', games: 'g/<id>.json', minPly: MIN_PLY, total, errata: errataApplied, sources }, null, 1));
 db.close();
-console.log(`total ${total} comments in ${shards.size} shards`);
+console.log(`total ${total} comments in ${shards.size} shards, ${errataApplied} errata corrections applied`);

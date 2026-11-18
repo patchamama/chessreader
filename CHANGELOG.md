@@ -2,6 +2,11 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.111.1 — 2026-11-18
+
+- fix: list labels such as "a1)", "b2)", "c1)" at the start of a line are not read as moves; a FEN is never renumbered backwards
+- feat: the comment database build applies the errata before extracting comments
+
 ## v0.111.0 — 2026-11-18
 
 - feat: book-style diagrams (black and white, hatched dark squares) by default; a small refresh icon above each diagram regenerates it and one on each evaluation re-runs it; tools to regenerate and download all diagrams (same file names as in the book) and all evaluations (.txt named after the image); a broken book image is replaced by a generated board when its position is known

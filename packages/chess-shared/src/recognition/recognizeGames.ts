@@ -77,7 +77,9 @@ function renumberFromFens(tokens: SanToken[]): void {
       // A move named in a remark ("con la jugada 3…dxe4") is not where the game goes on.
       if (depth > 0 || t.type !== 'move' || t.isolated || t.moveNumber === undefined || !t.atParagraphStart) continue;
       const shift = t.moveNumber - fullmove;
-      if (t.color !== color || shift === 0) return;
+      // Never backwards: a later game move that happens to be legal from an
+      // analysis FEN ("0 15" … "13…Nd7!") is not where that FEN goes on.
+      if (t.color !== color || shift <= 0) return;
       let legal = false;
       try { legal = new Chess(parts.join(' ')).move(t.san!) !== null; } catch { legal = false; }
       if (!legal) return;

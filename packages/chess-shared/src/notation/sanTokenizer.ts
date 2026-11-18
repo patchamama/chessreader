@@ -84,6 +84,20 @@ const SAN_MOVE_RE =
 const MOVE_NUMBER_RE = /\b(\d{1,3})(\.{1,3})\s*/g;
 const RESULT_RE = /\b(1-0|0-1|1\/2-1\/2|\*)\b/g;
 
+/**
+ * A list label that leads its line, such as "a1)", "b2)" or "c1)" in
+ * "b2) 13 Bb5 a6": a square followed by a ")" that closes nothing. Books
+ * enumerate the branches of their analysis this way; the label is not a move
+ * (the moves after it still are). The same square closing a "( … )" variation
+ * ("(14 Bb3 b2)") or written mid-line is left alone.
+ */
+function isEnumerationMarker(text: string, start: number, end: number, strayClosers: Set<number>): boolean {
+  if (text[end] !== ')' || !strayClosers.has(end)) return false;
+  if (!/^[a-h][1-8]$/.test(text.slice(start, end))) return false;
+  const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+  return /^[ \t]*$/.test(text.slice(lineStart, start));
+}
+
 export function tokenize(text: string): SanToken[] {
   const tokens: SanToken[] = [];
 
@@ -137,6 +151,8 @@ export function tokenize(text: string): SanToken[] {
   const CLOSERS = ')]}';
   const openStack: { ch: string; match: RawMatch }[] = [];
   const lineBraces: { ch: string; match: RawMatch }[] = [];
+  // Closers that close nothing: plain text, like the ")" of a list label "b2)".
+  const strayClosers = new Set<number>();
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     const top = openStack.length > 0 ? openStack[openStack.length - 1].ch : null;
@@ -155,7 +171,7 @@ export function tokenize(text: string): SanToken[] {
       const opener = OPENERS[CLOSERS.indexOf(ch)];
       let at = openStack.length - 1;
       while (at >= 0 && openStack[at].ch !== opener) at--;
-      if (at < 0) continue; // stray closer: plain text
+      if (at < 0) { strayClosers.add(i); continue; } // stray closer: plain text
       // Openers left unclosed inside this bracket were plain text too — except a
       // "{" whose paragraph already ended (an engine line's label, a cut comment):
       // it is closed at the end of its paragraph below, like any unclosed "{".
@@ -225,6 +241,7 @@ export function tokenize(text: string): SanToken[] {
     const re = new RegExp(SAN_MOVE_RE.source, 'g');
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
+      if (isEnumerationMarker(text, m.index, m.index + m[0].length, strayClosers)) continue;
       matches.push({
         start: m.index,
         end: m.index + m[0].length,
