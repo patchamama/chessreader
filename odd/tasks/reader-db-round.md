@@ -23,7 +23,7 @@ Objective: reader structure (games, headings, TOC, layout switch), database stat
 ## Tasks
 - [x] T1 S1 token link — inline (parent)
 - [x] T2 S10 S14 S16(library) EPUB ingestion: toc names, tables/images, cover from metadata, cover not deformed — delegated W1 (parallel)
-- [ ] T3 S7 S8 S9 S11 S12 S13 S15 reader structure — delegated W2 (parallel)
+- [x] T3 S7 S8 S9 S11 S12 S13 S15 reader structure — delegated W2 (parallel)
 - [x] T4 S2 S3 S4 S16(database) database page, game lists, game DB fields — delegated W3 (parallel)
 - [x] T5 S17 errors precomputed — delegated W4 (parallel)
 - [ ] T6 S5 S6 resources repo docs, sample repo, CRUD frontend — delegated W5 (parallel)

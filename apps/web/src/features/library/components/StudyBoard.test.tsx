@@ -79,20 +79,3 @@ describe('StudyBoard', () => {
 })
 
 const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
-
-describe('StudyBoard comment layout (S8)', () => {
-  it('shows the braces ⇄ paragraphs switch on the board for the current game', () => {
-    const onToggle = vi.fn()
-    render(<StudyBoard layoutToggle={{ braces: true, onToggle }} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Show the comments as paragraphs' }))
-    expect(onToggle).toHaveBeenCalledTimes(1)
-  })
-
-  it('offers braces when the comments are paragraphs, and nothing without a game', () => {
-    const { unmount } = render(<StudyBoard layoutToggle={{ braces: false, onToggle: () => {} }} />)
-    expect(screen.getByRole('button', { name: 'Show the comments in braces (PGN style)' })).toBeInTheDocument()
-    unmount()
-    render(<StudyBoard />)
-    expect(screen.queryByRole('button', { name: /Show the comments/ })).not.toBeInTheDocument()
-  })
-})

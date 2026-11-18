@@ -1,20 +1,21 @@
 import { useMemo, useEffect, useState, useCallback, useRef, memo, forwardRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useChapter, useTouchBook } from '../api/libraryApi'
 import { recognizeGames } from '@chess-ebook/chess-shared'
 import type { GameTree, GameNode, IsolatedMove } from '@chess-ebook/chess-shared'
 import { MoveTooltipCard } from './MoveTooltipCard'
 import { loadBoardMemory, saveBoardMemory } from '../store/boardMemory'
 import { dashedPair, squareLine } from '../utils/squareLine'
-import { bracesToParagraphs, paragraphsToBraces } from '../utils/commentLayout'
-import { textToChapters } from '../utils/textToChapters'
+import { applyGameLayouts, clearGameDecorations, decorateGames, describeGames, gameAnchorId, layoutToggleLabel } from '../utils/gameMarkers'
+import { detectHeadings } from '../utils/headingDetect'
+import { loadGameLayouts, saveGameLayout } from '../store/gameLayoutStore'
+import { ReaderToc } from './toc/ReaderToc'
 import { FOOTER_HEIGHT } from '../../../shared/layout/StatusFooter'
-import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
 import { StudyBoard } from './StudyBoard'
 import { StudyPanelResizer } from './StudyPanelResizer'
 import { VariationChooser } from './VariationChooser'
 import { useStudyBoardStore } from '../store/studyBoardStore'
-import { getProgress, saveProgress } from '../store/readingStore'
+import { getProgress, saveProgress, getChapterScroll, saveChapterScroll } from '../store/readingStore'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { successorOf, hasAlternativesAhead, variationLinesFrom } from '../utils/proseChess'
 import { useBookConfig } from '../../../shared/bookConfig/useBookConfig'
@@ -59,6 +60,9 @@ const ProseContent = memo(
   }),
 )
 
+/** Whether the desktop table-of-contents panel is open (kept per browser). */
+const TOC_OPEN_KEY = 'reader-toc-open'
+
 interface ProseChooser {
   top: number
   left: number
@@ -87,14 +91,28 @@ interface ResolvedNode {
 export default function BookReader() {
   const { bookId } = useParams<{ bookId: string }>()
   const id = Number(bookId)
-  const navigate = useNavigate()
   const statusFooter = useSettingsStore((s) => s.statusFooter)
 
   const [currentChapter, setCurrentChapter] = useState<number>(() => {
     const p = getProgress(id)
     return p?.chapter ?? 1
   })
-  const [showToc, setShowToc] = useState(false)
+  // The table of contents: a left panel always shown on desktop unless collapsed,
+  // a drawer on small screens. It stays open while navigating (S13).
+  const [showToc, setShowToc] = useState(() => {
+    try {
+      if (!window.matchMedia?.('(min-width: 1024px)').matches) return false
+      return localStorage.getItem(TOC_OPEN_KEY) !== 'false'
+    } catch {
+      return false
+    }
+  })
+  const toggleToc = () => setShowToc((v) => {
+    try {
+      if (window.matchMedia?.('(min-width: 1024px)').matches) localStorage.setItem(TOC_OPEN_KEY, String(!v))
+    } catch { /* not kept */ }
+    return !v
+  })
   const [showStudy, setShowStudy] = useState(true)
   const [chooser, setChooser] = useState<ProseChooser | null>(null)
   const [tooltip, setTooltip] = useState<MoveTooltip | null>(null)
@@ -139,10 +157,9 @@ export default function BookReader() {
     if (shownBook === id) saveProgress(id, currentChapter)
   }, [id, currentChapter, shownBook])
 
+  // The scroll position is restored per chapter once its content is shown (S12).
   const goTo = useCallback((n: number) => {
     setCurrentChapter(n)
-    setShowToc(false)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
   const loadStudyNode = useCallback(
@@ -221,22 +238,19 @@ export default function BookReader() {
     }
     setIsolatedHighlight(mark)
   }
-  /** Rewrite one game's comments in the other form (braces ⇄ paragraphs) and show the text again. */
+  /**
+   * Switch one game's comments to the other form (braces ⇄ paragraphs), in place:
+   * the choice is kept per book, chapter and game and applied when the chapter
+   * renders, from the game's first move to its last one (S11).
+   */
   const toggleLayout = (gameIndex: number) => {
     const g = games[gameIndex]
     if (!g) return
-    const start = plainText.lastIndexOf('\n', g.charStart - 1) + 1
-    const nl = plainText.indexOf('\n', g.charEnd)
-    const end = nl < 0 ? plainText.length : nl
-    const part = plainText.slice(start, end)
-    const changed = part.includes('{') ? bracesToParagraphs(part) : paragraphsToBraces(part)
-    const rewritten = `${plainText.slice(0, start)}${changed}${plainText.slice(end)}`.split('\n').filter((l) => l.trim() !== '\uFFFC').join('\n')
-    const { title, chapters } = textToChapters(rewritten, data?.title ?? 'Game')
+    saveGameLayout(id, currentChapter, gameIndex, g.source.includes('{') ? 'paragraphs' : 'braces')
+    // The board reopens the same game on its rewritten text.
+    saveBoardMemory(id, { chapter: currentChapter, gameIndex, nodeId: null, annotations: {} })
     useStudyBoardStore.getState().clearGame()
-    saveBoardMemory(EXTERNAL_BOOK_ID, { chapter: 1, gameIndex, nodeId: null, annotations: {} })
-    saveProgress(EXTERNAL_BOOK_ID, 1)
-    useExternalBookStore.getState().open(title, chapters)
-    navigate(`/read/${EXTERNAL_BOOK_ID}`)
+    setLayoutVersion((v) => v + 1)
   }
   const toggleLayoutRef = useRef(toggleLayout)
   useEffect(() => { toggleLayoutRef.current = toggleLayout })
@@ -261,12 +275,31 @@ export default function BookReader() {
   // Flatten the chapter to recognition text with the SAME DOM extraction the
   // wrapper uses on the rendered pane, so every node's charStart/charEnd points
   // at the exact DOM characters of its source token (see utils/proseText).
-  const plainText = useMemo(() => htmlToProseText(html), [html])
+  const basePlainText = useMemo(() => htmlToProseText(html), [html])
   const recognitionAlgorithm = useSettingsStore((s) => s.recognitionAlgorithm)
-  const games = useMemo(
-    () => recognizeGames(plainText, { algorithm: recognitionAlgorithm }),
-    [plainText, recognitionAlgorithm],
+  const baseGames = useMemo(
+    () => recognizeGames(basePlainText, { algorithm: recognitionAlgorithm }),
+    [basePlainText, recognitionAlgorithm],
   )
+  // The comment layout chosen per game is applied to the chapter's own HTML;
+  // the rest of the chapter (and every other chapter) is left untouched (S11).
+  const [layoutVersion, setLayoutVersion] = useState(0)
+  const layouts = useMemo(
+    () => loadGameLayouts(id, currentChapter),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [id, currentChapter, layoutVersion],
+  )
+  const shownHtml = useMemo(() => applyGameLayouts(html, baseGames, layouts), [html, baseGames, layouts])
+  const plainText = useMemo(
+    () => (shownHtml === html ? basePlainText : htmlToProseText(shownHtml)),
+    [shownHtml, html, basePlainText],
+  )
+  const games = useMemo(
+    () => (plainText === basePlainText ? baseGames : recognizeGames(plainText, { algorithm: recognitionAlgorithm })),
+    [plainText, basePlainText, baseGames, recognitionAlgorithm],
+  )
+  /** Each game's heading, label and anchor (S9, S15). */
+  const gameSummaries = useMemo(() => describeGames(plainText, games), [plainText, games])
 
   // When the algorithm changes the recognised trees are rebuilt, so any game
   // open in the study board points at a stale tree. Close it so the viewer and
@@ -335,6 +368,8 @@ export default function BookReader() {
     ? `${activeGameIndex}:${activeNodeId}`
     : null
 
+  const activeSummary = activeGameIndex >= 0 ? gameSummaries[activeGameIndex] : undefined
+
   // Registry mapping a span key → its resolved game move, rebuilt on every wrap.
   // Event handlers (delegated, mounted once) look up rich objects here by the
   // span's data-node-id, so re-wrapping never detaches behaviour from spans.
@@ -349,9 +384,10 @@ export default function BookReader() {
   // never re-wraps (and never wipes) the prose.
   useEffect(() => {
     const container = contentRef.current
-    if (!container || !html) return
+    if (!container || !shownHtml) return
 
-    // Remove previous markers (idempotent re-wrap) — moves and isolated tokens.
+    // Remove the game frames and previous markers (idempotent re-wrap).
+    clearGameDecorations(container)
     container.querySelectorAll('span[data-san], span[data-iso-square]').forEach((el) => {
       const parent = el.parentNode
       if (parent) {
@@ -379,6 +415,9 @@ export default function BookReader() {
       if (prose.text !== plainText) {
         console.warn('[BookReader] prose text mismatch; move positions may be off')
       }
+      // Frame every game (start/end markers, heading, hidden region) before the
+      // text nodes are split into move spans: the frames only move whole blocks.
+      decorateGames(container, prose, games, gameSummaries, { chapter: currentChapter })
       const targets = planMoveTargets(prose.text, games)
       const pieces = piecesByTextNode(prose.map, targets)
 
@@ -439,21 +478,9 @@ export default function BookReader() {
         textNode.parentNode?.replaceChild(frag, textNode)
       }
     }
-    // At the start of each game: switch its comments between braces and paragraphs (S19).
-    games.forEach((g, gameIndex) => {
-      const first = container.querySelector(`span[data-game-index="${gameIndex}"]`)
-      if (!first || first.previousElementSibling?.hasAttribute('data-layout-toggle')) return
-      const braces = g.source.includes('{')
-      const button = document.createElement('button')
-      button.type = 'button'
-      button.setAttribute('data-layout-toggle', String(gameIndex))
-      button.textContent = braces ? '¶' : '{ }'
-      button.title = braces ? 'Show the comments as paragraphs' : 'Show the comments in braces'
-      button.setAttribute('aria-label', button.title)
-      button.className = 'mr-1 rounded border border-slate-300 bg-white px-1 text-[0.7em] text-slate-600 hover:bg-slate-100 align-middle'
-      first.parentNode?.insertBefore(button, first)
-    })
-  }, [html, games, plainText, bookConfig.moveLineIndent.zeroIndent])
+    // Heading-like paragraphs of the EPUB (classes, its stylesheet, inline CSS) as headings (S8).
+    detectHeadings(container)
+  }, [shownHtml, games, plainText, gameSummaries, currentChapter, bookConfig.moveLineIndent.zeroIndent])
 
   // Wrap each book diagram <img> with an interactive DiagramImage overlay
   // (original ↔ autogenerated board toggle + eval footer + config menu). The
@@ -469,8 +496,15 @@ export default function BookReader() {
     diagramRoots.current.forEach((r) => r.unmount())
     diagramRoots.current = []
 
+    // Images in table cells (rating icons, symbols) and small icons are not
+    // board diagrams: they stay plain images, or the tables break (S14).
+    const tooSmall = (img: HTMLImageElement) => {
+      const w = Number(img.getAttribute('width')) || (img.complete ? img.naturalWidth : 0)
+      const h = Number(img.getAttribute('height')) || (img.complete ? img.naturalHeight : 0)
+      return (w > 0 && w < 40) || (h > 0 && h < 40)
+    }
     const images = Array.from(container.querySelectorAll('img')).filter(
-      (img) => !img.closest('[data-diagram-overlay]'),
+      (img) => !img.closest('[data-diagram-overlay], td, th') && !tooSmall(img),
     )
 
     const bookDiagrams: string[] = []
@@ -504,7 +538,7 @@ export default function BookReader() {
       diagramRoots.current.forEach((r) => r.unmount())
       diagramRoots.current = []
     }
-  }, [html, games])
+  }, [shownHtml, games])
 
   // Active-move highlight — cheap class toggle, decoupled from wrapping. Runs on
   // every active-node change WITHOUT touching the DOM structure, so clicks and
@@ -521,7 +555,45 @@ export default function BookReader() {
       span.classList.toggle('text-blue-700', !active)
       if (active) followActiveMove(span, autoscroll)
     })
-  }, [activeSpanKey, html, games, autoscroll])
+  }, [activeSpanKey, shownHtml, games, autoscroll])
+
+  // Scroll per chapter (S12): a chapter never opened starts at its top; one read
+  // before comes back to where the reader left it. A game picked in the table of
+  // contents is scrolled to once its chapter is on screen.
+  const mainRef = useRef<HTMLElement>(null)
+  const restoredScroll = useRef<string | null>(null)
+  const pendingAnchor = useRef<string | null>(null)
+  const scrollKey = `${id}:${currentChapter}`
+  useEffect(() => {
+    const main = mainRef.current
+    if (isLoading || !shownHtml || !main) return
+    if (restoredScroll.current !== scrollKey) {
+      main.scrollTop = getChapterScroll(id, currentChapter) ?? 0
+      restoredScroll.current = scrollKey
+    }
+    if (pendingAnchor.current) {
+      const target = document.getElementById(pendingAnchor.current)
+      if (target) {
+        pendingAnchor.current = null
+        target.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+      }
+    }
+  }, [isLoading, shownHtml, games, scrollKey, id, currentChapter])
+  const onMainScroll = () => {
+    const main = mainRef.current
+    // Only once this chapter's position was restored: a scroll caused by the
+    // previous chapter's content going away must not be saved for this one.
+    if (main && restoredScroll.current === scrollKey) saveChapterScroll(id, currentChapter, main.scrollTop)
+  }
+  const goToGame = (chapter: number, index: number) => {
+    const anchor = gameAnchorId(chapter, index)
+    if (chapter === currentChapter) {
+      document.getElementById(anchor)?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+      return
+    }
+    pendingAnchor.current = anchor
+    goTo(chapter)
+  }
 
   // Delegated pointer/click handlers — mounted ONCE on the content container.
   // They read data-* attributes + the registries, so re-wrapping spans (which
@@ -639,7 +711,7 @@ export default function BookReader() {
     // Re-bind when the content container (re)mounts. It does NOT exist on the
     // first render while the chapter is loading (isLoading=true), so binding
     // once with [] would attach to nothing. Re-run once the div appears.
-  }, [isLoading, html])
+  }, [isLoading, shownHtml])
 
   const pickChooser = useCallback(
     (targetId: string, isVariation: boolean) => {
@@ -653,11 +725,11 @@ export default function BookReader() {
 
   // Scoped CSS for EPUB rendering based on user settings
   const epubCss = `
-    .epub-content h1 { font-weight: ${epub.h1.bold ? '700' : '400'}; font-style: ${epub.h1.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h1.sizeDelta}px; margin: 1.2em 0 0.4em; }
-    .epub-content h2 { font-weight: ${epub.h2.bold ? '700' : '400'}; font-style: ${epub.h2.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h2.sizeDelta}px; margin: 1em 0 0.3em; }
-    .epub-content h3 { font-weight: ${epub.h3.bold ? '700' : '400'}; font-style: ${epub.h3.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h3.sizeDelta}px; margin: 0.9em 0 0.3em; }
-    .epub-content h4 { font-weight: ${epub.h4.bold ? '700' : '400'}; font-style: ${epub.h4.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h4.sizeDelta}px; margin: 0.8em 0 0.2em; }
-    .epub-content h5 { font-weight: ${epub.h5.bold ? '700' : '400'}; font-style: ${epub.h5.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h5.sizeDelta}px; margin: 0.7em 0 0.2em; }
+    .epub-content h1, .epub-content .epub-h1 { font-weight: ${epub.h1.bold ? '700' : '400'}; font-style: ${epub.h1.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h1.sizeDelta}px; margin: 1.2em 0 0.4em; }
+    .epub-content h2, .epub-content .epub-h2 { font-weight: ${epub.h2.bold ? '700' : '400'}; font-style: ${epub.h2.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h2.sizeDelta}px; margin: 1em 0 0.3em; }
+    .epub-content h3, .epub-content .epub-h3 { font-weight: ${epub.h3.bold ? '700' : '400'}; font-style: ${epub.h3.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h3.sizeDelta}px; margin: 0.9em 0 0.3em; }
+    .epub-content h4, .epub-content .epub-h4 { font-weight: ${epub.h4.bold ? '700' : '400'}; font-style: ${epub.h4.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h4.sizeDelta}px; margin: 0.8em 0 0.2em; }
+    .epub-content h5, .epub-content .epub-h5 { font-weight: ${epub.h5.bold ? '700' : '400'}; font-style: ${epub.h5.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h5.sizeDelta}px; margin: 0.7em 0 0.2em; }
     .epub-content p  { margin-bottom: ${epub.paragraphSpacing}rem; text-indent: ${epub.paragraphIndent}rem; line-height: 1.7; }
     .epub-content p.diagram-eval { text-align: center; text-indent: 0; font-size: 0.85em; color: #555; margin-top: -0.5rem; }
     .epub-content blockquote.human-comment { border-left: 3px solid #a16207; background: #fefce8; padding: 0.4rem 0.8rem; margin: 0.6rem 0; color: #422006; font-style: italic; }
@@ -668,6 +740,18 @@ export default function BookReader() {
     .epub-content .diagram-host { display: block; text-align: center; margin: 1rem 0 0.75rem; }
     .epub-content .diagram-host img { margin: 0 auto; }
     .epub-content img.diagram { margin-left: auto; margin-right: auto; box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25); }
+    .epub-content .epub-heading { text-indent: 0; line-height: 1.3; color: #0f172a; }
+    .epub-content .game-marker { display: flex; align-items: center; gap: 0.5rem; margin: 1.6em 0 0.6em; font-size: 0.75rem; color: #64748b; }
+    .epub-content .game-marker::before { content: attr(data-label); white-space: nowrap; font-weight: 600; letter-spacing: 0.02em; }
+    .epub-content .game-marker::after { content: ''; flex: 1; border-top: 1px dashed #94a3b8; }
+    .epub-content .game-marker-end { margin: 0.6em 0 1.6em; }
+    .epub-content .game-marker-end::before { font-weight: 400; font-style: italic; }
+    .epub-content .game-layout-toggle { order: 2; border: 1px solid #cbd5e1; border-radius: 0.25rem; background: #fff; padding: 0 0.35rem; font-size: 0.7rem; color: #475569; line-height: 1.4; }
+    .epub-content .game-layout-toggle::before { content: attr(data-glyph); }
+    .epub-content .game-layout-toggle:hover { background: #f1f5f9; }
+    .epub-content .game-heading-line { text-indent: 0; margin-bottom: 0.1rem; padding: 0 0.75rem; background: #f8fafc; border-left: 3px solid #2563eb; color: #1e293b; }
+    .epub-content .game-heading-first { padding-top: 0.4rem; font-weight: 700; font-size: 1.05em; }
+    .epub-content .game-heading-last { padding-bottom: 0.4rem; margin-bottom: ${epub.paragraphSpacing}rem; font-style: italic; }
     .epub-content hr { border: none; border-top: 1px solid #cbd5e1; margin: 1.5em 0; }
     .epub-content img { max-width: 100%; height: auto; display: block; margin: 1rem ${epub.imageAlign === 'center' ? 'auto' : epub.imageAlign === 'right' ? '0 0 auto' : '0 auto 0 0'}; border-radius: 4px; }
     .epub-content ul { list-style: disc; padding-left: 1.5rem; margin-bottom: ${epub.paragraphSpacing}rem; }
@@ -726,8 +810,9 @@ export default function BookReader() {
         <div className="mx-1 h-5 w-px bg-slate-200" />
 
         <button
-          onClick={() => setShowToc((v) => !v)}
+          onClick={toggleToc}
           title="Table of contents"
+          aria-expanded={showToc}
           className={`flex h-9 w-9 items-center justify-center rounded-lg border shadow-sm transition ${
             showToc
               ? 'border-blue-400 bg-blue-50 text-blue-600'
@@ -747,6 +832,18 @@ export default function BookReader() {
         </span>
 
         <div className="mx-1 h-5 w-px bg-slate-200" />
+
+        {/* Comment layout of the active game: braces ⇄ paragraphs (S7). */}
+        {activeSummary && (
+          <button
+            onClick={() => toggleLayout(activeSummary.index)}
+            title={layoutToggleLabel(activeSummary, false)}
+            aria-label={layoutToggleLabel(activeSummary, false)}
+            className="flex h-9 min-w-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+          >
+            <span aria-hidden="true">{activeSummary.braces ? '¶' : '{ }'}</span>
+          </button>
+        )}
 
         {/* Study board toggle — chessboard grid icon */}
         <button
@@ -794,36 +891,33 @@ export default function BookReader() {
         )}
       </nav>
 
-      {/* ── TOC drawer ── */}
-      {showToc && toc.length > 0 && (
-        <div className="sticky top-[53px] z-20 border-b border-slate-200 bg-white shadow-md">
-          <div className="max-h-72 overflow-y-auto px-4 py-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Table of Contents</p>
-            <ul className="space-y-0.5">
-              {toc.map((entry) => (
-                <li key={entry.order}>
-                  <button
-                    onClick={() => goTo(entry.order)}
-                    className={`w-full rounded-md px-3 py-1.5 text-left text-sm transition ${
-                      entry.order === currentChapter
-                        ? 'bg-blue-50 font-semibold text-blue-700'
-                        : 'text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    {entry.title}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
-
       {/* ── Main content ── */}
-      <div className="flex flex-1 min-h-0">
+      <div className="relative flex flex-1 min-h-0">
+
+        {/* Table of contents — left panel on desktop, drawer on small screens; stays open (S13). */}
+        {showToc && toc.length > 0 && (
+          <aside
+            aria-label="Table of contents"
+            className="absolute inset-y-0 left-0 z-20 w-72 max-w-[85vw] shrink-0 border-r border-slate-200 bg-white shadow-lg lg:static lg:z-auto lg:shadow-none"
+          >
+            <ReaderToc
+              bookId={id}
+              toc={toc}
+              currentChapter={currentChapter}
+              currentGames={gameSummaries}
+              algorithm={recognitionAlgorithm}
+              onChapter={goTo}
+              onGame={goToGame}
+            />
+          </aside>
+        )}
 
         {/* Reading pane — always shows original HTML */}
-        <main className="flex-1 overflow-x-hidden overflow-y-auto px-6 py-8 min-w-0">
+        <main
+          ref={mainRef}
+          onScroll={onMainScroll}
+          className="flex-1 overflow-x-hidden overflow-y-auto px-6 py-8 min-w-0"
+        >
           {isLoading ? (
             <div role="status" className="flex justify-center p-16">
               <span className="sr-only">Loading…</span>
@@ -836,7 +930,32 @@ export default function BookReader() {
               className={solvingProblem ? 'pointer-events-none select-none blur-sm transition' : 'transition'}
               aria-hidden={solvingProblem || undefined}
             >
-              <ProseContent ref={contentRef} html={html} />
+              <ProseContent ref={contentRef} html={shownHtml} />
+            </div>
+          )}
+          {/* Previous / next chapter at the end of the chapter too (S13). */}
+          {!isLoading && (
+            <div data-testid="chapter-end-nav" className="mt-10 flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
+              <button
+                onClick={() => goTo(currentChapter - 1)}
+                disabled={currentChapter <= 1}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+                Previous chapter
+              </button>
+              <button
+                onClick={() => goTo(currentChapter + 1)}
+                disabled={currentChapter >= maxChapter}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                Next chapter
+                <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
             </div>
           )}
         </main>
@@ -847,17 +966,14 @@ export default function BookReader() {
         {/* Study board pane — sticky, always mounted, visibility toggled.
             Width is user-resizable (px) via the handle; the board fills it. */}
         <aside
+          data-study-pane
           style={showStudy ? { width: studyPanelWidth } : undefined}
           className={`shrink-0 flex flex-col gap-3 bg-white overflow-y-auto ${
             showStudy ? 'px-4 py-5' : 'w-0 overflow-hidden px-0 py-0'
           }`}
         >
           {showStudy && (
-            <StudyBoard
-              layoutToggle={activeGameIndex >= 0 && games[activeGameIndex]
-                ? { braces: games[activeGameIndex].source.includes('{'), onToggle: () => toggleLayout(activeGameIndex) }
-                : undefined}
-            />
+            <StudyBoard />
           )}
           {showStudy && games.length > 0 && <NarrationPanel games={games} text={plainText} />}
           {showStudy && games.length > 0 && (

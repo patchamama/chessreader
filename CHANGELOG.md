@@ -2,6 +2,11 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.101.0 — 2026-11-18
+
+- fix: the braces ⇄ paragraphs switch rewrites the game in place (it no longer replaces the book); the switch is in the top bar before the board toggle and one line before each game
+- feat: games marked with start/end lines and highlighted headings (number, players, place, event, opening), anchors and a Games tab in the table of contents; a collapsible table of contents panel on desktop; previous/next chapter at the end; scroll position kept per chapter; book headings detected from the EPUB styles; small images and table images no longer become diagrams
+
 ## v0.100.0 — 2026-11-18
 
 - feat: chapter titles from the EPUB's own table of contents (nav.xhtml / toc.ncx, several lines joined), also for books already in the library
