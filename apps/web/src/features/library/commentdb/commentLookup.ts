@@ -1,8 +1,7 @@
 import { positionHash, type Lang } from '@chess-ebook/chess-shared'
+import { hasServerSession } from '../../../shared/api/serverSession'
 import { httpClient } from '../../../shared/api/httpClient'
-import { isDemoHost } from '../../../shared/env/devMode'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
-import { useAuthStore } from '../../auth/store/authStore'
 
 /** What an author said about a position, and where it comes from. */
 export interface HumanComment {
@@ -101,7 +100,7 @@ function getResource(path: string): Promise<Response> {
  */
 export async function lookupPositionComments(fen: string): Promise<HumanComment[]> {
   const hash = positionHash(fen)
-  if (!isDemoHost() && useAuthStore.getState().token) {
+  if (hasServerSession()) {
     try {
       const r = await httpClient<{ comments: Array<Omit<HumanComment, 'gameId' | 'label'> & { game: { id: string; label: string | null } }> }>(
         `/api/comments/position?hash=${hash}&fen=${encodeURIComponent(fen)}`, { method: 'GET' })
@@ -129,7 +128,7 @@ export async function lookupPositionComments(fen: string): Promise<HumanComment[
 
 /** Whether any commentary database can be asked (a server session, or a static database in Settings). */
 export function hasCommentSource(): boolean {
-  return (!isDemoHost() && !!useAuthStore.getState().token) || resourcesConfigured()
+  return hasServerSession() || resourcesConfigured()
 }
 
 /** "Kasparov, Mis geniales predecesores III, Partida 7": quiet, but says where it comes from. */

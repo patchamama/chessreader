@@ -10,6 +10,10 @@ import { useExternalBookStore } from '../../../shared/externalBook/externalBookS
 import * as exporter from './export/annotatedExport'
 import { useBusyStore } from '../../../shared/layout/busyStore'
 
+// These tests run without a server (jsdom's host is localhost, where the app would ask it).
+vi.mock('../../../shared/api/serverSession', () => ({ hasServerSession: () => false }))
+
+
 const TEXT = 'Tutor – Novice, 2024\n1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#'
 const games = recognizeGames(TEXT, { algorithm: 2 })
 const main = games[0].tree.mainline

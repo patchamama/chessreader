@@ -1,6 +1,5 @@
 import { httpClient } from '../../../shared/api/httpClient'
-import { isDemoHost } from '../../../shared/env/devMode'
-import { useAuthStore } from '../../auth/store/authStore'
+import { hasServerSession } from '../../../shared/api/serverSession'
 import { getJson } from '../commentdb/commentLookup'
 
 /** A whole commented game of the comment database (what a book comment comes from). */
@@ -15,7 +14,7 @@ export interface CommentGame {
 
 /** The game: from the server's database when there is a server and a session, else from the static one (g/<id>.json). */
 export async function loadCommentGame(id: string): Promise<CommentGame> {
-  if (!isDemoHost() && useAuthStore.getState().token) {
+  if (hasServerSession()) {
     try {
       return await httpClient<CommentGame>(`/api/comments/games/${encodeURIComponent(id)}`, { method: 'GET' })
     } catch {

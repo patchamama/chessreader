@@ -4,6 +4,10 @@ import { clearCommentCache, humanCommentsForGame, lookupPositionComments } from 
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { useAuthStore } from '../../auth/store/authStore'
 
+// These tests run without a server (jsdom's host is localhost, where the app would ask it).
+vi.mock('../../../shared/api/serverSession', () => ({ hasServerSession: () => false }))
+
+
 const FEN = 'r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3'
 const HASH = positionHash(FEN)
 const SHARD = {

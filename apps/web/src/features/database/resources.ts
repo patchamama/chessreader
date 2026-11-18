@@ -1,6 +1,5 @@
 import { httpClient } from '../../shared/api/httpClient'
-import { isDemoHost } from '../../shared/env/devMode'
-import { useAuthStore } from '../auth/store/authStore'
+import { hasServerSession } from '../../shared/api/serverSession'
 import { getJson, resourcesConfigured } from '../library/commentdb/commentLookup'
 
 /** A book of the private resources: cover, games, most frequent players, period of most games. */
@@ -35,12 +34,12 @@ export interface PlayerRating {
 
 /** Whether the private resources can be read: a server session, or the resources repository set in Settings. */
 export function hasResources(): boolean {
-  return (!isDemoHost() && !!useAuthStore.getState().token) || resourcesConfigured()
+  return hasServerSession() || resourcesConfigured()
 }
 
 /** A JSON file of the resources: from the server (storage/resources) or the private repository. */
 export async function resource<T>(name: string): Promise<T> {
-  if (!isDemoHost() && useAuthStore.getState().token) {
+  if (hasServerSession()) {
     try { return await httpClient<T>(`/api/resources/${name.replace(/\.json$/, '').replace(/\//g, '-')}`, { method: 'GET' }) } catch { /* try the repository */ }
   }
   return getJson<T>(name)

@@ -1,7 +1,6 @@
 import { httpClient } from '../../shared/api/httpClient'
-import { isDemoHost } from '../../shared/env/devMode'
+import { hasServerSession } from '../../shared/api/serverSession'
 import { EXTERNAL_BOOK_ID } from '../../shared/externalBook/externalBookStore'
-import { useAuthStore } from '../auth/store/authStore'
 import { loadRepoBookChapters, openRepoGame, type RepoBook } from '../errors/repoBooks'
 import { saveBoardMemory } from '../library/store/boardMemory'
 import { saveProgress } from '../library/store/readingStore'
@@ -20,7 +19,7 @@ const sameTitle = (a: string, b: string) => a.trim().toLocaleLowerCase() === b.t
  */
 export async function openGameInBook(book: RepoBook, place: BookPlace): Promise<string> {
   const gameIndex = place.gameIndex ?? 0
-  if (!isDemoHost() && useAuthStore.getState().token) {
+  if (hasServerSession()) {
     const library = await httpClient<{ id: number; title: string }[]>('/api/library/books').catch(() => [])
     const match = library.find((b) => sameTitle(b.title, book.title))
     if (match) {

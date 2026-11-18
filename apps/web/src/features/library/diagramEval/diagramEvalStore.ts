@@ -1,8 +1,7 @@
 import { create } from 'zustand'
+import { hasServerSession } from '../../../shared/api/serverSession'
 import { persist } from 'zustand/middleware'
 import { httpClient } from '../../../shared/api/httpClient'
-import { isDemoHost } from '../../../shared/env/devMode'
-import { useAuthStore } from '../../auth/store/authStore'
 import { useSettingsStore, STOCKFISH_VERSIONS } from '../../../shared/settings/settingsStore'
 import { reviewEngine } from '../review/reviewStore'
 
@@ -53,7 +52,7 @@ const localEngineName = () => {
  * Lichess cloud, when chosen in Settings).
  */
 export async function evaluatePosition(fen: string, depth: number, count: number): Promise<DiagramEvaluation> {
-  if (!isDemoHost() && useAuthStore.getState().token) {
+  if (hasServerSession()) {
     try {
       const r = await httpClient<ServerEval>('/api/eval/position', { method: 'POST', body: JSON.stringify({ fen, depth, lines: count }) })
       const lines = (r.lines ?? [r]).filter((l) => l.pv?.length).map((l) => ({ pv: l.pv!, ...(l.mate !== undefined ? { mate: l.mate } : { scoreCp: l.scoreCp ?? 0 }) }))

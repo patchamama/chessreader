@@ -1,7 +1,6 @@
 import { positionHash } from '@chess-ebook/chess-shared'
+import { hasServerSession } from '../../shared/api/serverSession'
 import { httpClient } from '../../shared/api/httpClient'
-import { isDemoHost } from '../../shared/env/devMode'
-import { useAuthStore } from '../auth/store/authStore'
 import { getJson, resourcesConfigured } from '../library/commentdb/commentLookup'
 
 /** A trap (celada): the line that sets it, who sets it, and how likely and hard it is. */
@@ -37,7 +36,7 @@ export async function loadTraps(): Promise<Trap[]> {
   const classic = await fetch(`${import.meta.env.BASE_URL ?? '/'}traps/classic.json`).then((r) => (r.ok ? r.json() : []), () => []) as Trap[]
   let books: Trap[] = []
   try {
-    if (!isDemoHost() && useAuthStore.getState().token) books = await httpClient<Trap[]>('/api/resources/traps', { method: 'GET' })
+    if (hasServerSession()) books = await httpClient<Trap[]>('/api/resources/traps', { method: 'GET' })
     else if (resourcesConfigured()) books = await getJson<Trap[]>('traps.json')
   } catch {
     books = []

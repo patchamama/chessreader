@@ -6,6 +6,10 @@ import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { Chess } from 'chess.js'
 import { positionHash } from '@chess-ebook/chess-shared'
 
+// These tests run without a server (jsdom's host is localhost, where the app would ask it).
+vi.mock('../../shared/api/serverSession', () => ({ hasServerSession: () => false }))
+
+
 vi.mock('./humanMoves', () => ({ humanMoves: vi.fn(async () => ({ rating: 1500, moves: [{ san: 'e4', probability: 0.41 }, { san: 'd4', probability: 0.32 }] })) }))
 vi.mock('../viewer/components/EvalBar', () => ({ default: () => <div data-testid="evalbar" /> }))
 vi.mock('../library/review/useMoveHints', () => ({ useMoveHints: () => ({}) }))
