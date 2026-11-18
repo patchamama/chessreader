@@ -5,7 +5,9 @@
 // level), its tactical themes, the introduction and the main line (the moves
 // in bold), with the position keys of the line for matching games.
 // Book content: the output goes to the private resources repository only.
-// Usage: node scripts/build-traps.mjs <book.epub> <out.json>
+// Usage: node scripts/build-traps.mjs <book.epub> <out.json> [<books/text/<id>.txt> <book id>]
+// With the book's text and id, each trap gets ref { bookId, chapter } to open the book there.
+import { chapterOfTitle } from './trapRefs.mjs'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -13,7 +15,8 @@ import { join } from 'node:path'
 import { Chess } from 'chess.js'
 import { figurineToAscii, spanishToEnglish, positionHash, recognizeGames } from '../dist/index.js'
 
-const [epub, out] = process.argv.slice(2)
+const [epub, out, bookText, bookId] = process.argv.slice(2)
+const textOfBook = bookText ? readFileSync(bookText, 'utf8') : null
 const dir = mkdtempSync(join(tmpdir(), 'traps-'))
 execFileSync('unzip', ['-q', '-o', epub, '-d', dir])
 const textDir = join(dir, 'OEBPS', 'Text')
@@ -58,6 +61,13 @@ for (const f of files) {
       intro, sans, keys, source: { title: 'Aprende a hacer trampas al ajedrez', author: 'Nicolás Lococo Cobo' },
     })
   }
+}
+if (textOfBook) {
+  for (const t of traps) {
+    const chapter = chapterOfTitle(textOfBook, t.title)
+    if (chapter) t.ref = { bookId, chapter }
+  }
+  console.log(`${traps.filter((t) => t.ref).length} of ${traps.length} traps located in the book`)
 }
 writeFileSync(out, JSON.stringify(traps))
 console.log(traps.length, 'traps')

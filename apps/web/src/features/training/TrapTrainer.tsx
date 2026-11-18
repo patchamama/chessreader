@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { OpenBookAtTrap } from './OpenBookAtTrap'
 import { Chess } from 'chess.js'
 import { useSettingsStore, type AppLanguage } from '../../shared/settings/settingsStore'
 import { HoverLine } from '../../shared/chess/HoverLine'
@@ -137,7 +138,7 @@ export function TrapPractice({ trap, onDone, initialMode = 'practice' }: { trap:
           <button type="button" className={`${button} ${mode === 'learn' ? 'bg-slate-100 font-semibold' : ''}`} onClick={startLearning}>{t.learn}</button>
           <button type="button" className={`${button} ${mode === 'practice' && !done ? 'bg-slate-100 font-semibold' : ''}`} onClick={startPractice}>{t.practise}</button>
           {isBookTrap(trap) && <button type="button" className={button} onClick={openInBook}>📖 {t.book}</button>}
-          {trap.ref?.bookId && <a className="text-xs text-blue-700 underline" href={`/read/${encodeURIComponent(trap.ref.bookId)}`}>{trap.source.title}</a>}
+          {trap.ref?.bookId && trap.ref.chapter && <OpenBookAtTrap book={{ id: trap.ref.bookId, title: trap.source.title }} chapter={Number(trap.ref.chapter)} />}
         </div>
         {mode === 'learn' && <p className="mt-1 text-xs text-slate-500">{t.step}</p>}
         {mode === 'practice' && <p data-testid="trap-progress" className="mt-2 font-mono text-xs">{lineText}</p>}

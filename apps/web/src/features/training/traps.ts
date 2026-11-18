@@ -27,7 +27,8 @@ export interface Trap {
   keys: string[]
   source: { title: string; author: string | null }
   /** Where the trap is in its book, when the trap data says it (file, anchor, chapter). */
-  ref?: { bookId?: string; file?: string; anchor?: string; chapter?: string }
+  /** Where the trap is in its book (resources text numbering), to open the book there. */
+  ref?: { bookId?: string; file?: string; anchor?: string; chapter?: number | string }
 }
 
 /** A trap taken from Lococo's book (the private resources). */
