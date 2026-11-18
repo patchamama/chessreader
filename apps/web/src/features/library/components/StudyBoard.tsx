@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { BoardModal } from './BoardModal'
+import { useStatusStore } from '../../../shared/layout/statusStore'
 import { Chess } from 'chess.js'
 import ChessBoard from '../../../shared/chess/ChessBoard'
 import { useNarrationStore } from '../narration/narrationStore'
@@ -171,6 +172,17 @@ export function StudyBoard() {
   // Single engine instance for the whole board: drives the eval panel AND the
   // best-move arrow. Internally gated by the `showEval` setting (no worker when off).
   const engine = useEngineLines(fen)
+  // The status bar: the move shown, its position and the evaluation.
+  useEffect(() => {
+    const st = useStatusStore.getState()
+    const node = nav.node
+    st.setStatus('reader.move', 'Move', node ? `${node.moveNumber}${node.color === 'white' ? '.' : '...'} ${node.san}` : '')
+    st.setStatus('reader.fen', 'FEN', fen)
+    const best = engine.lines[0]
+    const sign = fen.split(' ')[1] === 'b' ? -1 : 1
+    st.setStatus('reader.eval', 'Eval', best ? `${best.mate !== undefined ? `#${sign * best.mate}` : ((sign * (best.scoreCp ?? 0)) / 100).toFixed(2)} (d${engine.depth})` : '')
+  }, [fen, nav.node, engine.lines, engine.depth])
+  useEffect(() => () => useStatusStore.getState().clearStatus('reader.'), [])
 
   // The tree's next move (premove arrow when the engine is off).
   const nextMove =

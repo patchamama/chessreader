@@ -5,6 +5,8 @@ import { useAuthStore } from '../features/auth/store/authStore'
 import { isLocalhostHost } from '../shared/env/devMode'
 import { useSettingsStore, FONT_FAMILIES } from '../shared/settings/settingsStore'
 import SettingsPanel from '../shared/settings/SettingsPanel'
+import { StatusFooter } from '../shared/layout/StatusFooter'
+import { pageWidthClass } from '../shared/layout/pageWidth'
 import { NotesPanel } from '../shared/notes/NotesPanel'
 import { countPending, useNotesStore } from '../shared/notes/notesStore'
 
@@ -44,7 +46,7 @@ export default function AppLayout() {
     >
       <header data-testid="banner" className="bg-slate-900 text-white shadow-md">
         <div
-          className="mx-auto flex max-w-6xl items-center gap-6 py-3"
+          className={`mx-auto flex ${pageWidthClass(settings.pageWidth)} items-center gap-6 py-3`}
           style={{ paddingLeft: `${settings.marginH}rem`, paddingRight: `${settings.marginH}rem` }}
         >
           <Link
@@ -122,12 +124,13 @@ export default function AppLayout() {
       </header>
 
       <main
-        className="mx-auto max-w-6xl py-8"
+        className={`mx-auto ${pageWidthClass(settings.pageWidth)} py-8 ${settings.statusFooter ? 'pb-12' : ''}`}
         style={{ paddingLeft: `${settings.marginH}rem`, paddingRight: `${settings.marginH}rem` }}
       >
         <Outlet />
       </main>
 
+      <StatusFooter />
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
       {showNotes && <NotesPanel onClose={() => setShowNotes(false)} />}
     </div>

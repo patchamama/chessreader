@@ -456,6 +456,14 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
         </div>
 
         {/* Horizontal margin */}
+        <label className={labelClass} htmlFor="page-width">Page width (desktop)</label>
+        <select id="page-width" value={s.pageWidth} onChange={(e) => s.set({ pageWidth: e.target.value as 'normal' | 'wide' | 'full' })} className={inputClass}>
+          <option value="normal">Normal</option>
+          <option value="wide">Wide</option>
+          <option value="full">Whole window</option>
+        </select>
+        <div className="mt-2"><Toggle on={s.statusFooter} onClick={() => s.set({ statusFooter: !s.statusFooter })} label="Status bar at the bottom" /></div>
+
         <label className={labelClass}>Horizontal margin — {s.marginH}rem</label>
         <input
           type="range" min={0} max={6} step={0.5}

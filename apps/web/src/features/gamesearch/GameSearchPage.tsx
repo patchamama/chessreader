@@ -28,6 +28,7 @@ import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../shared/externalBoo
 import { saveProgress } from '../library/store/readingStore'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { PuzzlePanel } from './PuzzlePanel'
+import { usePageWidth } from '../../shared/layout/pageWidth'
 
 type Tab = 'recommended' | 'studies' | 'masters' | 'broadcasts' | 'chesscom' | 'mine' | 'puzzles'
 
@@ -65,6 +66,7 @@ const openBtn = 'shrink-0 rounded border border-slate-300 px-2 py-0.5 text-xs fo
  */
 export default function GameSearchPage() {
   const navigate = useNavigate()
+  const pageWidth = usePageWidth('max-w-3xl')
   const openBook = useExternalBookStore((s) => s.open)
   const [tab, setTab] = useState<Tab>('recommended')
   const [busy, setBusy] = useState(false)
@@ -126,7 +128,7 @@ export default function GameSearchPage() {
   )
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
+    <div className={`mx-auto ${pageWidth} px-4 py-6`}>
       <h1 className="text-xl font-bold text-slate-800">Game search</h1>
       <p className="mt-1 text-sm text-slate-600">
         Find annotated and instructive games, then open them in the reader to replay and narrate them.

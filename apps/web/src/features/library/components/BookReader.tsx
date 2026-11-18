@@ -8,6 +8,7 @@ import { loadBoardMemory, saveBoardMemory } from '../store/boardMemory'
 import { dashedPair, squareLine } from '../utils/squareLine'
 import { bracesToParagraphs, paragraphsToBraces } from '../utils/commentLayout'
 import { textToChapters } from '../utils/textToChapters'
+import { FOOTER_HEIGHT } from '../../../shared/layout/StatusFooter'
 import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
 import { StudyBoard } from './StudyBoard'
 import { StudyPanelResizer } from './StudyPanelResizer'
@@ -87,6 +88,7 @@ export default function BookReader() {
   const { bookId } = useParams<{ bookId: string }>()
   const id = Number(bookId)
   const navigate = useNavigate()
+  const statusFooter = useSettingsStore((s) => s.statusFooter)
 
   const [currentChapter, setCurrentChapter] = useState<number>(() => {
     const p = getProgress(id)
@@ -693,7 +695,7 @@ export default function BookReader() {
   )
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-slate-50">
+    <div className="flex flex-col overflow-hidden bg-slate-50" style={{ height: statusFooter ? `calc(100vh - ${FOOTER_HEIGHT}px)` : '100vh' }}>
       <style dangerouslySetInnerHTML={{ __html: epubCss }} />
 
       {/* ── Sticky nav bar ── */}

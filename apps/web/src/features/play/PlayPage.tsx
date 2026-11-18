@@ -7,6 +7,8 @@ import { useMoveHints } from '../library/review/useMoveHints'
 import { usePlayStore, type Clocks, type PlayerInfo, type PlayMode } from './playStore'
 import { LICHESS_BOTS, LICHESS_CLOCKS, LICHESS_PLAY_TOKEN_URL } from './lichessBoard'
 import { MOVE_KIND_COLORS, type MoveKind } from './moveJudge'
+import { usePageWidth } from '../../shared/layout/pageWidth'
+import { useStatusStore } from '../../shared/layout/statusStore'
 import { humanMoves, type HumanMoves } from './humanMoves'
 
 const TEXT = {
@@ -82,6 +84,27 @@ export default function PlayPage() {
   const t = TEXT[lang]
   const p = usePlayStore()
   const settings = useSettingsStore()
+  const pageWidth = usePageWidth('max-w-5xl')
+  // The status bar: mode, opponent, clocks, time played.
+  const [startedAt, setStartedAt] = useState<number | null>(null)
+  const [nowTick, setNowTick] = useState(() => Date.now())
+  useEffect(() => {
+    if (p.status === 'idle') { setStartedAt(null); return }
+    setStartedAt((s) => s ?? Date.now())
+  }, [p.status])
+  useEffect(() => {
+    if (!startedAt || p.status === 'over') return
+    const id = setInterval(() => setNowTick(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [startedAt, p.status])
+  useEffect(() => {
+    const st = useStatusStore.getState()
+    st.setStatus('play.mode', t.mode, p.status === 'idle' ? '' : `${p.mode}${p.players ? ` · ${p.players.white.name} – ${p.players.black.name}` : ''}`)
+    st.setStatus('play.moves', 'Moves', p.sans.length ? String(Math.ceil(p.sans.length / 2)) : '')
+    st.setStatus('play.time', 'Time', startedAt ? mmss(nowTick - startedAt) : '')
+    st.setStatus('play.status', 'Status', p.result || (p.status === 'thinking' ? t.thinking : ''))
+  }, [p.status, p.mode, p.players, p.sans.length, p.result, startedAt, nowTick, t])
+  useEffect(() => () => useStatusStore.getState().clearStatus('play.'), [])
   const [mode, setMode] = useState<PlayMode>('engine')
   const [color, setColor] = useState<'white' | 'black'>('white')
   const [strength, setStrength] = useState(3)
@@ -131,7 +154,7 @@ export default function PlayPage() {
     )
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-6 md:flex-row">
+    <div className={`mx-auto flex ${pageWidth} flex-col gap-4 px-4 py-6 md:flex-row`}>
       <div className="w-full max-w-[520px]">
         {row(top)}
         <div className="my-1 flex gap-2">

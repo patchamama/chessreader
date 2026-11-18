@@ -169,6 +169,10 @@ export interface AppSettings {
   /** Play: colour the destinations of the selected piece by how good each move is. */
   /** The thumbnail of a hovered move shows the engine's evaluation, the loss and the engine's move. */
   hintEval: boolean
+  /** Desktop page width: normal, wide or the whole window. */
+  pageWidth: 'normal' | 'wide' | 'full'
+  /** The status bar at the bottom of the window. */
+  statusFooter: boolean
   /** Human commentary database: a public base URL, or a GitHub contents API URL of a private repository. */
   commentDbUrl: string
   /** Token for a private commentary database (GitHub fine-grained token, contents:read). Kept in this browser. */
@@ -276,6 +280,8 @@ const DEFAULT: AppSettings = {
   stockfishVersion: 'sf18-local',
   engineSource: 'local',
   hintEval: true,
+  pageWidth: 'normal',
+  statusFooter: true,
   commentDbUrl: '',
   commentDbToken: '',
   humanComments: true,
