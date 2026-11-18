@@ -121,4 +121,21 @@ describe('PlayPage', () => {
     expect(await screen.findByTestId('human-moves')).toHaveTextContent('A 1500 player would play: e4 (41%), d4 (32%)')
     useSettingsStore.setState({ playHumanHint: false })
   })
+
+  it('can play a random colour (S6)', () => {
+    const start = vi.spyOn(usePlayStore.getState(), 'start').mockImplementation(() => {})
+    const rnd = vi.spyOn(Math, 'random').mockReturnValue(0.9)
+    render(<PlayPage />)
+    fireEvent.change(screen.getByLabelText('I play'), { target: { value: 'random' } })
+    fireEvent.click(screen.getByRole('button', { name: 'New game' }))
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ color: 'black' }))
+    rnd.mockRestore(); start.mockRestore()
+  })
+  it('on my turn, shows ideas: the opening and the targets on the board (S3)', () => {
+    useSettingsStore.setState({ playIdeas: true })
+    render(<PlayPage />)
+    act(() => usePlayStore.setState({ status: 'playing', mode: 'engine', color: 'white', sans: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Nd4'],
+      fen: 'r1bqkbnr/pppp1ppp/8/4p3/2BnP3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4' }))
+    expect(screen.getByTestId('play-ideas')).toHaveTextContent('e5')
+  })
 })
