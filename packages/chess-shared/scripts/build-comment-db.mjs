@@ -14,6 +14,7 @@
 //   comments.sqlite       the database (schema: apps/api/migrations/005_position_comments.sql)
 //   index.json            sources, counts, shard layout
 //   p/<xx>.json           comments of the positions whose hash starts with xx
+//                         (each with its ply and full move number, `move`)
 //   g/<game id>.json      the whole game (PGN) a comment comes from
 //
 // Book texts and comments are third-party works: never commit the output.
@@ -37,10 +38,14 @@ mkdirSync(join(outDir, 'p'), { recursive: true });
 mkdirSync(join(outDir, 'g'), { recursive: true });
 const db = new DatabaseSync(join(outDir, 'comments.sqlite'));
 db.exec(readFileSync(new URL('../../../apps/api/migrations/005_position_comments.sql', import.meta.url), 'utf8'));
+// Full move number of each comment (ply 15 → move 8). Optional for readers: older databases lack it.
+if (!db.prepare('PRAGMA table_info(position_comments)').all().some((c) => c.name === 'move_number')) {
+  db.exec('ALTER TABLE position_comments ADD COLUMN move_number INTEGER');
+}
 
 const insSource = db.prepare('INSERT INTO comment_sources (id, kind, title, author, lang, priority) VALUES (?, ?, ?, ?, ?, ?)');
 const insGame = db.prepare('INSERT OR REPLACE INTO comment_games (id, source_id, white, black, label, pgn) VALUES (?, ?, ?, ?, ?, ?)');
-const insComment = db.prepare('INSERT INTO position_comments (hash, position, game_id, ply, san, lang, text) VALUES (?, ?, ?, ?, ?, ?, ?)');
+const insComment = db.prepare('INSERT INTO position_comments (hash, position, game_id, ply, move_number, san, lang, text) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
 
 const shards = new Map();
 const sources = {};
@@ -90,11 +95,13 @@ manifest.forEach((entry, sourceIndex) => {
       insGame.run(gameId, sourceId, players.white ?? null, players.black ?? null, label || null, pgn);
       writeFileSync(join(outDir, 'g', `${gameId}.json`), JSON.stringify({ id: gameId, source: sourceId, white: players.white, black: players.black, pgn }));
       for (const c of comments) {
-        const info = insComment.run(c.hash, c.key, gameId, c.ply, c.san, c.lang, c.text);
+        // The move as written in the game (a game set up from a FEN keeps its numbering), else from the ply.
+        const move = c.moveNumber ?? Math.ceil(c.ply / 2);
+        const info = insComment.run(c.hash, c.key, gameId, c.ply, move, c.san, c.lang, c.text);
         const id = Number(info.lastInsertRowid);
         const prefix = c.hash.slice(0, 2);
         const shard = shards.get(prefix) ?? shards.set(prefix, {}).get(prefix);
-        (shard[c.hash] ??= []).push({ id, text: c.text, lang: c.lang, game: gameId, ply: c.ply, san: c.san, source: sourceId, label: label || null });
+        (shard[c.hash] ??= []).push({ id, text: c.text, lang: c.lang, game: gameId, ply: c.ply, move, san: c.san, source: sourceId, label: label || null });
         count++;
       }
     }
