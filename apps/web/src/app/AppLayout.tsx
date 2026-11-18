@@ -65,6 +65,9 @@ export default function AppLayout() {
             <NavLink to="/play" className={navLinkClass}>
               Play
             </NavLink>
+            <NavLink to="/training" className={navLinkClass}>
+              Training
+            </NavLink>
             <NavLink to="/webparser" className={navLinkClass}>
               Webparser
             </NavLink>

@@ -28,7 +28,7 @@ export function clearCommentCache() {
 }
 
 /** A file of the static database: public URL, or the GitHub contents API of a private repository with a token. */
-function getJson<T>(path: string): Promise<T> {
+export function getJson<T>(path: string): Promise<T> {
   const { commentDbUrl, commentDbToken } = useSettingsStore.getState()
   const url = `${commentDbUrl.replace(/\/+$/, '')}/${path}`
   const headers: Record<string, string> = {}

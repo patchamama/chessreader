@@ -11,6 +11,7 @@ import BookReader from '../features/library/components/BookReader'
 import WebparserView from '../features/webparser/components/WebparserView'
 import GameSearchPage from '../features/gamesearch/GameSearchPage'
 import PlayPage from '../features/play/PlayPage'
+import TrainingPage from '../features/training/TrainingPage'
 import { isDemoHost } from '../shared/env/devMode'
 import PendingPage from '../features/auth/components/PendingPage'
 
@@ -44,6 +45,14 @@ const routes = [
         element: (
           <RequireApproved>
             <GameSearchPage />
+          </RequireApproved>
+        ),
+      },
+      {
+        path: '/training',
+        element: (
+          <RequireApproved>
+            <TrainingPage />
           </RequireApproved>
         ),
       },

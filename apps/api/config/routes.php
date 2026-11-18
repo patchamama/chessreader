@@ -6,6 +6,7 @@ use App\Presentation\Admin\AdminController;
 use App\Presentation\Engine\EngineController;
 use App\Presentation\Engine\HumanMoveController;
 use App\Presentation\Comments\CommentsController;
+use App\Presentation\Resources\ResourcesController;
 use App\Presentation\Auth\AuthController;
 use App\Presentation\Diagram\DiagramController;
 use App\Presentation\Eval\EvalController;
@@ -79,6 +80,9 @@ return function (App $app): void {
     $app->group('/api/engine', function (RouteCollectorProxy $group) {
         $group->get('/human', [HumanMoveController::class, 'predict']);
     })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
+
+    // Private resources from the books (require JWT + Approved)
+    $app->get('/api/resources/{name}', [ResourcesController::class, 'get'])->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
 
     // Human commentary by position (require JWT + Approved)
     $app->group('/api/comments', function (RouteCollectorProxy $group) {

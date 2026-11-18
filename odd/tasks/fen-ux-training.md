@@ -41,7 +41,7 @@ Delivery: one commit + tag per phase on main, pushed (user's standing instructio
 - [x] T5 S12–S13 accounts in Settings, my games by year/month, move counts — inline — v0.82.0
 - [x] T6 S3, S6 Play random colour, ideas, targets, traps — inline — v0.83.0
 - [x] T7 S4 pattern DB + trainer + labels — inline — v0.84.0
-- [ ] T8 S16 trap DB + trainer — inline — v0.85.0
+- [x] T8 S16 trap DB + trainer — inline — v0.85.0
 - [ ] T9 S15, S21–S22 resources repo, game DB, search, players, openings, exercises, stats — inline — v0.86–0.87
 - [ ] T10 S14 level test — inline — v0.88.0
 - [ ] T11 S18 diagram images → FEN — inline — v0.89.0

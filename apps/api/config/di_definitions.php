@@ -381,6 +381,11 @@ return [
         );
     },
 
+    \App\Presentation\Resources\ResourcesController::class => function (ContainerInterface $c) {
+        $storageDir = $c->get('settings')['storage_dir'] ?? dirname(__DIR__) . '/storage';
+        return new \App\Presentation\Resources\ResourcesController($storageDir . '/resources');
+    },
+
     \App\Application\Comments\Port\PositionCommentStore::class => function (ContainerInterface $c) {
         $storageDir = $c->get('settings')['storage_dir'] ?? dirname(__DIR__) . '/storage';
         return new \App\Infrastructure\Comments\SqlitePositionCommentStore($storageDir . '/comments.sqlite');
