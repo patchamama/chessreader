@@ -5,11 +5,13 @@ import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../shared/externalBoo
 import { saveProgress } from '../library/store/readingStore'
 import { pgnToChapters } from '../gamesearch/pgnChapters'
 import { usePageWidth } from '../../shared/layout/pageWidth'
+import { withBusy } from '../../shared/layout/busyStore'
 import {
   firstMoves, gamesPerDecade, hasResources, loadBookGames, loadBooks, loadGames, loadRatings, matchesStat, openings, surname, topPlayers, wikipediaSummary,
   type DbBook, type DbGame, type DbGameFull, type PlayerRating, type StatFilter,
 } from './resources'
 import { gameFacts } from './gameFacts'
+import { openGameInBook } from './openInBook'
 
 type Tab = 'books' | 'search' | 'openings' | 'players' | 'stats'
 
@@ -156,20 +158,36 @@ export default function DatabasePage() {
     loadRatings().then((r) => setRatings(r.players), () => setRatings([]))
   }, [available])
 
-  const open = async (g: { id: string; book?: string }, bookId?: string) => {
+  /** A game: the one with the book's remarks (the moves only in databases built before them). */
+  const open = (g: { id: string; book?: string }, bookId?: string) => withBusy('Opening the commented game', async () => {
     const list = book && book.book.id === (bookId ?? g.book) ? book.games : await loadBookGames(bookId ?? g.book!)
     const full = list.find((x) => x.id === g.id)
     if (!full) return
     const title = `${full.white ?? '?'} – ${full.black ?? '?'}${full.year ? ` (${full.year})` : ''}`
     const tags: [string, string | number | null | undefined][] = [['Event', full.event], ['Site', full.place], ['Date', full.date?.replace(/-/g, '.')], ['White', full.white ?? '?'], ['Black', full.black ?? '?'],
       ['Result', full.result], ['WhiteElo', full.whiteElo], ['BlackElo', full.blackElo], ['Termination', full.termination]]
-    const pgn = `${tags.filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => `[${k} "${String(v).replace(/"/g, "'")}"]`).join('\n')}\n\n${full.pgn}`
+    const pgn = `${tags.filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => `[${k} "${String(v).replace(/"/g, "'")}"]`).join('\n')}\n\n${full.commented || full.pgn}`
     const { chapters } = pgnToChapters(pgn)
     if (!chapters.length) return
     saveProgress(EXTERNAL_BOOK_ID, 1)
     useExternalBookStore.getState().open(title, chapters)
     navigate(`/read/${EXTERNAL_BOOK_ID}`)
+  })
+
+  const booksById = useMemo(() => new Map((books ?? []).map((b) => [b.id, b])), [books])
+  /** A book's card opened on its games. */
+  const showBook = (b: DbBook) => {
+    setTab('books')
+    void loadBookGames(b.id).then((g) => setBook({ book: b, games: g }), (e: Error) => setError(e.message))
   }
+  /** The book of a game, opened at that game (its chapter and its place among the chapter's games). */
+  const openInBook = (b: DbBook, chapter: number, gameIndex: number | null) => withBusy('Opening the book', async () => {
+    try {
+      navigate(await openGameInBook(b, { chapter, gameIndex }))
+    } catch (e) {
+      setError(`${b.title}: ${(e as Error).message}`)
+    }
+  })
 
   const found = useMemo(() => games.filter((g) =>
     (!statFilter || matchesStat(g, statFilter))
@@ -205,12 +223,34 @@ export default function DatabasePage() {
   }, [player, lang])
 
   const row = 'flex items-center justify-between gap-2 rounded border border-slate-100 bg-white px-2 py-1 text-xs'
-  const gameRow = (g: DbGame | DbGameFull, bookId?: string) => (
-    <li key={g.id} className={row}>
-      <span><strong>{g.white ?? '?'} – {g.black ?? '?'}</strong> · {g.year ?? '—'} · {g.opening || '—'}{gameFacts(g).map((f) => ` · ${f}`).join('')}</span>
-      <button className="rounded border border-slate-300 px-2 py-0.5" aria-label={`Open ${g.white} – ${g.black}`} onClick={() => void open(g, bookId)}>Open</button>
-    </li>
-  )
+  /** Where a game comes from: its book (linking to the book's games) or Lichess. */
+  const sourceOf = (from: string | undefined, lichess: boolean) => {
+    if (lichess) return <span className="text-slate-500">Lichess</span>
+    const source = from ? booksById.get(from) : undefined
+    return source
+      ? <button className="text-blue-700 underline" aria-label={`Book: ${source.title}`} onClick={() => showBook(source)}>{source.title}</button>
+      : <span className="text-slate-500">{from ?? '—'}</span>
+  }
+  const gameRow = (g: DbGame | DbGameFull, bookId?: string) => {
+    const from = bookId ?? ('book' in g ? g.book : undefined)
+    const lichess = g.source === 'lichess' || from === 'lichess'
+    const source = lichess || !from ? null : booksById.get(from) ?? null
+    const players = `${g.white} – ${g.black}`
+    return (
+      <li key={g.id} className={row}>
+        <span>
+          <strong>{g.white ?? '?'} – {g.black ?? '?'}</strong> · {g.year ?? '—'} · {g.opening || '—'}{gameFacts(g).map((f) => ` · ${f}`).join('')}
+          {' · '}{sourceOf(from, lichess)}
+        </span>
+        <span className="flex shrink-0 gap-1">
+          <button className="rounded border border-slate-300 px-2 py-0.5" aria-label={`Open ${players}`} onClick={() => void open(g, bookId)}>Open</button>
+          {source && g.chapter && (
+            <button className="rounded border border-slate-300 px-2 py-0.5" aria-label={`Open ${players} in the book`} onClick={() => void openInBook(source, g.chapter!, g.gameIndex ?? null)}>Open in the book</button>
+          )}
+        </span>
+      </li>
+    )
+  }
 
   if (!available) {
     return (
@@ -320,7 +360,7 @@ export default function DatabasePage() {
                 <h3 className="mt-2 text-xs font-semibold">Near-perfect games (accuracy ≥ 95)</h3>
                 <ul className="mt-1 flex flex-col gap-1">
                   {player.nearPerfect.slice(0, 20).map((g) => (
-                    <li key={g.game + g.color} className={row}><span>{`${g.white} – ${g.black} · ${g.year ?? '—'} · ${g.accuracy}%`}{(byId.has(g.game) ? gameFacts(byId.get(g.game)!) : []).map((f) => ` · ${f}`).join('')}</span>
+                    <li key={g.game + g.color} className={row}><span>{`${g.white} – ${g.black} · ${g.year ?? '—'} · ${g.accuracy}%`}{(byId.has(g.game) ? gameFacts(byId.get(g.game)!) : []).map((f) => ` · ${f}`).join('')}{' · '}{sourceOf(g.book, byId.get(g.game)?.source === 'lichess' || g.book === 'lichess')}</span>
                       <button className="rounded border border-slate-300 px-2 py-0.5" onClick={() => void open({ id: g.game, book: g.book })}>Open</button></li>
                   ))}
                 </ul>

@@ -14,9 +14,20 @@ export interface DbGameDetails {
   whiteElo?: number | null; blackElo?: number | null
   /** How it ended: resignation, checkmate, draw, perpetual check, time… */
   termination?: string | null
+  /** Where the book has the game: chapter (1-based, one per form feed of its text) and index among the chapter's recognised games. */
+  chapter?: number | null
+  gameIndex?: number | null
+  /** Where the game comes from: a book of the resources (default) or Lichess. */
+  source?: 'book' | 'lichess' | null
 }
 export interface DbGame extends DbGameDetails { id: string; book: string; white: string | null; black: string | null; year: number | null; opening: string; result: string; moves: number; first: string }
-export interface DbGameFull extends Omit<DbGame, 'book' | 'first'> { first: string; pgn: string }
+export interface DbGameFull extends Omit<DbGame, 'book' | 'first'> {
+  first: string
+  /** The moves only (main line and variations). */
+  pgn: string
+  /** The game with the book's remarks in braces and its variations; absent in databases built before them. */
+  commented?: string | null
+}
 export interface PlayerRating {
   player: string; names: string[]; games: number; accuracy: number; engineAgreement: number; maiaAgreement: number | null
   nearPerfect: { game: string; accuracy: number; color: string; white: string; black: string; year: number | null; book: string }[]

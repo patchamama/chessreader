@@ -1,6 +1,8 @@
 // Extraction helpers of scripts/build-game-db.mjs: heading, ending and cover.
 import { describe, expect, it } from 'vitest'
 import { parseGameHeader } from '../src/recognition/gameHeader.ts'
+import { recognizeGames } from '../src/recognition/recognizeGames.ts'
+import { bookChapters, chapterProse, commentCount, commentedPgn, matchGame } from './gameDbExtract.mjs'
 import { coverHref, gameEnding, headingLines, readGameHeading } from './gameDbExtract.mjs'
 
 describe('headingLines', () => {
@@ -64,5 +66,64 @@ describe('coverHref', () => {
   })
   it('else the first image', () => {
     expect(coverHref(`<manifest>${items}</manifest>`)).toBe('Images/first.jpg')
+  })
+})
+
+describe('bookChapters (numbered like the reader: one chapter per form feed, empty ones skipped)', () => {
+  it('numbers the non-empty pieces from 1 and keeps each piece untouched', () => {
+    expect(bookChapters('Intro\n\f \n\fPartida 1\n1.e4 e5\fEnd')).toEqual([
+      { chapter: 1, text: 'Intro\n' }, { chapter: null, text: ' \n' }, { chapter: 2, text: 'Partida 1\n1.e4 e5' }, { chapter: 3, text: 'End' },
+    ])
+  })
+})
+
+describe('chapterProse (the text the reader recognises: one line per paragraph, whitespace collapsed)', () => {
+  it('drops blank lines and collapses spaces', () => {
+    expect(chapterProse('  Partida 1 \r\n\n\n1.e4   e5\t 2.Cf3\n')).toBe('Partida 1\n1.e4 e5 2.Cf3')
+  })
+})
+
+describe('commentedPgn (the game with the book\'s remarks in braces and its variations)', () => {
+  const text = chapterProse('1.e4 e5 2.Cf3 Las blancas atacan el peón de e5.\n2...Cc6 (2...d6 es la Defensa Philidor, más pasiva.) 3.Ab5 a6!? Una idea de Morphy.\n4.Aa4 Cf6')
+  const [game] = recognizeGames(text, { algorithm: 2 })
+  const pgn = commentedPgn(game.tree, text)
+  it('puts the prose after a move in braces (the next Black move numbered again), in English SAN with the move marks', () => {
+    expect(pgn).toContain('2. Nf3 {Las blancas atacan el peón de e5.} 2... Nc6')
+    expect(pgn).toContain('3. Bb5 a6!? {Una idea de Morphy.} 4. Ba4 Nf6')
+  })
+  it('keeps the variations in parentheses, with their remarks', () => {
+    expect(pgn).toContain('(2... d6 {es la Defensa Philidor, más pasiva.})')
+  })
+  it('no comment for a gap of bare move numbers; braces in the prose cannot break the PGN', () => {
+    expect(pgn.startsWith('1. e4 e5 2. Nf3')).toBe(true)
+    const t = chapterProse('1.e4 e5 2.Cf3 una {rara} jugada; Stockfish 14 eval: [+0.48] ￼ 2...Cc6 3.Ab5')
+    const [g] = recognizeGames(t, { algorithm: 2 })
+    expect(commentedPgn(g.tree, t)).toContain('2. Nf3 {una (rara) jugada;} 2... Nc6')
+  })
+  it('a remark keeps only balanced parentheses (an open one would swallow the moves after it)', () => {
+    const t = chapterProse('1.e4 e5 2.Cf3 Cc6 3.Ab5 a6?! (según Bronstein, era mejor 3...Cf6 4.O-O) 4.Aa4 Cf6 5.O-O Ae7')
+    const [g] = recognizeGames(t, { algorithm: 2 })
+    const pgn = commentedPgn(g.tree, t)
+    expect(pgn).toContain('3. Bb5 a6?! {según Bronstein, era mejor} (3... Nf6 4. O-O) 4. Ba4')
+    for (const [, body] of pgn.matchAll(/\{([^}]*)\}/g)) expect(body.split('(').length).toBe(body.split(')').length)
+    const [again] = recognizeGames(pgn, { algorithm: 2 })
+    expect(again.tree.mainline.map((id) => again.tree.nodes.get(id).san)).toEqual(['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4', 'Nf6', 'O-O', 'Be7'])
+  })
+  it('commentCount counts the remarks', () => {
+    expect(commentCount(pgn)).toBe(3)
+    expect(commentCount('1. e4 e5')).toBe(0)
+  })
+})
+
+describe('matchGame (the reader\'s game of a chapter that is this database game)', () => {
+  const games = [['d4', 'Nf6'], ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4', 'Nf6'], ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4', 'Nf6', 'O-O']]
+  const sans = ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4', 'Nf6', 'O-O', 'Be7']
+  it('the longest shared opening of the moves, skipping games already taken', () => {
+    expect(matchGame(sans, games)).toBe(2)
+    expect(matchGame(sans, games, new Set([2]))).toBe(1)
+  })
+  it('null when no game shares enough moves', () => {
+    expect(matchGame(['c4', 'e5', 'Nc3'], games)).toBeNull()
+    expect(matchGame(sans, games, new Set([1, 2]))).toBeNull()
   })
 })

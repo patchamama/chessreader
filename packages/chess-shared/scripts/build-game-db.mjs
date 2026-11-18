@@ -9,6 +9,10 @@
 //   "file" defaults to text/<id>.txt and "epub" to epub/<id>.epub, next to the manifest.
 // Writes <out-dir>/games.sqlite, games.json (compact list for the browser),
 // books.json, covers/<book id>.<ext>, games/<book id>.json (PGN of each game).
+// Each game also keeps where the book has it — `chapter` (1-based, one per form
+// feed, as the reader opens the text) and `gameIndex` (its index among the games
+// the reader recognises in that chapter) — and `commented`: the game with the
+// book's remarks in braces and its variations, read from that chapter's text.
 // Book contents are third-party works: publish only to a private repository.
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -16,7 +20,7 @@ import { tmpdir } from 'node:os'
 import { extname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { recognizeGames, extractPlayers, treeToPgn, openingName, spanishToEnglish, parseGameHeader } from '../dist/index.js'
-import { coverHref, gameEnding, headingLines, readGameHeading } from './gameDbExtract.mjs'
+import { bookChapters, chapterProse, commentCount, commentedPgn, coverHref, gameEnding, headingLines, matchGame, readGameHeading } from './gameDbExtract.mjs'
 
 const [manifestPath, outDir] = process.argv.slice(2)
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
@@ -29,9 +33,9 @@ const db = new DatabaseSync(dbFile)
 db.exec('PRAGMA foreign_keys = OFF')
 db.exec(readFileSync(new URL('../../../apps/api/migrations/006_games_db.sql', import.meta.url), 'utf8'))
 // Columns added after the migration: the file is rebuilt from scratch every time.
-for (const col of ['place TEXT', 'date TEXT', 'white_elo INTEGER', 'black_elo INTEGER', 'termination TEXT']) db.exec(`ALTER TABLE db_games ADD COLUMN ${col}`)
+for (const col of ['place TEXT', 'date TEXT', 'white_elo INTEGER', 'black_elo INTEGER', 'termination TEXT', 'commented_pgn TEXT', 'chapter INTEGER', 'game_index INTEGER']) db.exec(`ALTER TABLE db_games ADD COLUMN ${col}`)
 const insBook = db.prepare('INSERT INTO db_books (id, title, author, lang, cover, games, period_from, period_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-const insGame = db.prepare('INSERT INTO db_games (id, book_id, white, black, year, event, opening, result, moves, pgn, place, date, white_elo, black_elo, termination) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+const insGame = db.prepare('INSERT INTO db_games (id, book_id, white, black, year, event, opening, result, moves, pgn, place, date, white_elo, black_elo, termination, commented_pgn, chapter, game_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
 
 /** The cover image of an EPUB: from its metadata (see coverHref), else the first image. */
 function extractCover(epub, bookId) {
@@ -66,43 +70,62 @@ function extractCover(epub, bookId) {
 const YEAR = /\b(1[5-9]\d\d|20[0-2]\d)\b/
 const books = []
 const compact = []
+let commented = 0
+let remarks = 0
 for (const entry of manifest) {
   const text = readFileSync(join(base, entry.file ?? `text/${entry.id}.txt`), 'utf8')
   const epub = entry.epub ?? join(base, 'epub', `${entry.id}.epub`)
   const games = []
   let n = 0
-  for (const chunk of text.split(/\f|\n(?=(?:Partida|Game|Partie)\s+\d+\s*\n)/)) {
-    const body = entry.lang === 'es' ? spanishToEnglish(chunk) : chunk
-    let found
-    try { found = recognizeGames(body, { algorithm: 1 }) } catch { continue }
-    let prevEnd = 0
-    for (const g of found) {
-      const main = g.tree.mainline.map((id) => g.tree.nodes.get(id))
-      // The game's span may run over the prose (and the next heading) after its last move.
-      const lastEnd = Math.max(...main.map((x) => x.charEnd ?? 0)) || g.charEnd
-      if (main.length < 20) { prevEnd = lastEnd; continue }
-      const first = main.find((x) => x.charStart !== undefined)?.charStart ?? g.charStart
-      const head = body.slice(Math.max(prevEnd, first - 600), first)
-      const lines = head.split('\n').map((l) => l.trim()).filter(Boolean)
-      const heading = readGameHeading(headingLines(head), parseGameHeader)
-      const players = heading?.white ? { white: heading.white, black: heading.black } : extractPlayers(head)
-      const year = heading?.year ?? (Number(lines.map((l) => YEAR.exec(l)?.[1]).filter(Boolean).pop() ?? 0) || null)
-      const tail = body.slice(lastEnd, lastEnd + 40)
-      const written = /^\W{0,3}(1-0|0-1|½-½|1\/2-1\/2)/.exec(tail)?.[1] ?? /1-0|0-1|½-½|1\/2-1\/2|tablas/i.exec(body.slice(g.charEnd, g.charEnd + 40))?.[0]
-      const sans = main.map((x) => x.san)
-      let { result, termination } = gameEnding(body.slice(lastEnd, lastEnd + 300), sans[sans.length - 1], written?.replace('1/2-1/2', '½-½').replace(/tablas/i, '½-½') ?? '*')
-      // A mate on the board: the side that moved last won.
-      if (result === '*' && sans[sans.length - 1]?.endsWith('#')) result = sans.length % 2 ? '1-0' : '0-1'
-      const opening = openingName(sans, 'en') ?? ''
-      const id = `${entry.id}-${++n}`
-      const pgn = treeToPgn(g.tree)
-      const moves = Math.ceil(sans.length / 2)
-      const extra = { place: heading?.place ?? null, event: heading?.event ?? null, date: heading?.date ?? null, whiteElo: heading?.whiteElo ?? null, blackElo: heading?.blackElo ?? null, termination }
-      prevEnd = lastEnd
-      games.push({ id, white: players.white, black: players.black, year, opening, result, moves, first: sans[0], ...extra, pgn })
-      insGame.run(id, entry.id, players.white, players.black, year, extra.event, opening, result, moves, pgn, extra.place, extra.date, extra.whiteElo, extra.blackElo, termination)
-      // New fields go at the end: readers of the older list keep working.
-      compact.push([id, entry.id, players.white, players.black, year, opening, result, moves, sans[0], extra.place, extra.event, extra.date, extra.whiteElo, extra.blackElo, termination])
+  for (const { chapter, text: piece } of bookChapters(text)) {
+    // The reader's games of this chapter (as chapterErrors recognises them), read once when a game needs them.
+    let readerGames = null
+    const prose = chapterProse(piece)
+    const taken = new Set()
+    const inBook = (sans) => {
+      if (chapter === null) return { gameIndex: null, commented: null }
+      if (!readerGames) { try { readerGames = recognizeGames(prose, { algorithm: 2 }) } catch { readerGames = [] } }
+      const i = matchGame(sans, readerGames.map((r) => r.tree.mainline.map((id) => r.tree.nodes.get(id).san)), taken)
+      if (i === null) return { gameIndex: null, commented: null }
+      taken.add(i)
+      return { gameIndex: i, commented: commentedPgn(readerGames[i].tree, prose) }
+    }
+    for (const chunk of piece.split(/\n(?=(?:Partida|Game|Partie)\s+\d+\s*\n)/)) {
+      const body = entry.lang === 'es' ? spanishToEnglish(chunk) : chunk
+      let found
+      try { found = recognizeGames(body, { algorithm: 1 }) } catch { continue }
+      let prevEnd = 0
+      for (const g of found) {
+        const main = g.tree.mainline.map((id) => g.tree.nodes.get(id))
+        // The game's span may run over the prose (and the next heading) after its last move.
+        const lastEnd = Math.max(...main.map((x) => x.charEnd ?? 0)) || g.charEnd
+        if (main.length < 20) { prevEnd = lastEnd; continue }
+        const first = main.find((x) => x.charStart !== undefined)?.charStart ?? g.charStart
+        const head = body.slice(Math.max(prevEnd, first - 600), first)
+        const lines = head.split('\n').map((l) => l.trim()).filter(Boolean)
+        const heading = readGameHeading(headingLines(head), parseGameHeader)
+        const players = heading?.white ? { white: heading.white, black: heading.black } : extractPlayers(head)
+        const year = heading?.year ?? (Number(lines.map((l) => YEAR.exec(l)?.[1]).filter(Boolean).pop() ?? 0) || null)
+        const tail = body.slice(lastEnd, lastEnd + 40)
+        const written = /^\W{0,3}(1-0|0-1|½-½|1\/2-1\/2)/.exec(tail)?.[1] ?? /1-0|0-1|½-½|1\/2-1\/2|tablas/i.exec(body.slice(g.charEnd, g.charEnd + 40))?.[0]
+        const sans = main.map((x) => x.san)
+        let { result, termination } = gameEnding(body.slice(lastEnd, lastEnd + 300), sans[sans.length - 1], written?.replace('1/2-1/2', '½-½').replace(/tablas/i, '½-½') ?? '*')
+        // A mate on the board: the side that moved last won.
+        if (result === '*' && sans[sans.length - 1]?.endsWith('#')) result = sans.length % 2 ? '1-0' : '0-1'
+        const opening = openingName(sans, 'en') ?? ''
+        const id = `${entry.id}-${++n}`
+        const pgn = treeToPgn(g.tree)
+        const ref = inBook(sans)
+        const notes = ref.commented ? commentCount(ref.commented) : 0
+        if (notes) { commented++; remarks += notes }
+        const moves = Math.ceil(sans.length / 2)
+        const extra = { place: heading?.place ?? null, event: heading?.event ?? null, date: heading?.date ?? null, whiteElo: heading?.whiteElo ?? null, blackElo: heading?.blackElo ?? null, termination }
+        prevEnd = lastEnd
+        games.push({ id, white: players.white, black: players.black, year, opening, result, moves, first: sans[0], ...extra, chapter, gameIndex: ref.gameIndex, pgn, commented: ref.commented })
+        insGame.run(id, entry.id, players.white, players.black, year, extra.event, opening, result, moves, pgn, extra.place, extra.date, extra.whiteElo, extra.blackElo, termination, ref.commented, chapter, ref.gameIndex)
+        // New fields go at the end: readers of the older list keep working.
+        compact.push([id, entry.id, players.white, players.black, year, opening, result, moves, sans[0], extra.place, extra.event, extra.date, extra.whiteElo, extra.blackElo, termination, chapter, ref.gameIndex])
+      }
     }
   }
   writeFileSync(join(outDir, 'games', `${entry.id}.json`), JSON.stringify(games))
@@ -119,6 +142,6 @@ for (const entry of manifest) {
   console.log(`${entry.title}: ${games.length} games${book.period ? `, ${book.period[0]}–${book.period[1]}` : ''}`)
 }
 writeFileSync(join(outDir, 'books.json'), JSON.stringify(books, null, 1))
-writeFileSync(join(outDir, 'games.json'), JSON.stringify({ fields: ['id', 'book', 'white', 'black', 'year', 'opening', 'result', 'moves', 'first', 'place', 'event', 'date', 'whiteElo', 'blackElo', 'termination'], games: compact }))
+writeFileSync(join(outDir, 'games.json'), JSON.stringify({ fields: ['id', 'book', 'white', 'black', 'year', 'opening', 'result', 'moves', 'first', 'place', 'event', 'date', 'whiteElo', 'blackElo', 'termination', 'chapter', 'gameIndex'], games: compact }))
 db.close()
-console.log(`${compact.length} games in ${books.length} books`)
+console.log(`${compact.length} games in ${books.length} books; ${commented} with the book's remarks (${commented ? (remarks / commented).toFixed(1) : 0} per game)`)

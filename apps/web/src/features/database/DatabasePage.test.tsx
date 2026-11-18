@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import DatabasePage from './DatabasePage'
 import * as res from './resources'
+import * as inBook from './openInBook'
+import * as busy from '../../shared/layout/busyStore'
+import { useExternalBookStore } from '../../shared/externalBook/externalBookStore'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 
 beforeEach(() => {
@@ -145,5 +148,71 @@ describe('Database: sortable players, game facts, statistics links and charts (S
     const img = card.querySelector('img')!
     expect(img.className).toContain('object-contain')
     expect(img.className).not.toContain('object-cover')
+  })
+})
+
+describe('Database: where each game comes from, the commented game and the book (S1, S2, S3)', () => {
+  const petrosian = { id: 'k3-1', white: 'T. Petrosian', black: 'B. Spassky', year: 1966, opening: "Queen's Gambit", result: '1-0', moves: 40, first: 'd4', chapter: 4, gameIndex: 2 }
+  beforeEach(() => {
+    vi.spyOn(res, 'loadGames').mockResolvedValue([
+      { ...petrosian, book: 'k3' },
+      { id: 'li-1', book: 'lichess', source: 'lichess', white: 'M. Carlsen', black: 'H. Nakamura', year: 2020, opening: 'Sicilian Defence', result: '½-½', moves: 30, first: 'e4' },
+    ])
+    vi.spyOn(res, 'loadBookGames').mockResolvedValue([{ ...petrosian, pgn: '1. d4 d5 1-0', commented: '1. d4 {Una apertura cerrada.} 1... d5 1-0' }])
+  })
+  const page = () => render(
+    <MemoryRouter>
+      <Routes>
+        <Route path="/" element={<DatabasePage />} />
+        <Route path="/read/:id" element={<p>Reader open</p>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const searchRow = async (players: RegExp) => {
+    fireEvent.click(screen.getByRole('tab', { name: 'Search' }))
+    return (await screen.findByText(players)).closest('li')!
+  }
+
+  it('S1: every game list shows the book it comes from, linking to its games, or Lichess', async () => {
+    page()
+    await screen.findByText('Mis geniales predecesores III')
+    const row = await searchRow(/T\. Petrosian – B\. Spassky/)
+    expect(row).toHaveTextContent('Mis geniales predecesores III')
+    const lichess = screen.getByText(/M\. Carlsen – H\. Nakamura/).closest('li')!
+    expect(lichess).toHaveTextContent('Lichess')
+    fireEvent.click(screen.getByRole('button', { name: 'Book: Mis geniales predecesores III' }))
+    expect(screen.getByRole('tab', { name: 'Books' })).toHaveAttribute('aria-selected', 'true')
+    const bookRow = (await screen.findByText(/T\. Petrosian – B\. Spassky/)).closest('li')!
+    expect(screen.getByText(/Mis geniales predecesores III — 1 games/)).toBeTruthy()
+    expect(bookRow).toHaveTextContent('Mis geniales predecesores III')
+    fireEvent.click(screen.getByRole('button', { name: '← Books' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Players' }))
+    fireEvent.click(await screen.findByText('Petrosian', { selector: 'td' }))
+    const near = (await screen.findByText(/Petrosian – Spassky · 1966 · 97.4%/)).closest('li')!
+    expect(near).toHaveTextContent('Mis geniales predecesores III')
+  })
+
+  it('S2 S3: Open shows the game with the book\'s remarks, with a spinner while it opens', async () => {
+    const spy = vi.spyOn(busy, 'withBusy')
+    page()
+    await screen.findByText('Mis geniales predecesores III')
+    await searchRow(/T\. Petrosian – B\. Spassky/)
+    fireEvent.click(screen.getByRole('button', { name: 'Open T. Petrosian – B. Spassky' }))
+    await screen.findByText('Reader open')
+    expect(spy).toHaveBeenCalledWith('Opening the commented game', expect.any(Function))
+    expect(useExternalBookStore.getState().chapters[0].html).toContain('Una apertura cerrada.')
+  })
+
+  it('S2 S3: Open in the book opens the book at its chapter and game, with a spinner', async () => {
+    const spy = vi.spyOn(busy, 'withBusy')
+    const open = vi.spyOn(inBook, 'openGameInBook').mockResolvedValue('/read/7')
+    page()
+    await screen.findByText('Mis geniales predecesores III')
+    await searchRow(/T\. Petrosian – B\. Spassky/)
+    expect(screen.queryByRole('button', { name: 'Open M. Carlsen – H. Nakamura in the book' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Open T. Petrosian – B. Spassky in the book' }))
+    await screen.findByText('Reader open')
+    expect(spy).toHaveBeenCalledWith('Opening the book', expect.any(Function))
+    expect(open).toHaveBeenCalledWith(expect.objectContaining({ id: 'k3', title: 'Mis geniales predecesores III' }), { chapter: 4, gameIndex: 2 })
   })
 })

@@ -116,3 +116,129 @@ export function coverHref(opf, read) {
   const first = items.find((it) => it.href && isImage(it))
   return first ? clean(first.href) : null
 }
+
+// ── the game as the book wrote it: chapter, reader's game and remarks ────────
+
+/**
+ * A book text split into the reader's chapters (repoBooks.textBookChapters):
+ * one per form feed, empty pieces skipped. `chapter` is the 1-based number the
+ * reader uses (null for an empty piece); `text` is the piece untouched.
+ */
+export function bookChapters(text) {
+  let n = 0
+  return text.split('\f').map((piece) => ({ chapter: piece.replace(/\r/g, '').trim() ? ++n : null, text: piece }))
+}
+
+/**
+ * The text the reader recognises in a chapter of a book text: textToChapters
+ * makes one paragraph per line and htmlToProseText reads each paragraph as a
+ * line with its whitespace collapsed. Game indexes computed on it are the
+ * reader's (chapterErrors).
+ */
+export function chapterProse(piece) {
+  return piece.replace(/\r/g, '').split(/\n+/).map((p) => p.trim()).filter(Boolean).map((p) => p.replace(/\s+/g, ' ')).join('\n')
+}
+
+/** Engine evaluations and diagram marks of the resources text: not the author's words. */
+const NOT_REMARK = [/Stockfish\s*\d*\s*eval:\s*\[[^\]]*\]/gi, /￼/g]
+/** What may sit between a move and its remark, or between a remark and the next move: marks, brackets, move numbers. */
+const LEAD = /^[\s!?)\],;.:]+/
+const TRAIL = /(?:(?:^|[\s(])\d{1,3}\s*(?:\.{1,3}|…)?|[\s([]+)$/
+
+/** The author's words between two moves, ready to go in braces (empty when there are none). */
+function remark(raw) {
+  let s = raw
+  for (const re of NOT_REMARK) s = s.replace(re, ' ')
+  s = s.replace(/\s+/g, ' ').replace(/[{}]/g, (c) => (c === '{' ? '(' : ')'))
+  for (let prev = ''; prev !== s;) { prev = s; s = s.replace(LEAD, '').replace(TRAIL, '') }
+  s = balanced(s).replace(/\s+/g, ' ')
+  for (let prev = ''; prev !== s;) { prev = s; s = s.replace(LEAD, '').replace(TRAIL, '') }
+  return /[A-Za-zÀ-ÿ]{2}/.test(s) ? s.trim() : ''
+}
+
+/**
+ * Text without its unmatched parentheses: the "(" that opens the variation a
+ * remark introduces, the ")" that closes the one it ends. Left in a remark,
+ * they would open or close a variation for whoever reads the PGN.
+ */
+function balanced(s) {
+  const drop = new Set()
+  const open = []
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '(') open.push(i)
+    else if (s[i] === ')') { if (open.length) open.pop(); else drop.add(i) }
+  }
+  for (const i of open) drop.add(i)
+  return [...s].filter((_, i) => !drop.has(i)).join('')
+}
+
+/**
+ * A recognised game as PGN movetext with the book's remarks: the prose written
+ * after each move (main line or variation) goes in braces after it, the
+ * variations in parentheses. Same walk as chess-shared's treeToPgn, which
+ * prints the moves only. Moves are in English SAN with the marks the book
+ * gave them ("a6!?").
+ */
+export function commentedPgn(tree, text) {
+  const written = [...tree.nodes.values()].filter((n) => n.charStart !== undefined && n.charEnd !== undefined).sort((a, b) => a.charStart - b.charStart)
+  const after = new Map()
+  // The prose after the last move runs into whatever follows the game: left out.
+  for (let i = 0; i + 1 < written.length; i++) {
+    const r = remark(text.slice(written[i].charEnd, written[i + 1].charStart))
+    if (r) after.set(written[i].id, r)
+  }
+  const tokens = []
+  const emitted = new Set()
+  const move = (node) => node.san + (/(?:!!|\?\?|!\?|\?!|!|\?)$/.exec(node.rawSan ?? '')?.[0] ?? '')
+  const emitLine = (ids, startsLine) => {
+    if (emitted.has(ids)) return
+    emitted.add(ids)
+    let needNumber = startsLine
+    ids.forEach((id, i) => {
+      const node = tree.nodes.get(id)
+      if (!node) return
+      const number = node.color === 'white' ? `${node.moveNumber}. ` : needNumber || i === 0 ? `${node.moveNumber}... ` : ''
+      tokens.push(number + move(node))
+      needNumber = false
+      if (after.has(id)) { tokens.push(`{${after.get(id)}}`); needNumber = true }
+      const alts = (tree.variations.get(node.parentId ?? 'root') ?? []).filter((l) => l.length > 0 && l !== ids && !emitted.has(l) && l[0] !== id)
+      const subs = i === ids.length - 1 ? (tree.variations.get(id) ?? []).filter((l) => l.length > 0 && l !== ids && !emitted.has(l)) : []
+      for (const line of [...alts, ...subs]) {
+        if (emitted.has(line)) continue
+        const before = tokens.length
+        tokens.push('(')
+        emitLine(line, true)
+        if (tokens.length === before + 1) tokens.pop()
+        else { tokens.push(')'); needNumber = true }
+      }
+    })
+  }
+  emitLine(tree.mainline, true)
+  let out = ''
+  for (const t of tokens) {
+    if (t === ')') out = out.replace(/\s+$/, '') + ')'
+    else out += (out && !out.endsWith('(') ? ' ' : '') + t
+  }
+  return out.trim()
+}
+
+/** The number of remarks ({…}) of a PGN. */
+export const commentCount = (pgn) => (pgn.match(/\{[^}]*\}/g) ?? []).length
+
+/**
+ * Which of a chapter's recognised games (their main-line SAN) is this
+ * database game: the one sharing the longest opening of moves (at least six,
+ * or the whole game when shorter), skipping the indexes in `taken`. Null when
+ * none shares enough.
+ */
+export function matchGame(sans, games, taken = new Set()) {
+  let best = null
+  let bestLen = 0
+  games.forEach((g, i) => {
+    if (taken.has(i)) return
+    let k = 0
+    while (k < sans.length && k < g.length && sans[k] === g[k]) k++
+    if (k > bestLen) { best = i; bestLen = k }
+  })
+  return bestLen >= Math.min(6, sans.length) && bestLen > 0 ? best : null
+}

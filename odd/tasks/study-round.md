@@ -20,7 +20,7 @@ Objective: commented games in the database with book references, interactive lin
 - These elements live inside `data-no-recognition` blocks (they are not the game's moves).
 
 ## Tasks
-- [ ] T1 S1 S2 database: commented games, book reference, chapter/game, open in book — delegated U1
+- [x] T1 S1 S2 database: commented games, book reference, chapter/game, open in book — delegated U1
 - [x] T2 S9 S5(producer) commentary generator format + line markup in generated text, human comments and evaluations — delegated U2
 - [x] T3 S5(consumer) S6 S7 S10 reader: line thumbnails/replay/narration, end marker bug, square-highlight hover thumbnails, layout switch — delegated U3
 - [x] T4 S4 analysis boards panel, comment source opening (new tab or new board), narration on the analysis board — delegated U4

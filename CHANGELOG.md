@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.106.0 — 2026-11-18
+
+- feat: the game database keeps each game with the book's comments and variations, and its chapter and game in the book; game lists show the source book (or Lichess); "Open in the book" opens the book at that game; spinner while opening
+
 ## v0.105.1 — 2026-11-18
 
 - fix: regenerated commentary is written with the chapter's piece letters, so the whole game is read again and its moves stay highlighted after the commentary
