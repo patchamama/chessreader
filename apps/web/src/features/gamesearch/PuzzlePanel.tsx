@@ -3,6 +3,8 @@ import { loadPatternIndex, patternPuzzle, type PatternTheme } from './patterns'
 import ChessBoard from '../../shared/chess/ChessBoard'
 import { LinePlayer } from '../../shared/chess/LinePlayer'
 import { InfoSection } from '../../shared/info/InfoSection'
+import { OpenInStudy } from './OpenInStudy'
+import { lichessGamePgn } from './sources'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { lichessDailyPuzzle, lichessNextPuzzle, puzzleMove, puzzlePosition, type Puzzle } from './puzzles'
 
@@ -127,6 +129,9 @@ export function PuzzlePanel({ initialTheme }: { initialTheme?: string } = {}) {
             <a className="text-xs text-blue-700 underline" href={puzzle.game.url} target="_blank" rel="noreferrer">
               {puzzle.game.white} – {puzzle.game.black}{puzzle.game.perf ? ` (${puzzle.game.perf})` : ''}
             </a>
+            {puzzle.game.id && (
+              <OpenInStudy title={`${puzzle.game.white} – ${puzzle.game.black}`} load={() => lichessGamePgn(puzzle.game.id)} />
+            )}
             <div>
               <button className={plain} onClick={() => setShowSolution(true)}>Show the solution</button>
             </div>

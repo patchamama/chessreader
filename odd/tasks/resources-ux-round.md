@@ -17,7 +17,7 @@ Objective: fix resources access in the deployed app and the UX items of the 2026
 - [x] T2 S9 example books always shown, dismiss per example, reset in Settings — inline
 - [x] T3 S8 layout toggle visible on the study board — inline
 - [x] T4 S4 my games: only years/months with games, counts, flat list option — inline
-- [ ] T5 S7 open Lichess games in the study reader — inline
+- [x] T5 S7 open Lichess games in the study reader — inline
 - [x] T6 S5 thumbnails + replay player in notation answers — inline
 - [x] T7 S6 collapsible educational info per section (patterns, moves; Wikipedia/blog links), per language — inline
 

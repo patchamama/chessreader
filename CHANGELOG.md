@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.96.0 — 2026-11-18
+
+- feat: Lichess games open in the study too — the game of a puzzle, Lichess tournaments, and the game played in Play
+
 ## v0.95.0 — 2026-11-18
 
 - feat: answers in notation (puzzle and problem solutions, traps, Play ideas) with move thumbnails and a replay board; collapsible "About this…" sections that explain patterns, traps and openings in the selected language, with Wikipedia and Lichess links

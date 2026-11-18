@@ -17,6 +17,15 @@ import { lichessThemes, playIdeas } from './playIdeas'
 import { loadTraps, trapsAt, type Trap } from '../training/traps'
 import { LinePlayer } from '../../shared/chess/LinePlayer'
 import { InfoSection } from '../../shared/info/InfoSection'
+import { OpenInStudy } from '../gamesearch/OpenInStudy'
+
+/** The game played so far as PGN, with the players' names. */
+function gamePgn(sans: string[], players: { white: { name: string }; black: { name: string } } | null): string {
+  const chess = new Chess()
+  for (const san of sans) { try { chess.move(san) } catch { break } }
+  if (players) { chess.setHeader('White', players.white.name); chess.setHeader('Black', players.black.name) }
+  return chess.pgn()
+}
 
 const TEXT = {
   en: {
@@ -216,6 +225,9 @@ export default function PlayPage() {
           <a className="mt-1 block text-xs text-blue-700 underline" href={p.gameInfo.url} target="_blank" rel="noreferrer">
             Lichess: {p.gameInfo.speed} · {p.gameInfo.rated ? t.rated : t.casual}
           </a>
+        )}
+        {p.sans.length > 0 && (
+          <OpenInStudy title={p.players ? `${p.players.white.name} – ${p.players.black.name}` : 'Game'} load={() => Promise.resolve(gamePgn(p.sans, p.players))} />
         )}
         {settings.playMoveStatus && j && (
           <p data-testid="move-status" className="mt-2 flex items-center gap-2 text-sm">

@@ -5,6 +5,7 @@ import {
   chessComArchives,
   chessComGames,
   lichessBroadcasts,
+  lichessBroadcastPgn,
   lichessMasterPgn,
   lichessMastersByOpening,
   lichessStudiesBy,
@@ -420,7 +421,15 @@ export default function GameSearchPage() {
                 {broadcasts.map((b) => (
                   <li key={b.id} className={row}>
                     <span>{b.name}</span>
-                    <a className={openBtn} href={b.url} target="_blank" rel="noreferrer">View on Lichess</a>
+                    <a className={`${openBtn} ml-auto`} href={b.url} target="_blank" rel="noreferrer" aria-label={`${b.name} on Lichess`}>Lichess ↗</a>
+                    <button
+                      className={openBtn}
+                      disabled={busy}
+                      aria-label={`Open ${b.name} in the study`}
+                      onClick={() => void run(() => lichessBroadcastPgn(b.id)).then((pgn) => pgn && read(b.name, pgn))}
+                    >
+                      Open
+                    </button>
                   </li>
                 ))}
               </ul>

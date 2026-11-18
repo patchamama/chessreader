@@ -96,6 +96,16 @@ export async function lichessStudyPgn(id: string): Promise<string> {
   return cachedPgn(`study:${id}`, () => get(`https://lichess.org/api/study/${encodeURIComponent(id)}.pgn?clocks=false`))
 }
 
+/** One Lichess game as PGN (e.g. the game a puzzle comes from), to open it in the study. */
+export async function lichessGamePgn(id: string): Promise<string> {
+  return cachedPgn(`game:${id}`, () => get(`https://lichess.org/game/export/${encodeURIComponent(id)}?clocks=false&evals=false`))
+}
+
+/** Every game of a Lichess broadcast (tournament) as PGN. */
+export async function lichessBroadcastPgn(id: string): Promise<string> {
+  return cachedPgn(`broadcast:${id}`, () => get(`https://lichess.org/api/broadcast/${encodeURIComponent(id)}.pgn`))
+}
+
 export interface Opening {
   id: string
   name: string
