@@ -6,6 +6,7 @@ import { isLocalhostHost } from '../shared/env/devMode'
 import { useSettingsStore, FONT_FAMILIES } from '../shared/settings/settingsStore'
 import SettingsPanel from '../shared/settings/SettingsPanel'
 import { StatusFooter } from '../shared/layout/StatusFooter'
+import { BusyOverlay } from '../shared/layout/BusyOverlay'
 import { pageWidthClass } from '../shared/layout/pageWidth'
 import { NotesPanel } from '../shared/notes/NotesPanel'
 import { countPending, useNotesStore } from '../shared/notes/notesStore'
@@ -139,6 +140,7 @@ export default function AppLayout() {
         <Outlet />
       </main>
 
+      <BusyOverlay />
       <StatusFooter />
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
       {showNotes && <NotesPanel onClose={() => setShowNotes(false)} />}
