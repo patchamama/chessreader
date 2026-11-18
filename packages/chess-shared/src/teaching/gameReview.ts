@@ -1238,7 +1238,7 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
     const white = p.color === 'white';
     const glyph = m.quality ? GLYPH[m.quality] : '';
     const number = white ? `${p.moveNumber}. ` : needNumber ? `${p.moveNumber}... ` : '';
-    const move = `${number}${local(p.san.replace(/[!?]+$/, ''))}${glyph}`;
+    let move = `${number}${local(p.san.replace(/[!?]+$/, ''))}${glyph}`;
     needNumber = false;
 
     const remarks: string[] = [];
@@ -1298,12 +1298,16 @@ export function annotateGame(plies: PlyInput[], review: GameReview, options: Ann
       if (diagram) { out.push(`\n${diagram}\n`); needNumber = true; }
       return;
     }
-    line.push(move);
     const commented = remarks.length > 0 || !!variation || !!diagram || !!human;
-    // 'split': the line of moves breaks after a commented move. 'paragraphs':
-    // move by move — it also breaks after every Black move, so each full move
-    // (or a lone Black move after a remark) stands on its own line.
-    if (commented || (layout === 'paragraphs' && !white)) {
+    // 'paragraphs': a commented move starts its own line (the quiet moves before
+    // it stay together on theirs), and its remark follows on the next line.
+    // 'split': the line of moves just breaks after a commented move.
+    if (layout === 'paragraphs' && commented && line.length) {
+      flush();
+      if (!white && !move.startsWith(`${p.moveNumber}...`)) move = `${p.moveNumber}... ${move}`;
+    }
+    line.push(move);
+    if (commented) {
       flush();
       if (remarks.length) out.push(remarks.join(' '));
       if (human) out.push(human);

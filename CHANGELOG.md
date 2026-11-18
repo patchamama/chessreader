@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.106.3 — 2026-11-18
+
+- fix: in generated commentary ("Párrafo tras las jugadas") moves without a remark in a row stay on one line; only a commented move starts a new line, with its remark below
+
 ## v0.106.2 — 2026-11-18
 
 - chore: remove the setting "A square named in the text is shown on Main board / Hover thumbnail" (always a hover thumbnail now; click shows it on the board)

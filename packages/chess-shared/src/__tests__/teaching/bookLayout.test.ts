@@ -164,8 +164,16 @@ describe('"Párrafo tras las jugadas" on the reported game (S9)', () => {
     expect(at).toBeGreaterThan(0)
     expect(lines[at + 1]).toMatch(/^Error/)
     expect(lines.some((l) => /^\(2\.\.\. Cf6 3\. Cxe5/.test(l))).toBe(true)
-    // No line of moves holds more than one move number.
-    for (const l of lines.filter((x) => /^\d+\.(\.\.)? /.test(x))) expect(l.match(/\d+\./g)!.length).toBe(1)
+    // A commented move ends its line of moves: its remark follows on the next line.
+    expect(lines[at - 1]).not.toMatch(/^2\. Cf3$/)
+  })
+
+  it('moves without a remark in a row stay together on one line ("5. Axf7+ Re7 6. Te1 Df4 …")', () => {
+    const quiet = annotateGame(reported, reviewGame(reported), { level: 2, lang: 'es', layout: 'paragraphs' }).split('\n')
+    const isMoves = (l: string) => /^\d+\.(\.\.)? \S/.test(l) && !/[a-záéíóúñ]{4,}/i.test(l.replace(/\b(?:O-O(?:-O)?)\b/g, ''))
+    // A quiet run is one line; only a commented move starts a new one: never three lines of bare moves in a row.
+    for (let i = 2; i < quiet.length; i++) expect(isMoves(quiet[i - 2]) && isMoves(quiet[i - 1]) && isMoves(quiet[i]), quiet.slice(i - 2, i + 1).join(' / ')).toBe(false)
+    expect(quiet.some((l) => isMoves(l) && l.match(/\d+\./g)!.length > 1)).toBe(true)
   })
 
   it('reads back as ONE game with the whole mainline: the remarks are not moves', () => {
