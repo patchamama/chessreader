@@ -37,9 +37,40 @@ export function getText(path: string): Promise<string> {
   return getResource(path).then((r) => r.text())
 }
 
+/**
+ * The base URL to read files from: a github.com repository URL (what people
+ * copy from the browser) becomes its contents API URL — github.com itself does
+ * not allow reading from another site.
+ */
+export function resourcesApiUrl(url: string): string {
+  const u = url.trim().replace(/\/+$/, '')
+  const gh = /^https:\/\/(?:www\.)?github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/.*)?$/.exec(u)
+  return gh ? `https://api.github.com/repos/${gh[1]}/${gh[2]}/contents` : u
+}
+
+/** Whether the static database can be read: a URL, and a token when it is on GitHub (the repository is private). */
+export function resourcesConfigured(): boolean {
+  const { commentDbUrl, commentDbToken } = useSettingsStore.getState()
+  if (!commentDbUrl.trim()) return false
+  return !/^https:\/\/(?:api\.|www\.)?github\.com\//.test(resourcesApiUrl(commentDbUrl)) || !!commentDbToken
+}
+
+/** Try the URL and token of Settings: the books of the repository, or why it cannot be read. */
+export async function checkResources(): Promise<{ ok: boolean; message: string }> {
+  try {
+    const books = await getJson<unknown[]>('books/manifest.json')
+    return { ok: true, message: `✓ ${Array.isArray(books) ? books.length : 0} books` }
+  } catch (e) {
+    const m = (e as Error).message
+    if (m === '401' || m === '403') return { ok: false, message: `The token was rejected (${m}): check it or create a new one.` }
+    if (m === '404') return { ok: false, message: 'Repository not found (404): check the URL, and that the token can read this repository.' }
+    return { ok: false, message: `Could not reach the repository: ${m}` }
+  }
+}
+
 function getResource(path: string): Promise<Response> {
   const { commentDbUrl, commentDbToken } = useSettingsStore.getState()
-  const url = `${commentDbUrl.replace(/\/+$/, '')}/${path}`
+  const url = `${resourcesApiUrl(commentDbUrl)}/${path}`
   const headers: Record<string, string> = {}
   let host = ''
   try { const u = new URL(url); host = u.protocol === 'https:' ? u.hostname : '' } catch { /* not a URL */ }
@@ -65,7 +96,7 @@ export async function lookupPositionComments(fen: string): Promise<HumanComment[
       // no database on the server: try the static one
     }
   }
-  if (!useSettingsStore.getState().commentDbUrl) return []
+  if (!resourcesConfigured()) return []
   try {
     index ??= getJson<Index>('index.json')
     const prefix = hash.slice(0, 2)
@@ -84,7 +115,7 @@ export async function lookupPositionComments(fen: string): Promise<HumanComment[
 
 /** Whether any commentary database can be asked (a server session, or a static database in Settings). */
 export function hasCommentSource(): boolean {
-  return (!isDemoHost() && !!useAuthStore.getState().token) || !!useSettingsStore.getState().commentDbUrl
+  return (!isDemoHost() && !!useAuthStore.getState().token) || resourcesConfigured()
 }
 
 /** "Kasparov, Mis geniales predecesores III, Partida 7": quiet, but says where it comes from. */

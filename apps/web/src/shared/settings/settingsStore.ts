@@ -2,6 +2,9 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 // Board color themes
+/** The private resources repository (books, commentary and game databases); readable with a GitHub token. */
+export const DEFAULT_RESOURCES_URL = 'https://github.com/patchamama/chessreader-resources'
+
 export type BoardTheme =
   | 'classic'   // brown / beige
   | 'blue'      // steel blue
@@ -287,7 +290,7 @@ const DEFAULT: AppSettings = {
   chessComUser: '',
   pageWidth: 'normal',
   statusFooter: true,
-  commentDbUrl: '',
+  commentDbUrl: DEFAULT_RESOURCES_URL,
   commentDbToken: '',
   humanComments: true,
   diagramEvalShow: true,
@@ -352,6 +355,8 @@ export function mergeWithDefaults(
  */
 export function migrateSettings(persisted: unknown, version: number): Partial<SettingsStore> {
   const s = { ...(persisted as Partial<SettingsStore> | undefined) }
+  // Version 3: the private resources repository is the default source.
+  if (version < 3 && !s.commentDbUrl) s.commentDbUrl = DEFAULT_RESOURCES_URL
   if (version < 1) Object.assign(s, { commentLayout: 'split', commentDiagrams: true, commentDiagramEval: true })
   if (version < 2) {
     // The legacy recogniser (3) is retired: read with variations instead.
@@ -378,7 +383,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'chessreader-settings',
-      version: 2,
+      version: 3,
       migrate: (persisted, version) => migrateSettings(persisted, version) as SettingsStore,
       merge: (persisted, current) => mergeWithDefaults(current as SettingsStore, persisted),
     },

@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { VoiceSettings } from './VoiceSettings'
 import { LICHESS_TOKEN_URL } from '../lichess/tokenUrl'
 import { lichessAccount } from '../../features/gamesearch/myGames'
-import { APP_LANGUAGES, type AppLanguage } from './settingsStore'
+import { APP_LANGUAGES, DEFAULT_RESOURCES_URL, type AppLanguage } from './settingsStore'
+import { checkResources } from '../../features/library/commentdb/commentLookup'
 import { useSettingsStore, BOARD_THEMES, FONT_FAMILIES, STOCKFISH_VERSIONS, APP_THEME_PRESETS, PIECE_THEMES, type BoardTheme, type FontFamily, type EvalBarDirection, type StockfishVersion, type EngineSource,
   type ImageAlign, type HeadingStyle, type EngineVariations, type AppTheme, type PieceTheme } from './settingsStore'
 
@@ -52,6 +53,18 @@ function LichessAccountCheck({ token }: { token: string }) {
     <p className="mt-1 text-[11px] text-gray-300">
       <button className="underline" onClick={() => { setState('…'); lichessAccount(token).then((a) => setState(`✓ ${a.username}`), (e: Error) => setState(e.message)) }}>Check the token</button>
       {state && <span className="ml-2">{state}</span>}
+    </p>
+  )
+}
+
+/** Try the resources repository with the URL and token of Settings. */
+function ResourcesCheck({ url, token }: { url: string; token: string }) {
+  const [state, setState] = useState<{ ok: boolean; message: string } | null>(null)
+  if (!url) return null
+  return (
+    <p className="text-[11px] text-gray-300">
+      <button className="underline" onClick={() => { setState({ ok: true, message: '…' }); void checkResources().then(setState) }}>Check the repository{token ? ' and the token' : ''}</button>
+      {state && <span role="status" className={`ml-2 ${state.ok ? 'text-green-300' : 'text-red-300'}`}>{state.message}</span>}
     </p>
   )
 }
@@ -398,7 +411,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
             />
             <input
               aria-label="Commentary database URL"
-              placeholder="https://api.github.com/repos/<owner>/<repo>/contents"
+              placeholder={DEFAULT_RESOURCES_URL}
               value={s.commentDbUrl}
               onChange={(e) => s.set({ commentDbUrl: e.target.value.trim() })}
               className={inputClass}
@@ -412,7 +425,11 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               onChange={(e) => s.set({ commentDbToken: e.target.value.trim() })}
               className={inputClass}
             />
-            <p className="text-[10px] text-gray-400">With a server the database is read there; the token stays in this browser and is sent only to GitHub.</p>
+            <ResourcesCheck url={s.commentDbUrl} token={s.commentDbToken} />
+            {s.commentDbUrl !== DEFAULT_RESOURCES_URL && (
+              <button className="self-start text-[11px] text-gray-300 underline" onClick={() => s.set({ commentDbUrl: DEFAULT_RESOURCES_URL })}>Use the default repository</button>
+            )}
+            <p className="text-[10px] text-gray-400">A GitHub repository URL or any URL that serves its files. With a server the database is read there; the token stays in this browser and is sent only to GitHub.</p>
           </div>
         </div>
 

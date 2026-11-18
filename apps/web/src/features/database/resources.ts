@@ -1,8 +1,7 @@
 import { httpClient } from '../../shared/api/httpClient'
 import { isDemoHost } from '../../shared/env/devMode'
-import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { useAuthStore } from '../auth/store/authStore'
-import { getJson } from '../library/commentdb/commentLookup'
+import { getJson, resourcesConfigured } from '../library/commentdb/commentLookup'
 
 /** A book of the private resources: cover, games, most frequent players, period of most games. */
 export interface DbBook {
@@ -18,7 +17,7 @@ export interface PlayerRating {
 
 /** Whether the private resources can be read: a server session, or the resources repository set in Settings. */
 export function hasResources(): boolean {
-  return (!isDemoHost() && !!useAuthStore.getState().token) || !!useSettingsStore.getState().commentDbUrl
+  return (!isDemoHost() && !!useAuthStore.getState().token) || resourcesConfigured()
 }
 
 /** A JSON file of the resources: from the server (storage/resources) or the private repository. */

@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.92.0 — 2026-11-18
+
+- fix: resources repository URL defaults to github.com/patchamama/chessreader-resources and accepts github.com URLs (read through the contents API: fixes "Failed to fetch"); Settings checks the URL and token
+
 ## v0.91.0 — 2026-11-18
 
 - feat: errors page in the deployed app reads every book of the private resources repository (GitHub token in Settings) and opens its games in the reader
