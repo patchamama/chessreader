@@ -132,4 +132,10 @@ return function (App $app): void {
     $app->group('/api/library', function (RouteCollectorProxy $group) {
         $group->put('/books/{id:[0-9]+}/config', [BookConfigController::class, 'save']);
     })->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
+
+    // Errata: corrected main lines of book games (require JWT + Approved)
+    $app->group('/api/errata', function (RouteCollectorProxy $group) {
+        $group->get('', [\App\Presentation\Errata\ErrataController::class, 'list']);
+        $group->post('', [\App\Presentation\Errata\ErrataController::class, 'save']);
+    })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
 };

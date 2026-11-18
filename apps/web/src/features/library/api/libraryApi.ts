@@ -1,6 +1,9 @@
+import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
 import { httpClient } from '../../../shared/api/httpClient'
+import { withChapterErrata, type ChapterErrata } from '../errata/chapterErrata'
+import { useErrataContext } from '../errata/errataContext'
 
 export interface Book {
   id: number
@@ -19,6 +22,8 @@ export interface Chapter {
   title: string
   html: string
   toc: ChapterTocEntry[]
+  /** The errata of this book and chapter written into `html` (added by useChapter). */
+  errata?: ChapterErrata
 }
 
 export function useBooks() {
@@ -30,16 +35,48 @@ export function useBooks() {
 
 export function useChapter(bookId: number, chapterOrder: number) {
   // The external book (games opened from the game search) is served from
-  // memory; every other book comes from the API.
+  // memory; every other book comes from the API, with the errata of the book
+  // and chapter (server, else the resources repository) applied to its text.
   const external = useExternalBookStore((s) => (bookId === EXTERNAL_BOOK_ID ? s : null))
-  return useQuery<Chapter>({
+  const queryClient = useQueryClient()
+  const query = useQuery<Chapter>({
     queryKey: ['library', 'chapter', bookId, chapterOrder, external?.version ?? 0],
-    queryFn: () => {
-      if (!external) return httpClient<Chapter>(`/api/library/books/${bookId}/chapters/${chapterOrder}`)
-      const chapter = external.chapters[chapterOrder - 1]
-      return chapter ? Promise.resolve(chapter) : Promise.reject(new Error('Chapter not found'))
+    queryFn: async () => {
+      if (external) {
+        const chapter = external.chapters[chapterOrder - 1]
+        return chapter ? chapter : Promise.reject(new Error('Chapter not found'))
+      }
+      const chapter = await httpClient<Chapter>(`/api/library/books/${bookId}/chapters/${chapterOrder}`)
+      const title = await bookTitle(queryClient, bookId)
+      const { html, errata } = await withChapterErrata(chapter.html, title, chapterOrder)
+      return { ...chapter, html, errata }
     },
   })
+  const setErrataContext = useErrataContext((s) => s.set)
+  const errata = query.data?.errata
+  const externalTitle = external?.title ?? null
+  useEffect(() => {
+    setErrataContext({
+      bookId, chapter: chapterOrder,
+      bookTitle: errata?.bookTitle ?? externalTitle,
+      applied: errata?.applied ?? [],
+    })
+  }, [setErrataContext, bookId, chapterOrder, errata, externalTitle])
+  return query
+}
+
+/** The title of a book (errata are filed by it), from the cached book list; null when unknown. */
+async function bookTitle(queryClient: ReturnType<typeof useQueryClient>, bookId: number): Promise<string | null> {
+  try {
+    const books = await queryClient.fetchQuery<Book[]>({
+      queryKey: ['library', 'books'],
+      queryFn: () => httpClient<Book[]>('/api/library/books'),
+      staleTime: 60_000,
+    })
+    return books.find((b) => b.id === bookId)?.title ?? null
+  } catch {
+    return null
+  }
 }
 
 export interface UploadInput {

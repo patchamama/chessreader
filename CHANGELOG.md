@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.108.0 — 2026-11-18
+
+- feat: errata — corrected main-line moves of book games are saved (server storage/errata or the resources repo errata/) and applied when the chapter loads, with the printed move struck through in brackets; corrections from the engine, manual edits or a Lichess masters reference are filed as errata
+
 ## v0.107.0 — 2026-11-18
 
 - feat: comment one game again in place (main line only, with the panel's options) and restore the book's text with the same button; show/hide the book comments in the text (picking among several remarks at random when shown again); reading width control in the reader bar

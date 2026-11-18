@@ -515,4 +515,13 @@ return [
     DiagramController::class => function (ContainerInterface $c) {
         return new DiagramController($c->get(RegenerateDiagramHandler::class));
     },
+
+    \App\Application\Errata\ErrataRepository::class => function (ContainerInterface $c) {
+        $storageDir = $c->get('settings')['storage_dir'] ?? dirname(__DIR__) . '/storage';
+        return new \App\Infrastructure\Errata\FilesystemErrataRepository($storageDir . '/errata');
+    },
+
+    \App\Presentation\Errata\ErrataController::class => function (ContainerInterface $c) {
+        return new \App\Presentation\Errata\ErrataController($c->get(\App\Application\Errata\ErrataRepository::class));
+    },
 ];

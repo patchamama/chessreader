@@ -1,6 +1,7 @@
 import { Chess } from 'chess.js'
 import { figurineToAscii, sanSimilarity, spanishToEnglish, tokenize } from '@chess-ebook/chess-shared'
 import type { RecognizedGame } from '@chess-ebook/chess-shared'
+import type { ErrataSource } from '../errata/errataFormat'
 
 /**
  * Correction workbench: the moves of a game as an editable list. When the
@@ -17,6 +18,10 @@ export interface EditableMove {
   /** Set when the reader replaced the written move by a repair, with the move it proposes. */
   repaired?: boolean
   suggestion?: string
+  /** Where a changed move comes from (an errata entry records it): typed, the reader's/legal-move proposal, or an online game. */
+  origin?: ErrataSource
+  /** The online game (or note) the change comes from. */
+  evidence?: string
 }
 
 const START = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
