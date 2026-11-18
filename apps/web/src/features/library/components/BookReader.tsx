@@ -1,4 +1,6 @@
 import { useMemo, useEffect, useLayoutEffect, useState, useCallback, useRef, memo, forwardRef } from 'react'
+import { diagramFenOf } from '../utils/diagramFiles'
+import { DiagramToolsPanel } from './DiagramToolsPanel'
 import { formatChapterTitle, prepareChapterHtml } from '../utils/epubContent'
 import { useParams } from 'react-router-dom'
 import { useChapter, useTouchBook } from '../api/libraryApi'
@@ -676,7 +678,8 @@ export default function BookReader() {
       const offset = range.toString().length
 
       // A diagram written by the commentary carries its position.
-      const fen = img.getAttribute('data-fen') || inferDiagramFen(games, offset)
+      // The book's FEN (or the hidden FEN next to it) first, else the position at that point of the game.
+      const { fen, known } = diagramFenOf(img, inferDiagramFen(games, offset))
       const src = img.getAttribute('src') ?? ''
       const alt = img.getAttribute('alt') ?? 'diagram'
 
@@ -687,7 +690,7 @@ export default function BookReader() {
       img.replaceWith(mount)
 
       const root = createRoot(mount)
-      root.render(<DiagramImage src={src} alt={alt} fen={fen} textFen={img.getAttribute('data-text-fen') ?? undefined} withEval={!img.classList.contains('diagram')} />)
+      root.render(<DiagramImage src={src} alt={alt} fen={fen} fenKnown={known} textFen={img.getAttribute('data-text-fen') ?? undefined} withEval={!img.classList.contains('diagram')} />)
       if (!img.classList.contains('diagram')) bookDiagrams.push(fen)
       diagramRoots.current.push(root)
     }
@@ -1232,6 +1235,7 @@ export default function BookReader() {
             <GameReviewPanel games={games} text={plainText} bookId={id} chapter={currentChapter} />
           )}
           {showStudy && showDebugTools && <RecognitionDebugPanel chapterText={plainText} games={games} />}
+          {showStudy && <DiagramToolsPanel root={contentRef.current} />}
         </aside>
       </div>
 

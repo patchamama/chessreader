@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.112.1 — 2026-11-18
+
+- feat: the diagram tools (regenerate and download diagrams and evaluations) are in the reader's side panel; a broken book image shows the generated board of its position
+
 ## v0.112.0 — 2026-11-18
 
 - feat: the reader fills the window with the status bar always at the bottom; each game sits in its own container that keeps its place on screen and flashes after a layout switch or a new commentary (with a spinner); changing the reading width keeps the first visible line; the study tools (save line to the trainer, guess the moves, position trainer) are icons in the top bar and the "Study board" label is gone
