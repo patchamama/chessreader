@@ -159,3 +159,20 @@ describe('settingsStore — pause after each move in the narration (S32)', () =>
     expect(migrateSettings({ recognitionAlgorithm: 1, lichessPlayToken: 'play', lichessToken: 'read' }, 1)).toMatchObject({ recognitionAlgorithm: 1, lichessToken: 'read' })
   })
 })
+
+describe('settingsStore — chapter title separator', () => {
+  beforeEach(() => {
+    useSettingsStore.getState().reset()
+  })
+
+  it('defaults to " - " and an older saved state gets the default', () => {
+    expect(useSettingsStore.getState().chapterTitleSeparator).toBe(' - ')
+    const merged = mergeWithDefaults(useSettingsStore.getState(), { fontSize: 18 })
+    expect(merged.chapterTitleSeparator).toBe(' - ')
+  })
+
+  it('keeps the chosen separator', () => {
+    useSettingsStore.getState().set({ chapterTitleSeparator: ': ' })
+    expect(useSettingsStore.getState().chapterTitleSeparator).toBe(': ')
+  })
+})

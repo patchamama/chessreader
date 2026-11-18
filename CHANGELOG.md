@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.109.0 — 2026-11-18
+
+- feat: the book's own stylesheet is applied to its chapters (italics, sub-headings, hidden FEN lines), sub-headings written as styled spans are shown as headings, multi-line chapter titles are joined with a separator chosen in Settings ("Capítulo dos - Emanuel II"), a FEN next to a diagram is hidden with a FEN symbol showing it and its board; a wide reading width also widens the page
+
 ## v0.108.0 — 2026-11-18
 
 - feat: errata — corrected main-line moves of book games are saved (server storage/errata or the resources repo errata/) and applied when the chapter loads, with the printed move struck through in brackets; corrections from the engine, manual edits or a Lichess masters reference are filed as errata

@@ -117,6 +117,50 @@ final class EpubPackage
     }
 
     /**
+     * CSS of the stylesheets the N-th spine document (1-based) links, in order.
+     *
+     * @return list<string>
+     */
+    public function chapterStylesheets(int $order): array
+    {
+        $opf = $this->load();
+        if ($opf === null || $order < 1) {
+            return [];
+        }
+        $idref = $opf['spine'][$order - 1] ?? null;
+        $href  = $idref !== null ? ($opf['manifest'][$idref] ?? null) : null;
+        if ($href === null) {
+            return [];
+        }
+        $path = $this->resolve($this->opfDir(), $href);
+        $html = ($this->read)($path) ?? '';
+        // Only the <head> holds the links; the (often large) body is not parsed.
+        $head = preg_match('~<head\b.*?</head\s*>~is', $html, $m) ? $m[0] : '';
+
+        $sheets = [];
+        preg_match_all('~<link\b[^>]*>~i', $head, $links);
+        foreach ($links[0] as $link) {
+            if (!preg_match('~\brel\s*=\s*["\']?[^"\'>]*stylesheet~i', $link)
+                || !preg_match('~\bhref\s*=\s*["\']([^"\']+)["\']~i', $link, $h)
+                || preg_match('~^[a-z][a-z0-9+.-]*:~i', $h[1])) {
+                continue;
+            }
+            $css = ($this->read)($this->resolve(dirname($path), $h[1]));
+            if ($css !== null && $css !== '') {
+                $sheets[] = $css;
+            }
+        }
+        // Styles written in the document head itself.
+        preg_match_all('~<style\b[^>]*>(.*?)</style\s*>~is', $head, $styles);
+        foreach ($styles[1] as $css) {
+            if (trim($css) !== '') {
+                $sheets[] = $css;
+            }
+        }
+        return $sheets;
+    }
+
+    /**
      * Archive path of the cover image: EPUB 3 cover-image property, EPUB 2
      * <meta name="cover">, the <guide> cover page's image, then the first image.
      */

@@ -1,4 +1,5 @@
 import { useMemo, useEffect, useState, useCallback, useRef, memo, forwardRef } from 'react'
+import { formatChapterTitle, prepareChapterHtml } from '../utils/epubContent'
 import { useParams } from 'react-router-dom'
 import { useChapter, useTouchBook } from '../api/libraryApi'
 import { numberLine, recognizeGames } from '@chess-ebook/chess-shared'
@@ -328,17 +329,12 @@ export default function BookReader() {
   const rawHtml = data?.html ?? ''
 
   // Rewrite relative img/image src paths to the backend image endpoint
+  const titleSeparator = useSettingsStore((s) => s.chapterTitleSeparator)
+  // Images resolved to the API, multi-line titles joined, FENs next to diagrams hidden (kept for recognition).
   const html = useMemo(() => {
     if (!rawHtml || !id) return rawHtml
-    const rewrite = (_match: string, _dots: string, imgPath: string) =>
-      `src="/api/library/books/${id}/images/${imgPath}"`
-    return rawHtml
-      // <img src="../Images/x.jpg">
-      .replace(/src=["'](?!data:|https?:|\/)(\.\.\/)*([^"']+)["']/g, rewrite)
-      // SVG <image xlink:href="../Images/x.jpg"> or href="..."
-      .replace(/(xlink:href|href)=["'](?!data:|https?:|#|\/)(\.\.\/)*([^"']+\.(jpe?g|png|gif|webp|svg))["']/gi,
-        (_m, attr, _d, imgPath) => `${attr}="/api/library/books/${id}/images/${imgPath}"`)
-  }, [rawHtml, id])
+    return prepareChapterHtml(rawHtml, id, { titleSeparator })
+  }, [rawHtml, id, titleSeparator])
 
   // Flatten the chapter to recognition text with the SAME DOM extraction the
   // wrapper uses on the rendered pane, so every node's charStart/charEnd points
@@ -635,7 +631,7 @@ export default function BookReader() {
       img.replaceWith(mount)
 
       const root = createRoot(mount)
-      root.render(<DiagramImage src={src} alt={alt} fen={fen} withEval={!img.classList.contains('diagram')} />)
+      root.render(<DiagramImage src={src} alt={alt} fen={fen} textFen={img.getAttribute('data-text-fen') ?? undefined} withEval={!img.classList.contains('diagram')} />)
       if (!img.classList.contains('diagram')) bookDiagrams.push(fen)
       diagramRoots.current.push(root)
     }
@@ -990,7 +986,7 @@ export default function BookReader() {
         </button>
 
         <span className="ml-2 truncate text-sm font-medium text-slate-700 max-w-[200px]">
-          {data?.title ?? '…'}
+          {data ? formatChapterTitle(data.title, titleSeparator) : '…'}
         </span>
         <span className="ml-auto text-xs text-slate-400 shrink-0">
           {toc.length > 0 ? `${currentChapter} / ${maxChapter}` : ''}

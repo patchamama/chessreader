@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { READER_WIDTH_MAX, READER_WIDTH_MIN, useReaderViewStore } from '../store/readerViewStore'
+import { useSettingsStore } from '../../../shared/settings/settingsStore'
+
+/** Text columns wider than this no longer fit the normal page container. */
+const WIDE_FROM = 900
 
 const PRESETS: { label: string; short: string; width: number | null }[] = [
   { label: 'Narrow', short: 'Narrow', width: 560 },
@@ -14,7 +18,12 @@ const PRESETS: { label: string; short: string; width: number | null }[] = [
  */
 export function WidthControl() {
   const width = useReaderViewStore((s) => s.textWidth)
-  const setWidth = useReaderViewStore((s) => s.setTextWidth)
+  const setTextWidth = useReaderViewStore((s) => s.setTextWidth)
+  // The page container caps the column: a wide or full column widens the page too.
+  const setWidth = (w: number | null) => {
+    setTextWidth(w)
+    if (w === null || w > WIDE_FROM) useSettingsStore.getState().set({ pageWidth: 'full' })
+  }
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
 

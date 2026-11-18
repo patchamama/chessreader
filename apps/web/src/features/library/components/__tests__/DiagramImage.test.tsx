@@ -117,4 +117,22 @@ describe('DiagramImage', () => {
       expect(mockRegen).toHaveBeenLastCalledWith(expect.objectContaining({ fen: NEW_FEN })),
     )
   })
+
+  it('a diagram whose FEN line was hidden shows a FEN symbol that reveals the position and its board', async () => {
+    const TEXT_FEN = '3b4/pp6/8/8/2k1K1P1/2p5/P3N2P/8 w - - 0 1'
+    render(<DiagramImage src="/x.jpg" alt="diagram" fen={TEXT_FEN} textFen={TEXT_FEN} />)
+    expect(screen.queryByText(TEXT_FEN)).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: /show fen/i }))
+
+    const hint = screen.getByRole('tooltip')
+    expect(hint).toHaveTextContent(TEXT_FEN)
+    const board = screen.getByRole('img', { name: /fen diagram/i })
+    expect(board.getAttribute('src')).toMatch(/^data:image\/svg\+xml/)
+  })
+
+  it('a diagram without a FEN line in the text shows no FEN symbol', () => {
+    render(<DiagramImage src="/x.jpg" alt="diagram" fen={FEN} />)
+    expect(screen.queryByRole('button', { name: /show fen/i })).toBeNull()
+  })
 })

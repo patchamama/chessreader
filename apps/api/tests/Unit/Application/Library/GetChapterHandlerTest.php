@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Unit\Application\Library;
 
 use App\Application\Library\GetChapterHandler;
+use App\Application\Library\Port\ChapterStylesheetSource;
 use App\Application\Library\Port\ChapterTitleSource;
 use App\Domain\Library\BookRepository;
 use App\Domain\Library\Chapter;
@@ -79,5 +80,36 @@ class GetChapterHandlerTest extends TestCase
 
         $this->assertSame('https://example.com', $result['title']);
         $this->assertSame('https://example.com', $result['toc'][0]['title']);
+    }
+    public function testTheBookStylesheetIsInlinedInPlaceOfItsLink(): void
+    {
+        $html = '<html><head><link href="../Styles/estilos.css" rel="stylesheet" type="text/css" /></head><body><p class="h3">X</p></body></html>';
+        $ch1  = new Chapter(1, 7, 1, 'One', $html);
+        $repo = $this->createMock(BookRepository::class);
+        $repo->method('findChapter')->willReturn($ch1);
+        $repo->method('findChaptersByBook')->willReturn([$ch1]);
+        $styles = $this->createMock(ChapterStylesheetSource::class);
+        $styles->method('stylesheetFor')->with(7, 1)->willReturn(':where(.epub-content) .h3 {font-weight:bold}');
+
+        $result = (new GetChapterHandler($repo, null, $styles))->handle(7, 1);
+
+        $this->assertNotNull($result);
+        $this->assertStringContainsString('<style data-epub-stylesheet="1">:where(.epub-content) .h3 {font-weight:bold}</style>', $result['html']);
+        $this->assertStringNotContainsString('<link', $result['html']);
+        $this->assertStringContainsString('<p class="h3">X</p>', $result['html']);
+    }
+
+    public function testHtmlStaysUntouchedWithoutStylesheet(): void
+    {
+        $ch1  = new Chapter(1, 7, 1, 'One', '<p>a</p>');
+        $repo = $this->createMock(BookRepository::class);
+        $repo->method('findChapter')->willReturn($ch1);
+        $repo->method('findChaptersByBook')->willReturn([$ch1]);
+        $styles = $this->createMock(ChapterStylesheetSource::class);
+        $styles->method('stylesheetFor')->willReturn(null);
+
+        $result = (new GetChapterHandler($repo, null, $styles))->handle(7, 1);
+
+        $this->assertSame('<p>a</p>', $result['html']);
     }
 }

@@ -10,6 +10,7 @@ import { regenerateDiagram } from '../../../shared/chess/diagramApi'
 import { formatDiagramEvalFooter, type DiagramEval } from '../../../shared/chess/diagramEvalFooter'
 import { useDiagramEvalStore } from '../diagramEval/diagramEvalStore'
 import { DiagramEvalFooter } from '../diagramEval/DiagramEvalFooter'
+import { FenHint } from './FenHint'
 
 interface Props {
   src: string
@@ -18,6 +19,8 @@ interface Props {
   fen: string
   /** Show the engine's evaluation under the diagram (book diagrams; a commented game writes its own). */
   withEval?: boolean
+  /** The FEN line the text prints next to this diagram (hidden from the prose): shown on demand. */
+  textFen?: string
 }
 
 /**
@@ -26,7 +29,7 @@ interface Props {
  * Stockfish evaluation footer. Right-clicking the generated board opens a config
  * menu (board theme / piece set / coordinates) and a FEN editor.
  */
-export function DiagramImage({ src, alt, fen, withEval = false }: Props) {
+export function DiagramImage({ src, alt, fen, withEval = false, textFen }: Props) {
   const boardTheme = useSettingsStore((s) => s.diagramBoardTheme)
   const pieceTheme = useSettingsStore((s) => s.diagramPieceTheme)
   const coordinates = useSettingsStore((s) => s.diagramCoordinates)
@@ -97,6 +100,7 @@ export function DiagramImage({ src, alt, fen, withEval = false }: Props) {
 
   return (
     <span className="diagram-image relative inline-block">
+      {textFen && <FenHint fen={textFen} />}
       {/* Toggle control */}
       <button
         type="button"

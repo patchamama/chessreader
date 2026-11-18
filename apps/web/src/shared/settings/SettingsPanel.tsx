@@ -501,6 +501,18 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           <option value="wide">Wide</option>
           <option value="full">Whole window</option>
         </select>
+        <label className={labelClass} htmlFor="chapter-title-separator">Chapter title separator</label>
+        <input
+          id="chapter-title-separator"
+          type="text"
+          value={s.chapterTitleSeparator}
+          onChange={(e) => s.set({ chapterTitleSeparator: e.target.value })}
+          placeholder=" - "
+          maxLength={8}
+          title='Joins the lines of a chapter title, e.g. "Capítulo dos - Emanuel II"'
+          className={inputClass}
+        />
+
         <div className="mt-2"><Toggle on={s.statusFooter} onClick={() => s.set({ statusFooter: !s.statusFooter })} label="Status bar at the bottom" /></div>
 
         <label className={labelClass}>Horizontal margin — {s.marginH}rem</label>

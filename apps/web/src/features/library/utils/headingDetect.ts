@@ -68,9 +68,28 @@ function headingLevel(el: Element, classes: Map<string, number>): number | null 
   if (/[.:;]$/.test(text) && text.split(' ').length > 8) return null
   const inline = levelFromStyle(el.getAttribute('style') ?? '')
   if (inline) return inline
+  let best = classLevel(el, classes)
+  // A paragraph whose whole text sits in one heading-class span
+  // (`<p><span class="h3"><b>Title</b></span></p>`) is that heading.
+  if (!best) {
+    const spans = [...el.querySelectorAll('span[class]')].filter(
+      (s) => (s.textContent ?? '').replace(/\s+/g, ' ').trim() === text,
+    )
+    for (const span of spans) {
+      const level = classLevel(span, classes)
+      if (level && (!best || level < best)) best = level
+    }
+  }
+  return best
+}
+
+/** Best (lowest) heading level the element's classes imply, or null. */
+function classLevel(el: Element, classes: Map<string, number>): number | null {
   let best: number | null = null
   for (const c of el.classList) {
-    const level = classes.get(c) ?? levelFromClassName(c)
+    // A class NAMED after a level ("h5") is that level, whatever size the book gives it.
+    const named = /^h[1-6]$/i.test(c) ? levelFromClassName(c) : null
+    const level = named ?? classes.get(c) ?? levelFromClassName(c)
     if (level && (!best || level < best)) best = level
   }
   return best

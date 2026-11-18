@@ -229,6 +229,7 @@ return [
         return new GetChapterHandler(
             $c->get(BookRepository::class),
             new \App\Infrastructure\Epub\StoredEpubChapterTitles(__DIR__ . '/../storage/books'),
+            new \App\Infrastructure\Epub\StoredEpubChapterStyles(__DIR__ . '/../storage/books'),
         );
     },
 

@@ -174,6 +174,8 @@ export interface AppSettings {
   chessComUser: string
   /** Desktop page width: normal, wide or the whole window. */
   pageWidth: 'normal' | 'wide' | 'full'
+  /** Joins the lines of a chapter title written over several lines ("Capítulo dos - Emanuel II"). */
+  chapterTitleSeparator: string
   /** The status bar at the bottom of the window. */
   statusFooter: boolean
   /** Human commentary database: a public base URL, or a GitHub contents API URL of a private repository. */
@@ -288,6 +290,7 @@ const DEFAULT: AppSettings = {
   hintEval: true,
   chessComUser: '',
   pageWidth: 'normal',
+  chapterTitleSeparator: ' - ',
   statusFooter: true,
   commentDbUrl: DEFAULT_RESOURCES_URL,
   commentDbToken: '',

@@ -6,6 +6,8 @@ import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../../../shared/exter
 import type { Chapter, ChapterTocEntry } from '../../api/libraryApi'
 import { describeGames, type GameSummary } from '../../utils/gameMarkers'
 import { htmlToProseText } from '../../utils/proseText'
+import { formatChapterTitle } from '../../utils/epubContent'
+import { useSettingsStore } from '../../../../shared/settings/settingsStore'
 
 type Tab = 'chapters' | 'games'
 type RecognitionAlgorithm = 1 | 2
@@ -74,6 +76,7 @@ function ChapterGames({
   onGame: (chapter: number, index: number) => void
 }) {
   const [open, setOpen] = useState(current)
+  const separator = useSettingsStore((s) => s.chapterTitleSeparator)
   const { data, isLoading, isError } = useChapterGames(bookId, entry.order, algorithm, open && !current)
   const games = current ? currentGames : data
   return (
@@ -87,7 +90,7 @@ function ChapterGames({
         }`}
       >
         <span aria-hidden="true" className="text-[0.7em] text-slate-400">{open ? '▾' : '▸'}</span>
-        <span className="truncate">{entry.title}</span>
+        <span className="truncate">{formatChapterTitle(entry.title, separator)}</span>
       </button>
       {open && (
         <div className="ml-3 border-l border-slate-100 pl-1">
@@ -111,6 +114,7 @@ function ChapterGames({
  */
 export function ReaderToc({ bookId, toc, currentChapter, currentGames, algorithm, onChapter, onGame }: ReaderTocProps) {
   const [tab, setTab] = useState<Tab>('chapters')
+  const separator = useSettingsStore((s) => s.chapterTitleSeparator)
   const tabClass = (t: Tab) =>
     `flex-1 rounded-md px-3 py-1 text-xs font-semibold transition ${
       tab === t ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
@@ -138,7 +142,7 @@ export function ReaderToc({ bookId, toc, currentChapter, currentGames, algorithm
                     entry.order === currentChapter ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-700 hover:bg-slate-50'
                   }`}
                 >
-                  {entry.title}
+                  {formatChapterTitle(entry.title, separator)}
                 </button>
               </li>
             ))}

@@ -68,3 +68,11 @@
   max-height: 80vh;
   margin: 1rem auto;
 }
+
+/*
+ * A FEN line printed next to a diagram: hidden from view (the diagram shows it
+ * on demand) but kept in the document, so the recogniser still reads it.
+ */
+.epub-content .epub-fen-hidden {
+  display: none !important;
+}

@@ -54,4 +54,23 @@ describe('headingDetect', () => {
     expect(detectHeadings(el)).toBe(2)
     expect(el.querySelectorAll('[role="heading"]').length).toBe(2)
   })
+
+  it('reads a heading from a paragraph whose whole text is a heading-class span (EPUB "span.h3")', () => {
+    const el = root(`
+      <style>:where(.epub-content) .h3 { font-weight: bold; font-size: 130% }</style>
+      <p style="text-align: center;"><span class="h3"><b>De Moscú a Groninga</b></span></p>
+      <p>Prose with <span class="h3">a styled word</span> inside it.</p>`)
+    expect(detectHeadings(el)).toBe(1)
+    const h = el.querySelector('[role="heading"]')
+    expect(h?.textContent).toBe('De Moscú a Groninga')
+    expect(h?.getAttribute('aria-level')).toBe('3')
+  })
+
+  it('a numbered class name keeps its own level over the stylesheet size (.h5 at 120%)', () => {
+    const el = root(`
+      <style>:where(.epub-content) .h5 { font-weight: bold; font-size: 120% }</style>
+      <p class="h5">Una tragedia americana</p>`)
+    expect(detectHeadings(el)).toBe(1)
+    expect(el.querySelector('[role="heading"]')?.getAttribute('aria-level')).toBe('5')
+  })
 })
