@@ -1,29 +1,26 @@
 import { useState } from 'react'
 import { HoverLine } from '../../../shared/chess/HoverLine'
 import { playLine } from '../../../shared/chess/playLine'
-import { evalText, localLine, numberLine, shortScore, type Lang, type Score } from '@chess-ebook/chess-shared'
+import { shortScore, type Lang } from '@chess-ebook/chess-shared'
 import EvalBar from '../../viewer/components/EvalBar'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
-import { uciLineToSan } from '../review/reviewEngine'
 import { evaluateDiagram, useDiagramEvalStore, type DiagramLine } from './diagramEvalStore'
+import { bookLine, evalWords, fromWhite } from './diagramEvalText'
 
-const T: Record<Lang, { again: string; first: string; busy: string; depth: string }> = {
-  es: { again: 'Volver a evaluar este diagrama', first: 'Evaluar este diagrama', busy: 'Evaluando…', depth: 'prof.' },
-  en: { again: 'Evaluate this diagram again', first: 'Evaluate this diagram', busy: 'Evaluating…', depth: 'depth' },
-  de: { again: 'Dieses Diagramm neu bewerten', first: 'Dieses Diagramm bewerten', busy: 'Bewerte…', depth: 'Tiefe' },
+const T: Record<Lang, { again: string; first: string; busy: string }> = {
+  es: { again: 'Volver a evaluar este diagrama', first: 'Evaluar este diagrama', busy: 'Evaluando…' },
+  en: { again: 'Evaluate this diagram again', first: 'Evaluate this diagram', busy: 'Evaluating…' },
+  de: { again: 'Dieses Diagramm neu bewerten', first: 'Dieses Diagramm bewerten', busy: 'Bewerte…' },
 }
 
-/** A side-to-move score as seen from White. */
-const fromWhite = (l: DiagramLine, fen: string): Score => {
-  const sign = fen.split(' ')[1] === 'b' ? -1 : 1
-  return l.mate !== undefined ? { mate: sign * l.mate } : { cp: sign * (l.scoreCp ?? 0) }
-}
-
-/** The line in the moves of the book: numbered, with the piece letters of the language. */
-function bookLine(fen: string, l: DiagramLine, lang: Lang, max: number): string {
-  const sans = uciLineToSan(fen, l.pv, max)
-  const [, turn, , , , moveNo] = fen.split(' ')
-  return localLine(numberLine(sans, Number(moveNo) || 1, turn === 'b' ? 'black' : 'white'), lang)
+/** A minimalist refresh icon (spins while working). */
+export function RefreshIcon({ spinning = false, className = 'h-3 w-3' }: { spinning?: boolean; className?: string }) {
+  return (
+    <svg className={`${className}${spinning ? ' animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <path d="M21 3v6h-6" />
+    </svg>
+  )
 }
 
 /** A line of the engine whose moves show the position on hover (S7). */
@@ -44,7 +41,8 @@ export function DiagramEvalFooter({ fen }: { fen: string }) {
   const t = T[lang] ?? T.en
   const refresh = async () => {
     setBusy(true)
-    try { await evaluateDiagram(fen) } catch { /* no engine: nothing to show */ } finally { setBusy(false) }
+    // The engine chosen in Settings evaluates it again (S2).
+    try { await evaluateDiagram(fen, { engine: 'settings' }) } catch { /* no engine: nothing to show */ } finally { setBusy(false) }
   }
   const best = e?.lines[0]
   const whiteBest = best ? fromWhite(best, fen) : null
@@ -57,7 +55,7 @@ export function DiagramEvalFooter({ fen }: { fen: string }) {
               <EvalBar fen={fen} direction="horizontal" score={whiteBest.mate !== undefined ? { mate: whiteBest.mate } : { scoreCp: whiteBest.cp }} />
             </span>
           )}
-          <span data-testid="diagram-eval-words" className="block">{evalText(whiteBest, lang)} · {e.engine}, {t.depth} {e.depth}</span>
+          <span data-testid="diagram-eval-words" className="block">{evalWords(fen, e, lang)}</span>
           <EngineLine fen={fen} line={best} lang={lang} max={6} testId="diagram-eval-line" className="block text-slate-800" />
           {e.lines.slice(1, 3).map((l, i) => (
             <EngineLine key={i} fen={fen} line={l} lang={lang} max={4} testId="diagram-eval-alt" className="block italic text-slate-500" suffix={` (${shortScore(fromWhite(l, fen))})`} />
@@ -69,10 +67,12 @@ export function DiagramEvalFooter({ fen }: { fen: string }) {
         onClick={() => void refresh()}
         disabled={busy}
         aria-label={e ? t.again : t.first}
-        title={e ? t.again : t.first}
-        className="mt-0.5 rounded px-1 text-[0.9em] text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
+        aria-busy={busy || undefined}
+        title={busy ? t.busy : e ? t.again : t.first}
+        className="mt-0.5 inline-flex items-center gap-1 rounded p-0.5 align-middle text-[0.9em] text-slate-400 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
       >
-        {busy ? t.busy : e ? '⟳' : `⟳ ${t.first}`}
+        <RefreshIcon spinning={busy} />
+        {!e && !busy && <span>{t.first}</span>}
       </button>
     </span>
   )

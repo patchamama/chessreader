@@ -28,7 +28,7 @@ final class DiagramController
      */
     public function regenerate(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
-        $body      = (array) ($request->getParsedBody() ?? []);
+        $body      = self::body($request);
         $fenValue  = trim((string) ($body['fen'] ?? ''));
         $filename  = isset($body['filename']) ? (string) $body['filename'] : null;
         $depth     = isset($body['depth']) ? (int) $body['depth'] : 18;
@@ -62,5 +62,21 @@ final class DiagramController
 
         $response->getBody()->write(json_encode($payload));
         return $response->withStatus(200)->withHeader('Content-Type', 'application/json');
+    }
+
+    /**
+     * The request's fields: the parsed body (form posts, tests) or, as the web
+     * client sends it, a raw JSON body — the app adds no body-parsing middleware.
+     *
+     * @return array<string, mixed>
+     */
+    private static function body(ServerRequestInterface $request): array
+    {
+        $parsed = $request->getParsedBody();
+        if (is_array($parsed) && $parsed !== []) {
+            return $parsed;
+        }
+        $decoded = json_decode((string) $request->getBody(), true);
+        return is_array($decoded) ? $decoded : (array) ($parsed ?? []);
     }
 }

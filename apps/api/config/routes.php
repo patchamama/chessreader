@@ -26,6 +26,9 @@ use Slim\App;
 use Slim\Routing\RouteCollectorProxy;
 
 return function (App $app): void {
+    // JSON (and form) request bodies: without it getParsedBody() is null for the browser's JSON requests.
+    $app->addBodyParsingMiddleware();
+
     $app->get('/api/health', HealthController::class);
 
     // Auth routes (public)

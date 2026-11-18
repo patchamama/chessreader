@@ -75,6 +75,21 @@ final class EvalControllerTest extends TestCase
         $this->assertSame(401, $app->handle($req)->getStatusCode());
     }
 
+    public function test_eval_position_reads_a_raw_json_body_like_the_browser_sends(): void
+    {
+        $engine  = $this->makeFakeEngine();
+        [, $token] = $this->seedAndToken('eval_raw@test.com', $engine);
+        $app     = $this->createAppWithOverrides([ChessEngine::class => fn() => $engine]);
+        $factory = new ServerRequestFactory();
+        $req = $factory->createServerRequest('POST', '/api/eval/position')
+            ->withHeader('Content-Type', 'application/json')
+            ->withHeader('Authorization', "Bearer {$token}");
+        $req->getBody()->write(json_encode(['fen' => self::STARTPOS_FEN, 'depth' => 15]));
+        $req->getBody()->rewind();
+        $resp = $app->handle($req);
+        $this->assertSame(200, $resp->getStatusCode(), (string) $resp->getBody());
+    }
+
     public function test_eval_position_returns_evaluation_for_startpos(): void
     {
         $engine  = $this->makeFakeEngine();

@@ -111,6 +111,29 @@ final class DiagramControllerTest extends TestCase
         $this->assertStringContainsString('+1.3', $body['footer']);
     }
 
+    /**
+     * The web client sends a raw JSON body and the app adds no body-parsing
+     * middleware: the controller must read the JSON itself.
+     */
+    public function test_regenerate_reads_a_raw_json_body(): void
+    {
+        $token   = $this->seedAndToken('diag_json@test.com');
+        $app     = $this->makeApp();
+        $factory = new ServerRequestFactory();
+        $stream  = (new \Slim\Psr7\Factory\StreamFactory())->createStream(json_encode(['fen' => self::STARTPOS, 'depth' => 12]));
+
+        $req = $factory->createServerRequest('POST', '/api/diagrams/regenerate')
+            ->withBody($stream)
+            ->withHeader('Content-Type', 'application/json')
+            ->withHeader('Authorization', "Bearer {$token}");
+
+        $resp = $app->handle($req);
+        $body = json_decode((string) $resp->getBody(), true);
+
+        $this->assertSame(200, $resp->getStatusCode());
+        $this->assertStringContainsString('<svg', $body['svg']);
+    }
+
     public function test_regenerate_returns_400_for_missing_fen(): void
     {
         $token   = $this->seedAndToken('diag_400@test.com');

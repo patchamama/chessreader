@@ -51,8 +51,13 @@ const localEngineName = () => {
  * is a server and a session, else from the engine in this browser (or the
  * Lichess cloud, when chosen in Settings).
  */
-export async function evaluatePosition(fen: string, depth: number, count: number): Promise<DiagramEvaluation> {
-  if (hasServerSession()) {
+export interface EvaluateOptions {
+  /** 'settings': the engine chosen in Settings (browser Stockfish / Lichess cloud), never the server's. */
+  engine?: 'auto' | 'settings'
+}
+
+export async function evaluatePosition(fen: string, depth: number, count: number, opts: EvaluateOptions = {}): Promise<DiagramEvaluation> {
+  if (opts.engine !== 'settings' && hasServerSession()) {
     try {
       const r = await httpClient<ServerEval>('/api/eval/position', { method: 'POST', body: JSON.stringify({ fen, depth, lines: count }) })
       const lines = (r.lines ?? [r]).filter((l) => l.pv?.length).map((l) => ({ pv: l.pv!, ...(l.mate !== undefined ? { mate: l.mate } : { scoreCp: l.scoreCp ?? 0 }) }))
@@ -71,9 +76,9 @@ export async function evaluatePosition(fen: string, depth: number, count: number
 }
 
 /** Evaluate one diagram with the depth and number of lines of Settings, and keep it. */
-export async function evaluateDiagram(fen: string): Promise<DiagramEvaluation> {
+export async function evaluateDiagram(fen: string, opts: EvaluateOptions = {}): Promise<DiagramEvaluation> {
   const { diagramEvalDepth, diagramEvalLines } = useSettingsStore.getState()
-  const e = await evaluatePosition(fen, diagramEvalDepth, diagramEvalLines)
+  const e = await evaluatePosition(fen, diagramEvalDepth, diagramEvalLines, opts)
   useDiagramEvalStore.getState().put(fen, e)
   return e
 }

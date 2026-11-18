@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { evaluateDiagrams, evaluatePosition, useDiagramEvalStore } from './diagramEvalStore'
+import { evaluateDiagram, evaluateDiagrams, evaluatePosition, useDiagramEvalStore } from './diagramEvalStore'
+import { diagramEvalText } from './diagramEvalText'
 import { DiagramEvalFooter } from './DiagramEvalFooter'
 import { setReviewEngine } from '../review/reviewStore'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
@@ -91,5 +92,46 @@ describe('DiagramEvalFooter (S3)', () => {
     render(<DiagramEvalFooter fen={FEN} />)
     fireEvent.click(screen.getByRole('button', { name: 'Evaluar este diagrama' }))
     await waitFor(() => expect(screen.getByTestId('evalbar')).toHaveTextContent('44'))
+  })
+})
+
+describe('engine chosen in Settings (S2, S3)', () => {
+  it('evaluateDiagram with the Settings engine asks the browser engine even when there is a server', async () => {
+    useAuthStore.setState({ token: 'jwt' })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    setReviewEngine(async () => LINES)
+    const e = await evaluateDiagram(FEN, { engine: 'settings' })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(e.engine).toBe('Stockfish 18 lite')
+    expect(useDiagramEvalStore.getState().get(FEN)?.lines[0].pv[0]).toBe('d2d4')
+  })
+
+  it('the refresh icon of the footer is a small icon and re-runs the evaluation with the Settings engine', async () => {
+    useAuthStore.setState({ token: 'jwt' })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    useDiagramEvalStore.getState().put(FEN, { engine: 'old', depth: 8, lines: [{ pv: ['h2h3'], scoreCp: 0 }], at: 1 })
+    setReviewEngine(async () => LINES)
+    render(<DiagramEvalFooter fen={FEN} />)
+    const button = screen.getByRole('button', { name: 'Volver a evaluar este diagrama' })
+    expect(button.querySelector('svg')).toBeTruthy()
+    expect(button.textContent).toBe('')
+    fireEvent.click(button)
+    await waitFor(() => expect(screen.getByTestId('diagram-eval-line')).toHaveTextContent('3. d4'))
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('diagramEvalText (S3)', () => {
+  it('is the evaluation as the footer prints it: words, engine line and alternatives', () => {
+    const e = { engine: 'Stockfish 19', depth: 16, lines: LINES.map(({ pv, scoreCp }) => ({ pv, scoreCp })), at: 1 }
+    expect(diagramEvalText(FEN, e, 'es')).toBe(
+      'Evaluación: +0.4 (igualdad) · Stockfish 19, prof. 16\n3. d4 exd4 4. Cxd4\n3. Ab5 a6 (+0.4)\n3. Cc3 Cf6 (+0.2)\n',
+    )
+  })
+
+  it('a position the engine could not evaluate says so', () => {
+    expect(diagramEvalText(FEN, { engine: 'Stockfish', depth: 0, lines: [], at: 1 }, 'en')).toBe('No evaluation\n')
   })
 })
