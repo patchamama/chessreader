@@ -40,3 +40,8 @@ export function closeAnalysisBoard(id: number): void {
     return { boards, active: s.active === id ? boards[boards.length - 1]?.id ?? null : s.active }
   })
 }
+
+/** Bring an open board to the front (its tab). */
+export function activateAnalysisBoard(id: number): void {
+  useAnalysisBoards.setState((s) => (s.boards.some((b) => b.id === id) ? { active: id } : s))
+}

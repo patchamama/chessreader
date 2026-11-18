@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.103.0 — 2026-11-18
+
+- feat: several analysis boards at once (open, switch, close) with replay and narration that plays and highlights what the comment says; a page to open a book comment's game in a new tab (/comment/:gameId)
+
 ## v0.102.0 — 2026-11-18
 
 - feat: the main tabs keep their content when you leave and come back (inputs, results, scroll); a spinner shows while games, books and searches load

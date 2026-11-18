@@ -16,6 +16,7 @@ import DatabasePage from '../features/database/DatabasePage'
 import ErrorsPage from '../features/errors/ErrorsPage'
 import { isDemoHost } from '../shared/env/devMode'
 import PendingPage from '../features/auth/components/PendingPage'
+import CommentGamePage from '../features/library/analysis/CommentGamePage'
 
 const routes = [
   {
@@ -39,6 +40,14 @@ const routes = [
         element: (
           <RequireApproved>
             <BookReader />
+          </RequireApproved>
+        ),
+      },
+      {
+        path: '/comment/:gameId',
+        element: (
+          <RequireApproved>
+            <CommentGamePage />
           </RequireApproved>
         ),
       },

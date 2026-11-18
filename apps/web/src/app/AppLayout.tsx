@@ -8,6 +8,7 @@ import { useSettingsStore, FONT_FAMILIES } from '../shared/settings/settingsStor
 import SettingsPanel from '../shared/settings/SettingsPanel'
 import { StatusFooter } from '../shared/layout/StatusFooter'
 import { BusyOverlay } from '../shared/layout/BusyOverlay'
+import { AnalysisBoardsPanel } from '../features/library/analysis/AnalysisBoardsPanel'
 import { pageWidthClass } from '../shared/layout/pageWidth'
 import { NotesPanel } from '../shared/notes/NotesPanel'
 import { countPending, useNotesStore } from '../shared/notes/notesStore'
@@ -141,6 +142,7 @@ export default function AppLayout() {
         <KeepAliveOutlet />
       </main>
 
+      <AnalysisBoardsPanel />
       <BusyOverlay />
       <StatusFooter />
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
