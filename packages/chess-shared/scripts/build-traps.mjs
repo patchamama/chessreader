@@ -33,7 +33,7 @@ for (const f of files) {
     if (m[2]) { title = strip(m[2]).replace(/^[\d.]+\s*/, ''); continue }
     const table = m[3]
     const field = (name) => { const x = new RegExp(`<td>${name}</td><td>([\\s\\S]*?)</td>`).exec(table); return x ? x[1] : null }
-    const level = (name) => { const x = /_(\d)\.jpg/.exec(field(name) ?? ''); return x ? Number(x[1]) : null }
+    const level = (name) => { const x = /(?:^|["/])_([1-5])\.jpg/.exec(field(name) ?? ''); return x ? Number(x[1]) : null }
     const side = strip(field('Trampa') ?? '')
     if (!side) continue
     const before = html.slice(Math.max(0, m.index - 600), m.index)
