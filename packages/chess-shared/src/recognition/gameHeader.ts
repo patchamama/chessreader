@@ -43,12 +43,19 @@ const isProse = (l: string) => l.length > 90 || (/[.:;]$/.test(l) && l.split(/\s
 export function parseGameHeader(lines: string[]): GameHeader | null {
   const h: GameHeader = { lines: 0 }
   const seen = new Set<string>()
+  // A tournament line without a year ("19º Campeonato de la URSS") waits for the place/year line above it.
+  let eventWithoutYear = false
   for (let i = lines.length - 1; i >= 0 && lines.length - i <= 7; i--) {
     const l = lines[i].trim()
     if (!l) continue
     if (isProse(l)) break
     let m: RegExpExecArray | null
-    if (!seen.has('number') && (m = NUMBER.exec(l))) { h.number = Number(m[1]); seen.add('number') }
+    if (!seen.has('number') && (m = NUMBER.exec(l))) {
+      h.number = Number(m[1]); seen.add('number')
+      // The number opens the heading: what is above it belongs to the text.
+      h.lines = lines.length - i
+      break
+    }
     else if (!seen.has('opening') && (m = ECO_LINE.exec(l)) && !DATE.test(l)) { h.opening = m[1].trim(); h.eco = m[2]; seen.add('opening') }
     else if (!seen.has('date') && (m = DATE.exec(l))) {
       h.date = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
@@ -60,8 +67,9 @@ export function parseGameHeader(lines: string[]): GameHeader | null {
     else if (!seen.has('players') && !/\d/.test(l) && (m = PAIR.exec(l)) && m[1].trim().length > 2 && m[2].trim().length > 2) {
       h.white = tidy(m[1]); h.black = tidy(m[2]); seen.add('players')
     }
-    else if (!seen.has('event') && (m = YEAR.exec(l)) && l.length <= 90) {
-      h.event = l
+    else if ((!seen.has('event') || eventWithoutYear) && (m = YEAR.exec(l)) && l.length <= 90) {
+      h.event = eventWithoutYear ? `${l} · ${h.event}` : l
+      eventWithoutYear = false
       if (!seen.has('date')) {
         h.year = Number(m[1])
         const place = l.slice(0, m.index).replace(/[,\s]+$/, '').trim()
@@ -70,6 +78,9 @@ export function parseGameHeader(lines: string[]): GameHeader | null {
       seen.add('event')
     }
     else if (!seen.has('opening') && OPENING_WORDS.test(l) && l.length <= 80 && !/\d/.test(l)) { h.opening = l.replace(/\.$/, ''); seen.add('opening') }
+    else if (!seen.has('event') && l.length <= 60 && l.split(/\s+/).length <= 8 && !/[.:;!?,]$/.test(l) && /^[\p{Lu}\d]/u.test(l)) {
+      h.event = l; eventWithoutYear = true; seen.add('event')
+    }
     else break
     h.lines = lines.length - i
   }

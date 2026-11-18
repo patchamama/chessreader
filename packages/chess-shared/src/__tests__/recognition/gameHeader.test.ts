@@ -22,4 +22,12 @@ describe('game header lines before a game (books)', () => {
     expect(h).toMatchObject({ number: 12, white: 'Fischer', black: 'Rossetto', year: 1959, lines: 3 })
     expect(parseGameHeader(['Un párrafo cualquiera de comentario, sin nombres.'])).toBeNull()
   })
+
+  it('keeps a tournament line without a year as part of the event (Kasparov: "19º Campeonato de la URSS")', () => {
+    expect(parseGameHeader(['Partida 298', 'T. Petrosian-V. Smyslov', 'Moscú 1951', '19º Campeonato de la URSS', 'Defensa Eslava (D15)'])).toEqual({
+      number: 298, white: 'T. Petrosian', black: 'V. Smyslov', place: 'Moscú', year: 1951,
+      event: 'Moscú 1951 · 19º Campeonato de la URSS', opening: 'Defensa Eslava', eco: 'D15', lines: 5,
+    })
+    expect(parseGameHeader(['Partida 5', 'Tal-Botvinnik', 'Torneo de Candidatos'])).toMatchObject({ number: 5, event: 'Torneo de Candidatos', lines: 3 })
+  })
 })
