@@ -251,4 +251,4 @@ node packages/chess-shared/scripts/build-comment-db.mjs manifest.json out/
 
 [MIT](LICENSE) · built with ♞ and a lot of coffee.
 
-Third-party data: `apps/web/public/openings/eco.json` is built by `apps/web/scripts/build-eco.mjs` from [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings) (CC0-1.0). The cburnett pieces in `apps/web/src/shared/chess/pieces/cburnett/` (used to draw diagrams) are by Colin M.L. Burnett, from lichess-org/lila (GPLv2+).
+Third-party data: `apps/web/public/patterns/` is built by `apps/web/scripts/build-pattern-db.mjs` from the [Lichess puzzle database](https://database.lichess.org/#puzzles) (CC0): popular puzzles per tactical theme over four rating bands, used by the pattern trainer and to name the pattern of a move. `apps/web/public/openings/eco.json` is built by `apps/web/scripts/build-eco.mjs` from [lichess-org/chess-openings](https://github.com/lichess-org/chess-openings) (CC0-1.0). The cburnett pieces in `apps/web/src/shared/chess/pieces/cburnett/` (used to draw diagrams) are by Colin M.L. Burnett, from lichess-org/lila (GPLv2+).

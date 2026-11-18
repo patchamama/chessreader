@@ -1,20 +1,5 @@
-import { moveMotifs, openingName, opportunities, positionIdeas, type Lang, type MotifKind } from '@chess-ebook/chess-shared'
-
-/** The Lichess puzzle theme names of the patterns our detectors find (S4). */
-const THEME: Partial<Record<MotifKind, string>> = {
-  fork: 'Fork', pin: 'Pin', skewer: 'Skewer', 'discovered-check': 'Discovered attack', 'double-check': 'Double check',
-  sacrifice: 'Sacrifice', 'exchange-sacrifice': 'Exchange sacrifice', mate: 'Checkmate', 'mate-threat': 'Mate threat',
-  promotion: 'Promotion', 'en-passant': 'En passant',
-}
-
-/** The tactical patterns a move shows, named as Lichess names its puzzle themes. */
-export function lichessThemes(fenBefore: string, san: string): string[] {
-  try {
-    return [...new Set(moveMotifs(fenBefore, san).map((m) => THEME[m.kind]).filter((x): x is string => !!x))]
-  } catch {
-    return []
-  }
-}
+import { openingName, opportunities, positionIdeas, type Lang } from '@chess-ebook/chess-shared'
+export { lichessThemes } from '../../shared/chess/lichessThemes'
 
 const NAME: Record<Lang, Record<string, string>> = {
   en: { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king', hanging: 'can be taken', loose: 'is not defended', isolated: 'isolated pawn', doubled: 'doubled pawn', outpost: 'a square for your knight or bishop' },

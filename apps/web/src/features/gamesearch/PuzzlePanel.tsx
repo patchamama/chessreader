@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { loadPatternIndex, patternPuzzle, type PatternTheme } from './patterns'
 import { Chess } from 'chess.js'
 import ChessBoard from '../../shared/chess/ChessBoard'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
@@ -27,8 +28,11 @@ function solutionText(p: Puzzle): string {
  * rating when there is a token. The board answers each right move with the
  * opponent's reply, as on Lichess.
  */
-export function PuzzlePanel() {
+export function PuzzlePanel({ initialTheme }: { initialTheme?: string } = {}) {
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null)
+  const [themes, setThemes] = useState<PatternTheme[] | null>(null)
+  const [theme, setTheme] = useState(initialTheme ?? 'fork')
+  const lang = useSettingsStore((s) => s.language)
   const [ply, setPly] = useState(0)
   const [status, setStatus] = useState<Status>('solving')
   const [showSolution, setShowSolution] = useState(false)
@@ -51,6 +55,24 @@ export function PuzzlePanel() {
       setBusy(false)
     }
   }
+
+  /** A puzzle of a tactical pattern, near the player's level (S4). */
+  const loadPattern = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const p = await patternPuzzle(theme, useSettingsStore.getState().playHumanRating || 1500)
+      setPuzzle(p)
+      setPly(0)
+      setStatus('solving')
+      setShowSolution(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  useEffect(() => { void loadPatternIndex().then(setThemes, () => setThemes([])) }, [])
 
   const solver: 'white' | 'black' = puzzle?.fen.split(' ')[1] === 'b' ? 'black' : 'white'
   const position = puzzle ? puzzlePosition(puzzle, ply) : null
@@ -89,6 +111,17 @@ export function PuzzlePanel() {
         <button className={primary} disabled={busy} onClick={() => void load(false)}>Puzzle of the day</button>
         <button className={plain} disabled={busy} onClick={() => void load(true)}>New puzzle</button>
       </div>
+      {themes && themes.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <label className="flex items-center gap-1">Train a pattern
+            <select aria-label="Pattern" className="rounded border border-slate-300 px-1 py-0.5" value={theme} onChange={(e) => setTheme(e.target.value)}>
+              {themes.map((x) => <option key={x.theme} value={x.theme}>{lang === 'es' ? x.es : x.en} ({x.count})</option>)}
+            </select>
+          </label>
+          <button className={plain} disabled={busy} onClick={() => void loadPattern()}>Pattern puzzle</button>
+          <span className="text-xs text-slate-500">Lichess puzzle database (CC0)</span>
+        </div>
+      )}
       {error && <p role="alert" className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-800">{error}</p>}
       {puzzle && position && (
         <div className="flex flex-col gap-3 md:flex-row">

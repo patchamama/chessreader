@@ -3,6 +3,7 @@ import { Chess } from 'chess.js'
 import { shortScore, winPercent, numberLine, type GameNode, type GameTree, type Score } from '@chess-ebook/chess-shared'
 import ChessBoardThemed from '../../../shared/chess/ChessBoard'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
+import { lichessThemes } from '../../../shared/chess/lichessThemes'
 import { reviewEngine, useReviewStore } from '../review/reviewStore'
 import { uciLineToSan } from '../review/reviewEngine'
 import type { EngineLine } from '../../../shared/stockfish/useEngineLines'
@@ -100,6 +101,8 @@ export function MoveTooltipCard(p: {
   const node = p.node
   const mover = node?.color === 'black' ? -1 : 1
   const loss = judged ? Math.max(0, Math.round(mover * (winPercent(judged.before) - winPercent(judged.after)) * 10) / 10) : 0
+  const fenBefore = node && p.tree ? (node.parentId ? p.tree.nodes.get(node.parentId)?.fen : p.tree.startFen) : undefined
+  const themes = node && fenBefore ? lichessThemes(fenBefore, node.san) : []
   const sameAsBest = judged?.best && node && judged.best.from === node.from && judged.best.to === node.to
   return (
     <div style={{ width: BOARD }}>
@@ -121,6 +124,7 @@ export function MoveTooltipCard(p: {
             <span className="font-mono">{shortScore(judged.before)} → {shortScore(judged.after)}</span>
             {loss >= 1 && <span title={t.lost} className={loss >= 20 ? 'ml-1 font-semibold text-red-700' : loss >= 10 ? 'ml-1 text-amber-700' : 'ml-1 text-slate-500'}> · Δ −{loss}%</span>}
           </p>
+          {themes.length > 0 && <p data-testid="hint-themes" className="text-slate-600">🧩 {themes.join(', ')}</p>}
           {judged.best && (
             <p data-testid="hint-best" className="text-emerald-800">
               {t.engine}: {sameAsBest ? t.same : numberLine([judged.best.san], node.moveNumber, node.color)}

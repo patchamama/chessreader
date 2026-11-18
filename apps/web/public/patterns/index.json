@@ -1,0 +1,323 @@
+{
+ "source": "Lichess puzzle database (CC0), https://database.lichess.org/#puzzles",
+ "themes": [
+  {
+   "theme": "advancedPawn",
+   "en": "Advanced pawn",
+   "es": "Peón avanzado",
+   "count": 120
+  },
+  {
+   "theme": "anastasiaMate",
+   "en": "Anastasia's mate",
+   "es": "Mate de Anastasia",
+   "count": 94
+  },
+  {
+   "theme": "arabianMate",
+   "en": "Arabian mate",
+   "es": "Mate árabe",
+   "count": 101
+  },
+  {
+   "theme": "attraction",
+   "en": "Attraction",
+   "es": "Atracción",
+   "count": 120
+  },
+  {
+   "theme": "backRankMate",
+   "en": "Back-rank mate",
+   "es": "Mate del pasillo",
+   "count": 120
+  },
+  {
+   "theme": "balestraMate",
+   "en": "Balestra mate",
+   "es": "Mate de la ballesta",
+   "count": 93
+  },
+  {
+   "theme": "bishopEndgame",
+   "en": "Bishop endgame",
+   "es": "Final de alfiles",
+   "count": 120
+  },
+  {
+   "theme": "blindSwineMate",
+   "en": "Blind swine mate",
+   "es": "Mate de los cerdos ciegos",
+   "count": 113
+  },
+  {
+   "theme": "bodenMate",
+   "en": "Boden's mate",
+   "es": "Mate de Boden",
+   "count": 79
+  },
+  {
+   "theme": "capturingDefender",
+   "en": "Capture the defender",
+   "es": "Eliminar al defensor",
+   "count": 120
+  },
+  {
+   "theme": "castling",
+   "en": "Castling",
+   "es": "Enroque",
+   "count": 66
+  },
+  {
+   "theme": "mate",
+   "en": "Checkmate",
+   "es": "Jaque mate",
+   "count": 120
+  },
+  {
+   "theme": "clearance",
+   "en": "Clearance",
+   "es": "Despeje",
+   "count": 120
+  },
+  {
+   "theme": "cornerMate",
+   "en": "Corner mate",
+   "es": "Mate en la esquina",
+   "count": 120
+  },
+  {
+   "theme": "defensiveMove",
+   "en": "Defensive move",
+   "es": "Jugada defensiva",
+   "count": 120
+  },
+  {
+   "theme": "deflection",
+   "en": "Deflection",
+   "es": "Desviación",
+   "count": 120
+  },
+  {
+   "theme": "discoveredAttack",
+   "en": "Discovered attack",
+   "es": "Ataque a la descubierta",
+   "count": 120
+  },
+  {
+   "theme": "doubleBishopMate",
+   "en": "Double bishop mate",
+   "es": "Mate de los dos alfiles",
+   "count": 52
+  },
+  {
+   "theme": "doubleCheck",
+   "en": "Double check",
+   "es": "Jaque doble",
+   "count": 120
+  },
+  {
+   "theme": "dovetailMate",
+   "en": "Dovetail mate",
+   "es": "Mate de la cola de paloma",
+   "count": 102
+  },
+  {
+   "theme": "enPassant",
+   "en": "En passant",
+   "es": "Al paso",
+   "count": 91
+  },
+  {
+   "theme": "exposedKing",
+   "en": "Exposed king",
+   "es": "Rey expuesto",
+   "count": 120
+  },
+  {
+   "theme": "fork",
+   "en": "Fork",
+   "es": "Ataque doble",
+   "count": 120
+  },
+  {
+   "theme": "hangingPiece",
+   "en": "Hanging piece",
+   "es": "Pieza colgada",
+   "count": 120
+  },
+  {
+   "theme": "hookMate",
+   "en": "Hook mate",
+   "es": "Mate del gancho",
+   "count": 112
+  },
+  {
+   "theme": "interference",
+   "en": "Interference",
+   "es": "Interferencia",
+   "count": 120
+  },
+  {
+   "theme": "intermezzo",
+   "en": "Intermezzo",
+   "es": "Jugada intermedia",
+   "count": 120
+  },
+  {
+   "theme": "killBoxMate",
+   "en": "Kill box mate",
+   "es": "Mate de la caja",
+   "count": 114
+  },
+  {
+   "theme": "kingsideAttack",
+   "en": "Kingside attack",
+   "es": "Ataque al flanco de rey",
+   "count": 120
+  },
+  {
+   "theme": "knightEndgame",
+   "en": "Knight endgame",
+   "es": "Final de caballos",
+   "count": 120
+  },
+  {
+   "theme": "mateIn1",
+   "en": "Mate in 1",
+   "es": "Mate en 1",
+   "count": 120
+  },
+  {
+   "theme": "mateIn2",
+   "en": "Mate in 2",
+   "es": "Mate en 2",
+   "count": 120
+  },
+  {
+   "theme": "mateIn3",
+   "en": "Mate in 3",
+   "es": "Mate en 3",
+   "count": 120
+  },
+  {
+   "theme": "morphysMate",
+   "en": "Morphy's mate",
+   "es": "Mate de Morphy",
+   "count": 120
+  },
+  {
+   "theme": "operaMate",
+   "en": "Opera mate",
+   "es": "Mate de la Ópera",
+   "count": 120
+  },
+  {
+   "theme": "pawnEndgame",
+   "en": "Pawn endgame",
+   "es": "Final de peones",
+   "count": 120
+  },
+  {
+   "theme": "pillsburysMate",
+   "en": "Pillsbury's mate",
+   "es": "Mate de Pillsbury",
+   "count": 120
+  },
+  {
+   "theme": "pin",
+   "en": "Pin",
+   "es": "Clavada",
+   "count": 120
+  },
+  {
+   "theme": "promotion",
+   "en": "Promotion",
+   "es": "Coronación",
+   "count": 120
+  },
+  {
+   "theme": "queenRookEndgame",
+   "en": "Queen and rook",
+   "es": "Dama y torre",
+   "count": 120
+  },
+  {
+   "theme": "queenEndgame",
+   "en": "Queen endgame",
+   "es": "Final de damas",
+   "count": 120
+  },
+  {
+   "theme": "queensideAttack",
+   "en": "Queenside attack",
+   "es": "Ataque al flanco de dama",
+   "count": 120
+  },
+  {
+   "theme": "quietMove",
+   "en": "Quiet move",
+   "es": "Jugada tranquila",
+   "count": 120
+  },
+  {
+   "theme": "rookEndgame",
+   "en": "Rook endgame",
+   "es": "Final de torres",
+   "count": 120
+  },
+  {
+   "theme": "sacrifice",
+   "en": "Sacrifice",
+   "es": "Sacrificio",
+   "count": 120
+  },
+  {
+   "theme": "skewer",
+   "en": "Skewer",
+   "es": "Enfilada",
+   "count": 120
+  },
+  {
+   "theme": "smotheredMate",
+   "en": "Smothered mate",
+   "es": "Mate ahogado",
+   "count": 95
+  },
+  {
+   "theme": "trappedPiece",
+   "en": "Trapped piece",
+   "es": "Pieza atrapada",
+   "count": 120
+  },
+  {
+   "theme": "triangleMate",
+   "en": "Triangle mate",
+   "es": "Mate del triángulo",
+   "count": 109
+  },
+  {
+   "theme": "underPromotion",
+   "en": "Underpromotion",
+   "es": "Subpromoción",
+   "count": 60
+  },
+  {
+   "theme": "vukovicMate",
+   "en": "Vukovic mate",
+   "es": "Mate de Vukovic",
+   "count": 104
+  },
+  {
+   "theme": "xRayAttack",
+   "en": "X-ray attack",
+   "es": "Rayos X",
+   "count": 120
+  },
+  {
+   "theme": "zugzwang",
+   "en": "Zugzwang",
+   "es": "Zugzwang",
+   "count": 120
+  }
+ ]
+}
