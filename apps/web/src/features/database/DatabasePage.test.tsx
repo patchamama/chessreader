@@ -203,6 +203,17 @@ describe('Database: where each game comes from, the commented game and the book 
     expect(useExternalBookStore.getState().chapters[0].html).toContain('Una apertura cerrada.')
   })
 
+  it('a book fragment that starts from a position opens from that position', async () => {
+    const fen = '5rk1/1pp5/r5bp/p1nPp1q1/2P2p2/2N5/PP1QBRPP/5R1K w - - 0 26'
+    vi.spyOn(res, 'loadBookGames').mockResolvedValue([{ ...petrosian, fen, pgn: '26. g3 Ne4 *', commented: '26. g3 {Un buen plan.} 26... Ne4 *' }])
+    page()
+    await screen.findByText('Mis geniales predecesores III')
+    await searchRow(/T\. Petrosian – B\. Spassky/)
+    fireEvent.click(screen.getByRole('button', { name: 'Open T. Petrosian – B. Spassky' }))
+    await screen.findByText('Reader open')
+    expect(useExternalBookStore.getState().chapters[0].html).toContain(`<p>${fen}</p>`)
+  })
+
   it('S2 S3: Open in the book opens the book at its chapter and game, with a spinner', async () => {
     const spy = vi.spyOn(busy, 'withBusy')
     const open = vi.spyOn(inBook, 'openGameInBook').mockResolvedValue('/read/7')

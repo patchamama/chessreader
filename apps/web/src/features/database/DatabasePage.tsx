@@ -165,9 +165,11 @@ export default function DatabasePage() {
     if (!full) return
     const title = `${full.white ?? '?'} – ${full.black ?? '?'}${full.year ? ` (${full.year})` : ''}`
     const tags: [string, string | number | null | undefined][] = [['Event', full.event], ['Site', full.place], ['Date', full.date?.replace(/-/g, '.')], ['White', full.white ?? '?'], ['Black', full.black ?? '?'],
-      ['Result', full.result], ['WhiteElo', full.whiteElo], ['BlackElo', full.blackElo], ['Termination', full.termination]]
+      ['Result', full.result], ['WhiteElo', full.whiteElo], ['BlackElo', full.blackElo], ['Termination', full.termination],
+      // A fragment of the book starts from a position.
+      ...(full.fen ? [['SetUp', '1'], ['FEN', full.fen]] as [string, string][] : [])]
     const pgn = `${tags.filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => `[${k} "${String(v).replace(/"/g, "'")}"]`).join('\n')}\n\n${full.commented || full.pgn}`
-    const { chapters } = pgnToChapters(pgn)
+    const { chapters } = pgnToChapters(pgn, { fromPosition: true })
     if (!chapters.length) return
     saveProgress(EXTERNAL_BOOK_ID, 1)
     useExternalBookStore.getState().open(title, chapters)

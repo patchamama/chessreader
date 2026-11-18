@@ -57,3 +57,16 @@ describe('pgnToChapters', () => {
     expect(legal.mainline).toHaveLength(13)
   })
 })
+
+describe('games that start from a position (book fragments with a FEN)', () => {
+  it('are opened from that position: the FEN line comes before the moves', async () => {
+    const { recognizeGames } = await import('@chess-ebook/chess-shared')
+    const { htmlToProseText } = await import('../library/utils/proseText')
+    const fen = '5rk1/1pp5/r5bp/p1nPp1q1/2P2p2/2N5/PP1QBRPP/5R1K w - - 0 26'
+    const { chapters, skipped } = pgnToChapters(`[White "Petrosian"]\n[Black "Gligoric"]\n[SetUp "1"]\n[FEN "${fen}"]\n\n26. g3 Ne4 27. Nxe4 Bxe4+ *`, { fromPosition: true })
+    expect(skipped).toBe(0)
+    const [g] = recognizeGames(htmlToProseText(chapters[0].html), { algorithm: 2 })
+    expect(g.tree.startFen).toBe(fen)
+    expect(g.tree.mainline.map((id) => g.tree.nodes.get(id)!.san)).toEqual(['g3', 'Ne4', 'Nxe4', 'Bxe4+'])
+  })
+})

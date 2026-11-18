@@ -26,6 +26,8 @@ export interface DbGameFull extends Omit<DbGame, 'book' | 'first'> {
   pgn: string
   /** The game with the book's remarks in braces and its variations; absent in databases built before them. */
   commented?: string | null
+  /** Start position of a book fragment (games that do not start from move 1). */
+  fen?: string | null
 }
 export interface PlayerRating {
   player: string; names: string[]; games: number; accuracy: number; engineAgreement: number; maiaAgreement: number | null

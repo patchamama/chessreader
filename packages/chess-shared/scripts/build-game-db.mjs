@@ -33,9 +33,9 @@ const db = new DatabaseSync(dbFile)
 db.exec('PRAGMA foreign_keys = OFF')
 db.exec(readFileSync(new URL('../../../apps/api/migrations/006_games_db.sql', import.meta.url), 'utf8'))
 // Columns added after the migration: the file is rebuilt from scratch every time.
-for (const col of ['place TEXT', 'date TEXT', 'white_elo INTEGER', 'black_elo INTEGER', 'termination TEXT', 'commented_pgn TEXT', 'chapter INTEGER', 'game_index INTEGER']) db.exec(`ALTER TABLE db_games ADD COLUMN ${col}`)
+for (const col of ['place TEXT', 'date TEXT', 'white_elo INTEGER', 'black_elo INTEGER', 'termination TEXT', 'commented_pgn TEXT', 'chapter INTEGER', 'game_index INTEGER', 'start_fen TEXT']) db.exec(`ALTER TABLE db_games ADD COLUMN ${col}`)
 const insBook = db.prepare('INSERT INTO db_books (id, title, author, lang, cover, games, period_from, period_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-const insGame = db.prepare('INSERT INTO db_games (id, book_id, white, black, year, event, opening, result, moves, pgn, place, date, white_elo, black_elo, termination, commented_pgn, chapter, game_index) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+const insGame = db.prepare('INSERT INTO db_games (id, book_id, white, black, year, event, opening, result, moves, pgn, place, date, white_elo, black_elo, termination, commented_pgn, chapter, game_index, start_fen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
 
 /** The cover image of an EPUB: from its metadata (see coverHref), else the first image. */
 function extractCover(epub, bookId) {
@@ -67,6 +67,8 @@ function extractCover(epub, bookId) {
   }
 }
 
+/** Games that start from move 1; the others are book fragments that keep their start position. */
+const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 const YEAR = /\b(1[5-9]\d\d|20[0-2]\d)\b/
 const books = []
 const compact = []
@@ -121,8 +123,8 @@ for (const entry of manifest) {
         const moves = Math.ceil(sans.length / 2)
         const extra = { place: heading?.place ?? null, event: heading?.event ?? null, date: heading?.date ?? null, whiteElo: heading?.whiteElo ?? null, blackElo: heading?.blackElo ?? null, termination }
         prevEnd = lastEnd
-        games.push({ id, white: players.white, black: players.black, year, opening, result, moves, first: sans[0], ...extra, chapter, gameIndex: ref.gameIndex, pgn, commented: ref.commented })
-        insGame.run(id, entry.id, players.white, players.black, year, extra.event, opening, result, moves, pgn, extra.place, extra.date, extra.whiteElo, extra.blackElo, termination, ref.commented, chapter, ref.gameIndex)
+        games.push({ id, white: players.white, black: players.black, year, opening, result, moves, first: sans[0], ...extra, chapter, gameIndex: ref.gameIndex, ...(g.tree.startFen !== START_FEN ? { fen: g.tree.startFen } : {}), pgn, commented: ref.commented })
+        insGame.run(id, entry.id, players.white, players.black, year, extra.event, opening, result, moves, pgn, extra.place, extra.date, extra.whiteElo, extra.blackElo, termination, ref.commented, chapter, ref.gameIndex, g.tree.startFen !== START_FEN ? g.tree.startFen : null)
         // New fields go at the end: readers of the older list keep working.
         compact.push([id, entry.id, players.white, players.black, year, opening, result, moves, sans[0], extra.place, extra.event, extra.date, extra.whiteElo, extra.blackElo, termination, chapter, ref.gameIndex])
       }
