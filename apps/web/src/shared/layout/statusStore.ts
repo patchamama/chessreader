@@ -9,7 +9,14 @@ interface StatusState {
   setStatus: (key: string, label: string, value: string) => void
   /** Remove every piece whose key starts with `prefix` (a page leaving). */
   clearStatus: (prefix: string) => void
+  /** Pages kept alive but hidden (first key segment, e.g. `play`): their pieces stay stored but are not shown. */
+  hiddenScopes: string[]
+  setHiddenScopes: (scopes: string[]) => void
 }
+
+/** The pieces the footer shows: those of the page in front, not of a hidden (kept-alive) tab. */
+export const visibleStatus = (items: StatusItem[], hiddenScopes: string[]): StatusItem[] =>
+  hiddenScopes.length ? items.filter((i) => !hiddenScopes.includes(i.key.split('.')[0])) : items
 
 /** What the page shown publishes for the status footer: position, evaluation, mode, time… */
 export const useStatusStore = create<StatusState>((set) => ({
@@ -25,4 +32,6 @@ export const useStatusStore = create<StatusState>((set) => ({
     return { items }
   }),
   clearStatus: (prefix) => set((s) => ({ items: s.items.filter((i) => !i.key.startsWith(prefix)) })),
+  hiddenScopes: [],
+  setHiddenScopes: (hiddenScopes) => set({ hiddenScopes }),
 }))

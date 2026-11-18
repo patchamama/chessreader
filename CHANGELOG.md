@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.102.0 — 2026-11-18
+
+- feat: the main tabs keep their content when you leave and come back (inputs, results, scroll); a spinner shows while games, books and searches load
+
 ## v0.101.0 — 2026-11-18
 
 - fix: the braces ⇄ paragraphs switch rewrites the game in place (it no longer replaces the book); the switch is in the top bar before the board toggle and one line before each game

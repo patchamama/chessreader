@@ -5,6 +5,7 @@ import { saveProgress } from '../library/store/readingStore'
 import { saveBoardMemory } from '../library/store/boardMemory'
 import { getJson } from '../library/commentdb/commentLookup'
 import { usePageWidth } from '../../shared/layout/pageWidth'
+import { withBusy } from '../../shared/layout/busyStore'
 import { bookErrors, type GameErrors } from './bookErrors'
 import { isDemoHost } from '../../shared/env/devMode'
 import { hasResources } from '../database/resources'
@@ -114,7 +115,7 @@ export default function ErrorsPage() {
       let chapters = repoChapters.current.get(book.id)
       if (!chapters) {
         try {
-          chapters = await loadRepoBookChapters(book)
+          chapters = await withBusy(`Opening ${book.title}…`, () => loadRepoBookChapters(book))
         } catch (e) {
           setRepoError(`${book.title}: ${(e as Error).message}`)
           return

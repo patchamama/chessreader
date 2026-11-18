@@ -1,5 +1,5 @@
 import { useSettingsStore } from '../settings/settingsStore'
-import { useStatusStore } from './statusStore'
+import { useStatusStore, visibleStatus } from './statusStore'
 
 /** Height of the status footer, read by full-height pages (the reader). */
 export const FOOTER_HEIGHT = 28
@@ -10,7 +10,9 @@ export const FOOTER_HEIGHT = 28
  * game mode and clocks. It can be hidden.
  */
 export function StatusFooter() {
-  const items = useStatusStore((s) => s.items)
+  const all = useStatusStore((s) => s.items)
+  const hiddenScopes = useStatusStore((s) => s.hiddenScopes)
+  const items = visibleStatus(all, hiddenScopes)
   const show = useSettingsStore((s) => s.statusFooter)
   const set = useSettingsStore((s) => s.set)
   if (!show) {

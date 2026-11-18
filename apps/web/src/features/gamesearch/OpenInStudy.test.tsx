@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { useExternalBookStore } from '../../shared/externalBook/externalBookStore'
 import { PuzzlePanel } from './PuzzlePanel'
 import { OpenInStudy } from './OpenInStudy'
+import { BusyOverlay } from '../../shared/layout/BusyOverlay'
 
 vi.mock('../../shared/chess/ChessBoard', () => ({ default: ({ fen }: { fen: string }) => <div data-testid="board">{fen}</div> }))
 
@@ -29,6 +30,21 @@ describe('Lichess games open in the study too (S7)', () => {
     expect(await screen.findByText('reader')).toBeInTheDocument()
     expect(urls.some((u) => u.startsWith('https://lichess.org/game/export/g1'))).toBe(true)
     expect(useExternalBookStore.getState().chapters.length).toBeGreaterThan(0)
+  })
+
+  it('shows the spinner while the game is being opened (S3)', async () => {
+    let resolve!: (pgn: string) => void
+    render(
+      <MemoryRouter>
+        <Routes><Route path="/" element={<OpenInStudy title="Y" load={() => new Promise<string>((r) => { resolve = r })} />} /><Route path="/read/:id" element={<p>reader</p>} /></Routes>
+        <BusyOverlay />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Y in the study' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Opening Y…')
+    resolve(PGN)
+    expect(await screen.findByText('reader')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
   })
 
   it('says why when the game cannot be read, and renders nothing outside a router', async () => {

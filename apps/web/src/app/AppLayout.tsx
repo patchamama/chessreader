@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { APP_VERSION } from '../version'
+import { KeepAliveOutlet } from './keepAlive'
 import { useAuthStore } from '../features/auth/store/authStore'
 import { isLocalhostHost } from '../shared/env/devMode'
 import { useSettingsStore, FONT_FAMILIES } from '../shared/settings/settingsStore'
@@ -137,7 +138,7 @@ export default function AppLayout() {
         className={`mx-auto ${pageWidthClass(settings.pageWidth)} py-8 ${settings.statusFooter ? 'pb-12' : ''}`}
         style={{ paddingLeft: `${settings.marginH}rem`, paddingRight: `${settings.marginH}rem` }}
       >
-        <Outlet />
+        <KeepAliveOutlet />
       </main>
 
       <BusyOverlay />

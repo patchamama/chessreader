@@ -25,6 +25,7 @@ import { RECOMMENDED_GAMES, STUDY_TOPICS, lichessStudySearchUrl, openingsFor } f
 import { pgnToChapters } from './pgnChapters'
 import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../shared/externalBook/externalBookStore'
 import { saveProgress } from '../library/store/readingStore'
+import { withBusy } from '../../shared/layout/busyStore'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { PuzzlePanel } from './PuzzlePanel'
 import { MyGamesBrowser } from './MyGamesBrowser'
@@ -92,12 +93,12 @@ export default function GameSearchPage() {
   const [player, setPlayer] = useState('')
   const [games, setGames] = useState<{ month: string; games: ChessComGame[] } | null>(null)
 
-  async function run<T>(work: () => Promise<T>, retry?: () => void): Promise<T | undefined> {
+  async function run<T>(work: () => Promise<T>, retry?: () => void, label = 'Loading from the site…'): Promise<T | undefined> {
     setBusy(true)
     setError(null)
     setFailure(null)
     try {
-      return await work()
+      return await withBusy(label, work)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       if (e instanceof LichessAuthError) setFailure({ kind: 'auth', retry: retry ?? (() => {}) })
@@ -110,6 +111,8 @@ export default function GameSearchPage() {
   }
 
   /** Open a PGN in the reader as an in-memory book. */
+  // In-page PGNs open synchronously (the parse is quick); the slow part, fetching a study or a
+  // broadcast, already runs under `run` with the spinner.
   const read = (title: string, pgn: string) => {
     const { chapters } = pgnToChapters(pgn)
     if (chapters.length === 0) {

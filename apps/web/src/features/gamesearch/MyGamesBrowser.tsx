@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
+import { withBusy } from '../../shared/layout/busyStore'
 import { lichessAccount, type MyGame } from './myGames'
 import { loadGameIndex, type YearGroup } from './myGamesIndex'
 
@@ -48,8 +49,10 @@ export function MyGamesBrowser({ open }: { open: (title: string, pgn: string) =>
     setShown(PAGE)
     setRead(0)
     try {
-      const user = source === 'lichess' ? (await lichessAccount(token)).username : chessComUser
-      setIndex(await loadGameIndex(source, user, token, setRead))
+      await withBusy('Reading your games…', async () => {
+        const user = source === 'lichess' ? (await lichessAccount(token)).username : chessComUser
+        setIndex(await loadGameIndex(source, user, token, setRead))
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {

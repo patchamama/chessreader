@@ -3,6 +3,7 @@ import { useInRouterContext, useNavigate } from 'react-router-dom'
 import { pgnToChapters } from './pgnChapters'
 import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../shared/externalBook/externalBookStore'
 import { saveProgress } from '../library/store/readingStore'
+import { withBusy } from '../../shared/layout/busyStore'
 
 interface Props {
   title: string
@@ -28,10 +29,12 @@ function OpenInStudyButton({ title, load, className }: Props) {
     setBusy(true)
     setError(null)
     try {
-      const { chapters } = pgnToChapters(await load())
-      if (chapters.length === 0) throw new Error('no game could be read from it')
-      useExternalBookStore.getState().open(title, chapters)
-      saveProgress(EXTERNAL_BOOK_ID, 1)
+      await withBusy(`Opening ${title}…`, async () => {
+        const { chapters } = pgnToChapters(await load())
+        if (chapters.length === 0) throw new Error('no game could be read from it')
+        useExternalBookStore.getState().open(title, chapters)
+        saveProgress(EXTERNAL_BOOK_ID, 1)
+      })
       navigate(`/read/${EXTERNAL_BOOK_ID}`)
     } catch (e) {
       setError(`Could not open the game: ${(e as Error).message}`)

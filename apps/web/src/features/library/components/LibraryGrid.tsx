@@ -10,6 +10,7 @@ import { EXTERNAL_BOOK_ID } from '../../../shared/externalBook/externalBookStore
 import { resourcesConfigured } from '../commentdb/commentLookup'
 import { loadBooks, type DbBook } from '../../database/resources'
 import { openRepoBook } from '../../errors/repoBooks'
+import { withBusy } from '../../../shared/layout/busyStore'
 
 export default function LibraryGrid() {
   const demo = isDemoHost()
@@ -54,7 +55,7 @@ function RepoBooks() {
   const read = (b: DbBook) => {
     setOpening(b.id)
     setFailed(null)
-    openRepoBook(b).then(() => navigate(`/read/${EXTERNAL_BOOK_ID}`), (e: Error) => setFailed(`${b.title}: ${e.message}`)).finally(() => setOpening(null))
+    withBusy(`Opening ${b.title}…`, () => openRepoBook(b)).then(() => navigate(`/read/${EXTERNAL_BOOK_ID}`), (e: Error) => setFailed(`${b.title}: ${e.message}`)).finally(() => setOpening(null))
   }
   return (
     <section className="p-4" aria-label="Books of the resources repository">
