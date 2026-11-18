@@ -65,7 +65,7 @@ function RepoBooks() {
       <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {(data ?? []).map((b) => (
           <div key={b.id} className="border rounded-lg p-4 flex flex-col gap-2 bg-white shadow-sm">
-            {b.thumb && <img src={b.thumb} alt={`Cover of ${b.title}`} className="mb-1 h-44 w-full rounded-md object-cover bg-slate-100" />}
+            {b.thumb && <img src={b.thumb} alt={`Cover of ${b.title}`} className="mb-1 h-44 w-full rounded-md object-contain bg-slate-100" />}
             <h3 className="font-semibold leading-snug">{b.title}</h3>
             {b.author && <p className="text-sm text-gray-600">{b.author}</p>}
             <p className="text-xs text-slate-500">{b.games} games{b.period ? ` · ${b.period[0]}–${b.period[1]}` : ''}</p>

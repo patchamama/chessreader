@@ -47,12 +47,16 @@ describe('example books in the deployed app (S9)', () => {
     useSettingsStore.setState({ commentDbToken: 'ghp_x' })
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (String(url).includes('/api/library/books')) return new Response(JSON.stringify(EXAMPLES))
-      if (String(url).endsWith('books.json')) return new Response(JSON.stringify([{ id: 'al-ataque', title: 'Al ataque', author: 'Tal', lang: 'es', cover: null, thumb: null, games: 41, topPlayers: [], period: [1950, 1960] }]))
+      if (String(url).endsWith('books.json')) return new Response(JSON.stringify([{ id: 'al-ataque', title: 'Al ataque', author: 'Tal', lang: 'es', cover: null, thumb: 'data:image/jpeg;base64,AA==', games: 41, topPlayers: [], period: [1950, 1960] }]))
       return new Response('[]')
     }))
     wrap(<LibraryGrid />)
     expect(await screen.findByText('Al ataque')).toBeInTheDocument()
     expect(screen.getByText(/41 games/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Read Al ataque' })).toBeInTheDocument()
+    // The whole cover is shown, never cropped or stretched.
+    const cover = screen.getByAltText('Cover of Al ataque')
+    expect(cover.className).toContain('object-contain')
+    expect(cover.className).not.toContain('object-cover')
   })
 })

@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.104.1 — 2026-11-18
+
+- fix: covers of the resources books in the library are shown whole (no cropping or stretching)
+
 ## v0.104.0 — 2026-11-18
 
 - feat: generated commentary goes move by move — each move on its line with its comment below, no "Move N (White):" labels; variations, engine lines and moves in book comments are marked as playable lines; the evaluation has a button to send its line to an analysis board; book comments link to their source; spinner while opening or regenerating
