@@ -43,7 +43,7 @@ Delivery: one commit + tag per phase on main, pushed (user's standing instructio
 - [x] T7 S4 pattern DB + trainer + labels — inline — v0.84.0
 - [x] T8 S16 trap DB + trainer — inline — v0.85.0
 - [ ] T9 S15, S21–S22 resources repo, game DB, search, players, openings, exercises, stats — inline — v0.86–0.87
-- [ ] T10 S14 level test — inline — v0.88.0
+- [x] T10 S14 level test — inline — v0.88.0
 - [ ] T11 S18 diagram images → FEN — inline — v0.89.0
 - [x] T13 S19–S20 comment layout toggle in the reader, FEN/PGN download always available — inline — v0.79.x
 - [ ] T14 S23 other engines to play against (backend UCI + browser) — inline
