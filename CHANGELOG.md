@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.106.2 — 2026-11-18
+
+- chore: remove the setting "A square named in the text is shown on Main board / Hover thumbnail" (always a hover thumbnail now; click shows it on the board)
+
 ## v0.106.1 — 2026-11-18
 
 - fix: on localhost (login optional) the database, traps, comments and diagram evaluations are read from the server without logging in

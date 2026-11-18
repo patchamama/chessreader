@@ -203,13 +203,6 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
           ))}
         </div>
 
-        {/* Squares named in the text */}
-        <label className={labelClass}>A square named in the text is shown on</label>
-        <div className="flex gap-2">
-          <button className={choice(s.mentionPreview === 'board')} onClick={() => s.set({ mentionPreview: 'board' })}>Main board</button>
-          <button className={choice(s.mentionPreview === 'thumbnail')} onClick={() => s.set({ mentionPreview: 'thumbnail' })}>Hover thumbnail</button>
-        </div>
-
         {/* Help mode */}
         <label className={labelClass}>Help mode: colour the moves of the selected piece (red = bad)</label>
         <div className="flex gap-2">

@@ -19,10 +19,11 @@ describe('SettingsPanel study options', () => {
     expect(useSettingsStore.getState().narrationRepeatSeconds).toBe(6)
   })
 
-  it('chooses where a square named in the text is shown', () => {
+  it('no longer offers where a square named in the text is shown (always a hover thumbnail now)', () => {
     render(<SettingsPanel onClose={() => {}} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Hover thumbnail' }))
-    expect(useSettingsStore.getState().mentionPreview).toBe('thumbnail')
+    expect(screen.queryByRole('button', { name: 'Hover thumbnail' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Main board' })).toBeNull()
+    expect('mentionPreview' in useSettingsStore.getState()).toBe(false)
   })
 
   it('can be maximised and restored', () => {

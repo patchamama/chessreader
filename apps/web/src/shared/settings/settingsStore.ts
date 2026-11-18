@@ -131,8 +131,6 @@ export interface AppSettings {
   narrationRepeatSeconds: number
   /** Selecting a piece colours its destinations by how good each move is. */
   moveHints: boolean
-  /** A square named in the text: show it on the main board at that point of the game, or in a hover thumbnail. */
-  mentionPreview: 'board' | 'thumbnail'
   /** Engine depth used to review a whole game. */
   reviewDepth: number
   /** Who speaks: the browser (live only) or a server voice (can be saved as MP3). */
@@ -265,7 +263,6 @@ const DEFAULT: AppSettings = {
   narrationSayNumber: 'white',
   narrationRepeatSeconds: 5,
   moveHints: true,
-  mentionPreview: 'board',
   reviewDepth: 14,
   voiceProvider: 'browser',
   voiceName: '',
@@ -360,6 +357,8 @@ export function migrateSettings(persisted: unknown, version: number): Partial<Se
   const s = { ...(persisted as Partial<SettingsStore> | undefined) }
   // Version 3: the private resources repository is the default source.
   if (version < 3 && !s.commentDbUrl) s.commentDbUrl = DEFAULT_RESOURCES_URL
+  // Version 4: a square named in the text is always shown on a hover thumbnail.
+  if (version < 4) delete (s as Record<string, unknown>).mentionPreview
   if (version < 1) Object.assign(s, { commentLayout: 'split', commentDiagrams: true, commentDiagramEval: true })
   if (version < 2) {
     // The legacy recogniser (3) is retired: read with variations instead.
@@ -386,7 +385,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'chessreader-settings',
-      version: 3,
+      version: 4,
       migrate: (persisted, version) => migrateSettings(persisted, version) as SettingsStore,
       merge: (persisted, current) => mergeWithDefaults(current as SettingsStore, persisted),
     },
