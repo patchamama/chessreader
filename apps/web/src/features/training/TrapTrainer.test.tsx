@@ -36,7 +36,7 @@ describe('trap practice with a replay and info (S5, S6)', () => {
     }
     expect(screen.getByTestId('trap-line-moves')).toHaveTextContent('1. e4 e5 2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7#')
     fireEvent.click(screen.getByRole('button', { name: 'Last move' }))
-    expect(screen.getByTestId('trap-line-board')).toHaveTextContent('r1bqkb1r/pppp1Qpp/2n2n2/4p3/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 0 4')
+    expect(screen.getByTestId('board')).toHaveTextContent('r1bqkb1r/pppp1Qpp/2n2n2/4p3/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 0 4')
   })
 
   it('explains the trap: its idea, its opening and its patterns, in an info section', () => {

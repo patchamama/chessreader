@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import ChessBoard from '../../shared/chess/ChessBoard'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
-import { loadPatternIndex, patternPuzzle } from '../gamesearch/patterns'
+import { levelPuzzle } from './levelPuzzles'
 import { puzzleMove, puzzlePosition, type Puzzle } from '../gamesearch/puzzles'
 import { answerLevel, LEVEL_PUZZLES, levelMargin, startLevel, type LevelState } from './levelEstimate'
 
 const KEY = 'chessreader-level'
 
 /**
- * How strong are you? Fifteen puzzles from the Lichess database (CC0), each
- * chosen near the current estimate; the estimate moves after every one. The
+ * How strong are you? Fifteen puzzles from the Lichess database (CC0),
+ * bundled with the app (no connection needed), each chosen near the current estimate; the estimate moves after every one. The
  * result sets the level of the Maia hints and of the pattern puzzles.
  */
 export function LevelTest() {
@@ -17,9 +17,8 @@ export function LevelTest() {
   const [state, setState] = useState<LevelState | null>(null)
   const [puzzle, setPuzzle] = useState<Puzzle | null>(null)
   const [ply, setPly] = useState(0)
-  const [themes, setThemes] = useState<string[]>([])
+  const [error, setError] = useState('')
   const [last] = useState(() => { try { return JSON.parse(localStorage.getItem(KEY) ?? 'null') as { rating: number; margin: number; at: string } | null } catch { return null } })
-  useEffect(() => { void loadPatternIndex().then((t) => setThemes(t.map((x) => x.theme)), () => setThemes([])) }, [])
 
   const next = async (s: LevelState) => {
     setState(s)
@@ -31,9 +30,13 @@ export function LevelTest() {
       setPuzzle(null)
       return
     }
-    const theme = themes[Math.floor(Math.random() * themes.length)] ?? 'fork'
-    setPuzzle(await patternPuzzle(theme, s.rating))
-    setPly(0)
+    try {
+      setPuzzle(await levelPuzzle(s.rating))
+      setPly(0)
+      setError('')
+    } catch {
+      setError('The level-test puzzles could not be read.')
+    }
   }
 
   const drop = (from: string, to: string) => {
@@ -54,8 +57,9 @@ export function LevelTest() {
           <p role="status" className="text-lg font-semibold">Your level: about {state.rating} ± {levelMargin(state)} (puzzle rating)</p>
         )}
         {last && !state && <p className="text-slate-600">Last test ({last.at}): {last.rating} ± {last.margin}</p>}
-        <p className="text-slate-600">{LEVEL_PUZZLES} puzzles from the Lichess database, each near your current estimate. Other ways to know your level: play a few games against the Lichess Maia bots (1100/1500/1900) or Stockfish at set levels and look at your accuracy in the engine review; your Lichess or chess.com rating, if you have one, is the best measure.</p>
-        <div><button className="rounded bg-blue-600 px-3 py-1 text-white" disabled={themes.length === 0} onClick={() => void next(startLevel(last?.rating ?? 1500))}>Start the test</button></div>
+        {error && <p role="alert" className="text-red-700">{error}</p>}
+        <p className="text-slate-600">{LEVEL_PUZZLES} puzzles from the Lichess puzzle database (CC0), bundled with the app so no connection is needed, each near your current estimate. Other ways to know your level: play a few games against the Lichess Maia bots (1100/1500/1900) or Stockfish at set levels and look at your accuracy in the engine review; your Lichess or chess.com rating, if you have one, is the best measure.</p>
+        <div><button className="rounded bg-blue-600 px-3 py-1 text-white" onClick={() => void next(startLevel(last?.rating ?? 1500))}>Start the test</button></div>
       </div>
     )
   }
@@ -68,6 +72,7 @@ export function LevelTest() {
       </div>
       <div className="text-sm">
         <p className="font-semibold">Puzzle {state.answered + 1} / {LEVEL_PUZZLES}</p>
+        {error && <p role="alert" className="text-red-700">{error}</p>}
         <p data-testid="level-estimate" className="text-slate-600">Estimate: {state.rating} ± {levelMargin(state)}</p>
         <p className="mt-1 text-xs text-slate-500">Find the best move for the side to play. One wrong move counts the puzzle as failed.</p>
         <button className="mt-2 text-xs underline" onClick={() => puzzle && void next(answerLevel(state, puzzle.rating, false))}>Skip (counts as failed)</button>

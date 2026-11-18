@@ -2,6 +2,7 @@ import { positionHash } from '@chess-ebook/chess-shared'
 import { hasServerSession } from '../../shared/api/serverSession'
 import { httpClient } from '../../shared/api/httpClient'
 import { getJson, resourcesConfigured } from '../library/commentdb/commentLookup'
+import { bundled, cachedJson } from './offline'
 
 /** A trap (celada): the line that sets it, who sets it, and how likely and hard it is. */
 export interface Trap {
@@ -25,7 +26,12 @@ export interface Trap {
   /** Position hash before each move and after the last (keys[i] = before sans[i]). */
   keys: string[]
   source: { title: string; author: string | null }
+  /** Where the trap is in its book, when the trap data says it (file, anchor, chapter). */
+  ref?: { bookId?: string; file?: string; anchor?: string; chapter?: string }
 }
+
+/** A trap taken from Lococo's book (the private resources). */
+export const isBookTrap = (t: Trap) => t.id.startsWith('lococo-') || /Lococo/i.test(t.source.author ?? '')
 
 /**
  * The traps: a public set of classic traps shipped with the app, plus — with
@@ -33,18 +39,19 @@ export interface Trap {
  * the books (Lococo's book has 164, each rated as the book rates it).
  */
 export async function loadTraps(): Promise<Trap[]> {
-  const classic = await fetch(`${import.meta.env.BASE_URL ?? '/'}traps/classic.json`).then((r) => (r.ok ? r.json() : []), () => []) as Trap[]
+  // Bundled and book traps are kept for offline use: the last copy is served without network.
+  const classic = await cachedJson<Trap[]>(bundled('traps/classic.json')).catch(() => [] as Trap[])
   let books: Trap[] = []
   try {
-    if (hasServerSession()) books = await httpClient<Trap[]>('/api/resources/traps', { method: 'GET' })
-    else if (resourcesConfigured()) books = await getJson<Trap[]>('traps.json')
+    if (hasServerSession()) books = await cachedJson('training:book-traps', () => httpClient<Trap[]>('/api/resources/traps', { method: 'GET' }))
+    else if (resourcesConfigured()) books = await cachedJson('training:book-traps', () => getJson<Trap[]>('traps.json'))
   } catch {
     books = []
   }
   return [...classic, ...books]
 }
 
-export interface TrapFilter { q?: string; category?: string; side?: 'white' | 'black' | ''; minFall?: number }
+export interface TrapFilter { q?: string; category?: string; side?: 'white' | 'black' | ''; minFall?: number; firstMove?: string }
 
 export function filterTraps(traps: Trap[], f: TrapFilter): Trap[] {
   const q = (f.q ?? '').trim().toLowerCase()
@@ -52,7 +59,8 @@ export function filterTraps(traps: Trap[], f: TrapFilter): Trap[] {
     (!q || [t.title, t.titleEs ?? '', t.opening, ...t.themes].some((x) => x.toLowerCase().includes(q)))
     && (!f.category || t.category === f.category)
     && (!f.side || t.side === f.side)
-    && (!f.minFall || (t.fall ?? 0) >= f.minFall))
+    && (!f.minFall || (t.fall ?? 0) >= f.minFall)
+    && (!f.firstMove || t.sans[0] === f.firstMove))
 }
 
 /**

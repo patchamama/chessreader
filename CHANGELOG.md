@@ -2,6 +2,11 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.113.0 — 2026-11-19
+
+- feat: Training works offline (bundled level-test puzzles; trap data cached); trap practice shows the expected move with an arrow and squares, has a step-by-step learning mode, a first-move filter, clickable and highlighted idea text in the selected notation, legal-move dots, captured pieces, a link to read book traps on the analysis board, and a "Try a trap" game that lists the traps still reachable
+- fix: "About this trap" no longer opens a second board
+
 ## v0.112.1 — 2026-11-18
 
 - feat: the diagram tools (regenerate and download diagrams and evaluations) are in the reader's side panel; a broken book image shows the generated board of its position
