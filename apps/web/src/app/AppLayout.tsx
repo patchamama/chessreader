@@ -71,6 +71,9 @@ export default function AppLayout() {
             <NavLink to="/database" className={navLinkClass}>
               Database
             </NavLink>
+            <NavLink to="/errors" className={navLinkClass}>
+              Errors
+            </NavLink>
             <NavLink to="/webparser" className={navLinkClass}>
               Webparser
             </NavLink>

@@ -47,7 +47,7 @@ Delivery: one commit + tag per phase on main, pushed (user's standing instructio
 - [ ] T11 S18 diagram images → FEN — inline — v0.89.0
 - [x] T13 S19–S20 comment layout toggle in the reader, FEN/PGN download always available — inline — v0.79.x
 - [ ] T14 S23 other engines to play against (backend UCI + browser) — inline
-- [ ] T15 S29 errors table + ranking page — inline
+- [x] T15 S29 errors table + ranking page — inline
 - [ ] T16 S25–S27 resources repo docs (en/es), query servers (Flask, PHP), CHANGELOG — inline
 - [ ] T12 S17, S26 start.sh / start.bat, lc0 + Maia install — inline — v0.90.0
 
