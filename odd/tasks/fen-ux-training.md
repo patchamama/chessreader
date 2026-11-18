@@ -42,17 +42,18 @@ Delivery: one commit + tag per phase on main, pushed (user's standing instructio
 - [x] T6 S3, S6 Play random colour, ideas, targets, traps — inline — v0.83.0
 - [x] T7 S4 pattern DB + trainer + labels — inline — v0.84.0
 - [x] T8 S16 trap DB + trainer — inline — v0.85.0
-- [ ] T9 S15, S21–S22 resources repo, game DB, search, players, openings, exercises, stats — inline — v0.86–0.87
+- [x] T9 S15, S21–S22 resources repo, game DB, search, players, openings, exercises, stats — inline — v0.86–0.87
 - [x] T10 S14 level test — inline — v0.88.0
-- [ ] T11 S18 diagram images → FEN — inline — v0.89.0
+- [x] T11 S18 diagram images → FEN — inline — v0.89.0
 - [x] T13 S19–S20 comment layout toggle in the reader, FEN/PGN download always available — inline — v0.79.x
 - [x] T14 S23 other engines to play against (backend UCI + browser) — inline
 - [x] T15 S29 errors table + ranking page — inline
-- [ ] T16 S25–S27 resources repo docs (en/es), query servers (Flask, PHP), CHANGELOG — inline
-- [ ] T12 S17, S26 start.sh / start.bat, lc0 + Maia install — inline — v0.90.0
+- [x] T16 S25–S27 resources repo docs (en/es), query servers (Flask, PHP), CHANGELOG — inline
+- [x] T12 S17, S26 start.sh / start.bat, lc0 + Maia install — inline — v0.90.0
 
 ## Log
 - L1 2026-11-18 user request (verbatim fragments in S1–S18; full text in session transcript 59547ab6).
 - L2 Evidence: recognizeGames ignores FEN lines (fragment "26 Qe3…" after a FEN → 0 games); Kasparov I–V ~240 FEN lines, Gude 1 31, Tal 4. chess.com API is read-only (no play/login). Lichess puzzle DB CC0, 6.19M puzzles with themes.
 - L3 T1: FEN lines start a game from their position (tokenizer `fen` token, builder numbers plies from the FEN's move counter, FEN read from the original text so Spanish letters never touch it). Differential: 3164 PGN games 0 differences. Kasparov I–V games 728 → 943 (+215), plies +2114; Gude 1 +29 games/+572 plies. Errors rose (e.g. Kasparov II 569 → 803) because analysis lines of fragments that used to be dropped silently are now read; new errors are inside deep analysis, same kinds as before. Algorithm 3 retired from the UI (settings v2 migrates 3 → 2), Settings → Recognition: with variations / main line only.
 - L4 T2: the book shown and the board place (chapter, game, move, arrows and marks) survive a refresh (external book persisted under `chessreader-external-book`, place under `chessreader-board-v1`); hovering a square/line named in the text previews it and mouse-out restores the board unless clicked; clicking a move scrolls the board into view; arrows in 4 colours (Shift green, Ctrl red). User reports fixed (2026-11-18): "Reanalizar y regenerar" left a blank page — the reader kept the previous book's chapter number when the route changed to the one-chapter regenerated book; regeneration now rewrites only the active game in place (first to last move), keeps the other games, and selects its first move. "la diagonal a2-g8" now lights the whole diagonal (dashed square pairs that form a line), a plan "d4-d5" shows an arrow.
+- L5 T9/T11/T12/T16: private repo patchamama/chessreader-resources created and pushed (458 MB: commentary DB, game DB 1994 games/17 books, 164 traps, covers, books text+EPUB except files ≥100 MB, Flask+PHP query servers tested on the real data, bilingual README). Diagram images → FEN: templates learned from the 44 diagrams with printed FEN in Kasparov II–III read 100% of squares on 14 held-out boards; 691 read boards accepted by the moves that follow (296 K-III, 395 K-II). start.sh/start.bat install system requirements, engines, Maia nets and the private resources. CHANGELOG.md generated from the 97 version tags.

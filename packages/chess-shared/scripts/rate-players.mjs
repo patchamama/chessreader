@@ -57,6 +57,8 @@ for (const g of rows) {
     ins.run(g.id, color, g[color], review[color].accuracy, maia ? a[2] / Math.max(1, a[0]) : null, a[1] / Math.max(1, a[0]))
   }
   if (++done % 50 === 0) console.error(`${done}/${rows.length}`)
+  // Partial results along the way: the ranking is usable before the end.
+  if (done % 100 === 0) exportRatings(db, file.replace(/games\.sqlite$/, 'ratings.json'))
 }
 sf.p.kill(); maia?.p.kill()
 console.log(`rated ${done} games`)

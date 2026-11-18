@@ -23,7 +23,11 @@ ChessReader parses chess content — EPUBs, public URLs, plain text — recognis
 | **Engine review & coach** | Stockfish review with accuracy per player (Lichess formula), key moments and commentary at three levels (with "the only good move" — the engine's second choice and its refutation — and the engine's plan after a quiet move, saying whether the game carried it out); a *coach review* of a game you played (focus on White, Black or both): errors with what they allowed, free pieces left, the better move and what it did, the opponent's threats; optional commentary by Claude or OpenAI with your own key; *Re-analyse and regenerate all comments* runs the engine again over the whole game and writes every remark and diagram anew; diagrams are drawn with your board colours and piece set, centred, with the evaluation in words, the engine and depth, its next moves and an alternative; hovering a move shows the evaluation before → after, the winning chances it gave away and the engine's move as a dashed arrow; *Analyse on Lichess* imports the game to the Lichess analysis board; engine source *Lichess cloud first* (Settings) uses Lichess' deep cloud analysis when it knows the position and the local Stockfish otherwise |
 | **Book layout** | Annotated games written as a book: remarks in braces, a line per remark, or a paragraph after the moves; diagrams at the key moments (or the moves you pick) with the engine evaluation under them |
 | **Play with a tutor** | Play the engine (strength 1–8), a person at the same board, someone on Lichess (casual) or the Lichess AI (level 1–8), a Maia bot on Lichess (plays like a person of 1100/1500/1900), at the clock you choose (10+5 by default; token with `board:play` and `challenge:write`); the tutor comments every move: ideas, threats, chances, what your move leaves. Options: the selected piece's moves coloured by quality (with a legend for the first moves), a status after each move (book move from the bundled ECO table or the masters explorer, tablebase result with ≤7 pieces, else best/good/inaccuracy/mistake/blunder by the engine), evaluation bar, moves said aloud (opponent's or both). Lichess games show both players with ratings and titles, the ticking clocks and a Resign button |
-| **Game search** | Recommended annotated games (offline), Lichess studies, master games by opening (needs a free Lichess token), tournaments, chess.com archives, your own Lichess games (to review and comment them), Lichess puzzles (the puzzle of the day, or new ones for your rating with a token); games read from Lichess are kept offline |
+| **Game search** | Recommended annotated games (offline, with their number of moves), Lichess studies, master games by opening (needs a free Lichess token), tournaments, chess.com archives, **your games** on Lichess (token) or chess.com (user name) by year → month with ratings, result, how it ended, opening and moves, Lichess puzzles (the puzzle of the day, or new ones for your rating) and a pattern trainer; games read from Lichess are kept offline |
+| **Training** | *Traps*: the 164 traps of Lococo's book (private resources) and 12 classic ones, searchable by name, opening and theme, filtered by side, kind and how likely the opponent falls, practised move by move with spaced repetition — and offered in Play when the position allows. *Tactical patterns*: puzzles of 53 themes from the Lichess puzzle database (CC0). *Your level*: 15 adaptive puzzles give your puzzle rating and set the Maia hint level |
+| **Database** | The game database of the books (private resources): book cards with cover, games, most frequent players and period; search by player, opening and year; openings; players ranked by the engines (accuracy, Stockfish and Maia agreement) with their near-perfect games and a Wikipedia summary; statistics with charts (players, decades, first moves, openings) |
+| **Errors** | A table of the books with their recognition errors by kind and the games ranked by errors, each opening in the reader at that game |
+| **Board** | The reader remembers the book, chapter, move, arrows and marks after a refresh; hovering a move named in a comment previews it and restores the board; arrows in four colours and square marks; a full-screen board with the moves, evaluation and narration controls (back 5/10/15 s); a status bar with position, evaluation, mode and time; page width normal, wide or full |
 | **Notes** | Per-user scratch notes with explicit Save and maximize — stored server-side, cached offline |
 | **Theming** | App light/dark theme, 6 board color themes, 7 piece sprite sets, board size, move sounds, autoplay |
 | **Browser Extension** | MV3 Chrome/Edge extension — makes chess blogs interactive without the app |
@@ -31,6 +35,10 @@ ChessReader parses chess content — EPUBs, public URLs, plain text — recognis
 | **Dev Bypass** | On `localhost`, login is optional — direct access to all features |
 
 ---
+
+## Changelog
+
+What each version brought, from the git history: [CHANGELOG.md](CHANGELOG.md).
 
 ## Architecture
 
@@ -136,6 +144,8 @@ start.bat              # Windows
 
 ### Start
 
+`start.sh` / `start.bat` install what the system lacks (Homebrew/apt or winget: Node, pnpm, PHP, composer, Stockfish, GNU Chess, lc0 with the Maia nets — Metal GPU on Apple Silicon), download the private resources from `chessreader-resources` into `apps/api/storage/resources` when they are missing and GitHub access exists (`gh auth login` or `GITHUB_TOKEN`), build the shared package, migrate the database and start both servers.
+
 ```bash
 # macOS / Linux
 bash start.sh
@@ -230,6 +240,12 @@ for r in 1100 1500 1900; do curl -LO https://github.com/CSSLab/maia-chess/releas
 ```
 
 The Maia code is GPL-3.0 and its nets carry no separate licence notice, so this repository does not ship them; each server downloads them.
+
+## Private resources (chessreader-resources)
+
+The data built from the books — commentary database, game database, traps, player ratings, the books themselves — lives in the private repository `chessreader-resources`, documented there in English and Spanish (sources, extraction, queries, a Flask and a PHP query server, ideas to clean and translate the comments). With the server it is read from `apps/api/storage/resources` (`GET /api/resources/{books,games,traps,ratings,games-<book>}`); in the demo, give its contents API URL and a read-only token in Settings.
+
+Diagram images to FEN: `packages/chess-shared/scripts/diagram_fen.py` learns the book's diagram font from the diagrams that have a printed FEN (100% of squares right on held-out boards) and reads the others; `validate-diagram-fens.mjs` accepts a board only when the moves after the diagram are legal from it (691 boards accepted in Kasparov II–III).
 
 ## Human commentary database
 
