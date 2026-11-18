@@ -7,11 +7,14 @@ namespace App\Infrastructure\Epub;
 /**
  * Parses an EPUB 2 toc.ncx file and returns ordered TocEntry list.
  *
- * Uses DOMDocument to walk the navMap/navPoint elements.
+ * Walks every navPoint (nested ones included) in document order, so a spine
+ * document only listed under a parent entry still gets its own label.
  * Isolated, stateless, unit-testable with no I/O side effects beyond reading one file.
  */
 final class NcxTocParser
 {
+    private const NS = 'http://www.daisy.org/z3986/2005/ncx/';
+
     /** @return TocEntry[] ordered by playOrder */
     public function parse(string $ncxPath): array
     {
@@ -24,51 +27,44 @@ final class NcxTocParser
             throw new \RuntimeException("Cannot read NCX file: $ncxPath");
         }
 
+        return $this->parseXml($xml);
+    }
+
+    /** @return TocEntry[] ordered by playOrder (document order for ties) */
+    public function parseXml(string $xml): array
+    {
         $dom = new \DOMDocument();
         // Suppress warnings from DTD declaration in the NCX
         if (!@$dom->loadXML($xml)) {
-            throw new \RuntimeException("Cannot parse NCX XML: $ncxPath");
+            throw new \RuntimeException('Cannot parse NCX XML');
         }
 
-        $ns       = 'http://www.daisy.org/z3986/2005/ncx/';
-        $xpath    = new \DOMXPath($dom);
-        $xpath->registerNamespace('ncx', $ns);
+        $xpath = new \DOMXPath($dom);
+        $xpath->registerNamespace('ncx', self::NS);
 
-        $navPoints = $xpath->query('//ncx:navMap/ncx:navPoint');
-
+        $navPoints = $xpath->query('//ncx:navMap//ncx:navPoint');
         if ($navPoints === false || $navPoints->length === 0) {
             // Fallback: try without namespace (some NCX files omit it)
-            $navPoints = $dom->getElementsByTagName('navPoint');
+            $navPoints = $xpath->query('//*[local-name()="navMap"]//*[local-name()="navPoint"]');
         }
 
         $entries = [];
-        foreach ($navPoints as $node) {
+        foreach ($navPoints ?: [] as $node) {
             /** @var \DOMElement $node */
             $playOrder = (int) ($node->getAttribute('playOrder') ?: count($entries) + 1);
 
-            // navLabel/text
-            $labelNodes = $node->getElementsByTagNameNS($ns, 'navLabel');
-            if ($labelNodes->length === 0) {
-                $labelNodes = $node->getElementsByTagName('navLabel');
-            }
+            // Own navLabel/text and content only — not those of nested navPoints.
             $title = '';
-            if ($labelNodes->length > 0) {
-                $textNodes = $labelNodes->item(0)->getElementsByTagName('text');
-                if ($textNodes->length > 0) {
-                    $title = trim($textNodes->item(0)->textContent);
-                }
+            $label = $this->firstChild($node, 'navLabel');
+            if ($label !== null) {
+                $text = $this->firstChild($label, 'text');
+                $title = TocLabel::fromText(($text ?? $label)->textContent);
             }
 
-            // content src
-            $contentNodes = $node->getElementsByTagNameNS($ns, 'content');
-            if ($contentNodes->length === 0) {
-                $contentNodes = $node->getElementsByTagName('content');
-            }
-            $href = '';
-            if ($contentNodes->length > 0) {
-                /** @var \DOMElement $contentEl */
-                $contentEl = $contentNodes->item(0);
-                $href = $contentEl->getAttribute('src');
+            $href    = '';
+            $content = $this->firstChild($node, 'content');
+            if ($content !== null) {
+                $href = $content->getAttribute('src');
                 // Strip fragment anchors if any
                 if (str_contains($href, '#')) {
                     $href = substr($href, 0, strpos($href, '#'));
@@ -78,9 +74,19 @@ final class NcxTocParser
             $entries[] = new TocEntry(order: $playOrder, title: $title, href: $href);
         }
 
-        // Sort by playOrder to guarantee order
+        // Sort by playOrder to guarantee order (usort is stable: document order for ties)
         usort($entries, fn(TocEntry $a, TocEntry $b) => $a->order <=> $b->order);
 
         return $entries;
+    }
+
+    private function firstChild(\DOMElement $parent, string $localName): ?\DOMElement
+    {
+        foreach ($parent->childNodes as $child) {
+            if ($child instanceof \DOMElement && $child->localName === $localName) {
+                return $child;
+            }
+        }
+        return null;
     }
 }

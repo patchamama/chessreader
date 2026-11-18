@@ -13,6 +13,7 @@ use App\Domain\Library\Chapter;
 use App\Infrastructure\Epub\NcxTocParser;
 use App\Infrastructure\Epub\OpfManifestParser;
 use App\Infrastructure\Epub\ZipEpubExtractor;
+use App\Tests\Fixtures\epub\EpubBuilder;
 use App\Tests\Fixtures\epub\EpubFixture;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -69,6 +70,35 @@ final class ProcessEpubHandlerTest extends TestCase
         self::assertSame('Basic Endgames', $savedChapters[1]['title']);
 
         unlink($epubPath);
+    }
+
+    public function test_epub3_chapters_are_named_from_the_nav_document(): void
+    {
+        $epubPath = EpubBuilder::zip([
+            'OPS/package.opf' => EpubBuilder::opf(
+                '<item id="toc" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>'
+                . '<item id="a" href="a.xhtml" media-type="application/xhtml+xml"/>',
+                '<itemref idref="a"/>',
+                version: '3.0',
+            ),
+            'OPS/nav.xhtml' => EpubBuilder::xhtml('<nav epub:type="toc"><ol><li><a href="a.xhtml">Prefacio<br/>Campeones</a></li></ol></nav>'),
+            'OPS/a.xhtml'   => EpubBuilder::xhtml('<p>Primera línea.</p>'),
+        ], 'OPS/package.opf');
+        $saved = [];
+        // A book id no real stored book uses: ingestion copies the EPUB to storage/books/{id}.epub.
+        $this->repo->method('save')->willReturn(999902);
+        $this->repo->method('saveChapter')->willReturnCallback(
+            function (int $bookId, int $order, string $title) use (&$saved) {
+                $saved[] = $title;
+                return $order;
+            },
+        );
+
+        $this->handler->handle(new ProcessEpubCommand(ownerId: 42, epubPath: $epubPath));
+
+        self::assertSame(['Prefacio — Campeones'], $saved);
+        unlink($epubPath);
+        @unlink(__DIR__ . '/../../../../storage/books/999902.epub');
     }
 
     public function test_corrupt_epub_saves_failed_status_and_throws(): void

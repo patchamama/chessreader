@@ -2,6 +2,11 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.100.0 — 2026-11-18
+
+- feat: chapter titles from the EPUB's own table of contents (nav.xhtml / toc.ncx, several lines joined), also for books already in the library
+- fix: chapter images load (the images route is public for image entries only, like covers); covers from the EPUB metadata, shown whole; EPUB tables styled
+
 ## v0.99.0 — 2026-11-18
 
 - feat: database — sortable players ranking, statistics items link to their games, optional bar or pie chart per table, game lists show moves, result and how it ended, Elo, place and event; covers from the EPUB metadata shown whole; the game database reads the book headings (place, event, date, termination)

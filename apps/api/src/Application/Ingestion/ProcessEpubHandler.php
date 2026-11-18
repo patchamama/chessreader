@@ -9,6 +9,7 @@ use App\Application\Ingestion\Port\EpubExtractor;
 use App\Domain\Library\Book;
 use App\Domain\Library\BookRepository;
 use App\Domain\Library\BookStatus;
+use App\Infrastructure\Epub\EpubPackage;
 use App\Infrastructure\Epub\NcxTocParser;
 use App\Infrastructure\Epub\OpfManifestParser;
 
@@ -56,38 +57,20 @@ final class ProcessEpubHandler
             // 3. Extract archive
             $extractDir = $this->extractor->extract($cmd->epubPath);
 
-            // 4. Locate content.opf via META-INF/container.xml
-            $opfPath = $this->resolveOpfPath($extractDir);
+            // 4–7. Read the package: chapters in spine order, each named from
+            // the book's own table of contents (EPUB 3 nav, else EPUB 2 NCX).
+            $package = EpubPackage::fromDirectory($extractDir, $this->opfParser, $this->tocParser);
+            if ($package->opfPath() === null) {
+                // No container.xml: fall back to any .opf in the archive.
+                $opfFile = $this->resolveOpfPath($extractDir);
+                $package = $package->withFallbackOpf(substr($opfFile, strlen($extractDir) + 1));
+            }
+            $opf      = $this->opfParser->parse($extractDir . '/' . $package->opfPath());
+            $chapters = $package->chapters();
 
-            // 5. Parse manifest + metadata
-            $opf     = $this->opfParser->parse($opfPath);
-            $opfDir  = dirname($opfPath);
-
-            // 6. Parse TOC
-            $ncxHref = $opf['manifest']['ncx'] ?? null;
-            $ncxPath = $ncxHref ? $opfDir . '/' . $ncxHref : $opfDir . '/toc.ncx';
-            $tocEntries = is_file($ncxPath) ? $this->tocParser->parse($ncxPath) : [];
-
-            // 7. Build chapters from spine + xhtml files
             $order = 1;
-            foreach ($opf['spine'] as $idref) {
-                $href   = $opf['manifest'][$idref] ?? null;
-                if ($href === null) {
-                    continue;
-                }
-                $xhtmlPath = $opfDir . '/' . $href;
-                $html      = is_file($xhtmlPath) ? file_get_contents($xhtmlPath) : '';
-
-                // Find matching TOC title
-                $title = "Chapter $order";
-                foreach ($tocEntries as $entry) {
-                    if (trim($entry->href, '/') === trim($href, '/')) {
-                        $title = $entry->title;
-                        break;
-                    }
-                }
-
-                $this->books->saveChapter($bookId, $order, $title, (string) $html);
+            foreach ($chapters as $chapter) {
+                $this->books->saveChapter($bookId, $order, $chapter['title'], $chapter['html']);
                 $order++;
             }
 

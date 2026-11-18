@@ -38,7 +38,7 @@ export default function BookCard({ book, totalChapters, onHide }: Props) {
             alt={`Cover of ${book.title}`}
             loading="lazy"
             onError={() => setHasCover(false)}
-            className="mb-1 h-44 w-full rounded-md object-cover bg-slate-100"
+            className="mb-1 h-44 w-full rounded-md object-contain bg-slate-100"
           />
         </Link>
       )}

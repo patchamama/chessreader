@@ -6,6 +6,7 @@ namespace App\Tests\Unit\Infrastructure\Epub;
 
 use App\Infrastructure\Epub\NcxTocParser;
 use App\Infrastructure\Epub\TocEntry;
+use App\Tests\Fixtures\epub\EpubBuilder;
 use App\Tests\Fixtures\epub\EpubFixture;
 use PHPUnit\Framework\TestCase;
 
@@ -45,6 +46,28 @@ final class NcxTocParserTest extends TestCase
         self::assertSame(2, $entries[1]->order);
         self::assertSame('Basic Endgames', $entries[1]->title);
         self::assertSame('Text/ch2.xhtml', $entries[1]->href);
+    }
+
+    public function test_nested_nav_points_are_kept_in_document_order(): void
+    {
+        $xml = EpubBuilder::ncx([
+            ['Part one', 'Text/a.xhtml', [['Inner', 'Text/b.xhtml#x']]],
+            ['Part two', 'Text/c.xhtml'],
+        ]);
+
+        $entries = (new NcxTocParser())->parseXml($xml);
+
+        self::assertSame(['Part one', 'Inner', 'Part two'], array_map(fn(TocEntry $e) => $e->title, $entries));
+        self::assertSame('Text/b.xhtml', $entries[1]->href);
+    }
+
+    public function test_multi_line_label_keeps_its_lines(): void
+    {
+        $xml = EpubBuilder::ncx([["Capítulo I\n   CELADAS  CON CEBO\n", 'Text/a.xhtml']]);
+
+        $entries = (new NcxTocParser())->parseXml($xml);
+
+        self::assertSame('Capítulo I — CELADAS CON CEBO', $entries[0]->title);
     }
 
     public function test_throws_on_missing_file(): void

@@ -112,12 +112,14 @@ return function (App $app): void {
     // Public book cover — served as a plain <img>, which cannot send an auth
     // header. Only exposes the cover image binary (no sensitive data).
     $app->get('/api/library/books/{id:[0-9]+}/cover', [LibraryController::class, 'cover']);
+    // Chapter images (diagrams, figures) — same reason: the reader shows them
+    // with plain <img>/<image> tags. Serves image entries of the EPUB only.
+    $app->get('/api/library/books/{id:[0-9]+}/images/{path:.+}', [LibraryController::class, 'image']);
 
     // Library routes (require JWT + Approved)
     $app->group('/api/library', function (RouteCollectorProxy $group) {
         $group->get('/books', [LibraryController::class, 'books']);
         $group->get('/books/{id:[0-9]+}/chapters/{n:[0-9]+}', [LibraryController::class, 'chapter']);
-        $group->get('/books/{id:[0-9]+}/images/{path:.+}', [LibraryController::class, 'image']);
         $group->put('/books/{id:[0-9]+}', [LibraryController::class, 'updateBook']);
         $group->delete('/books/{id:[0-9]+}', [LibraryController::class, 'deleteBook']);
         $group->post('/books/{id:[0-9]+}/touch', [LibraryController::class, 'touch']);

@@ -1,0 +1,70 @@
+/*
+ * Book content (EPUB chapter HTML rendered inside .epub-content).
+ * Tables and figures as the book prints them. The reader's inline per-book
+ * rules (BookReader) still apply on top of these.
+ */
+
+/* Tables: ruled cells, scroll sideways on narrow screens instead of overflowing. */
+.epub-content table {
+  border-collapse: collapse;
+  max-width: 100%;
+  margin: 0.75rem 0 1rem;
+}
+.epub-content th,
+.epub-content td {
+  border: 1px solid #cbd5e1;
+  padding: 0.35rem 0.6rem;
+  vertical-align: top;
+  text-align: left;
+}
+.epub-content th {
+  background: #f1f5f9;
+  font-weight: 600;
+}
+.epub-content caption {
+  caption-side: top;
+  font-size: 0.85em;
+  color: #475569;
+  padding-bottom: 0.25rem;
+}
+/* Paragraphs inside a cell are cell text, not body paragraphs. */
+.epub-content td p,
+.epub-content th p {
+  margin: 0;
+  text-indent: 0;
+}
+/* Small images inside a cell (ratings, icons) stay inline with the text. */
+.epub-content td img,
+.epub-content th img {
+  display: inline-block;
+  margin: 0;
+  vertical-align: middle;
+  box-shadow: none;
+}
+
+@media (max-width: 640px) {
+  .epub-content table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Figures and inline SVG drawings (diagrams, graphics, cover pages). */
+.epub-content figure {
+  margin: 1rem auto;
+  text-align: center;
+}
+.epub-content figcaption {
+  font-size: 0.85em;
+  color: #475569;
+  margin-top: 0.25rem;
+}
+/* Only the book's own SVG drawings (an <image> inside), not the app's icons. */
+.epub-content svg:has(> image) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  max-height: 80vh;
+  margin: 1rem auto;
+}

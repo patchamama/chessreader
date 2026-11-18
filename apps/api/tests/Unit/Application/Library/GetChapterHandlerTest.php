@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Unit\Application\Library;
 
 use App\Application\Library\GetChapterHandler;
+use App\Application\Library\Port\ChapterTitleSource;
 use App\Domain\Library\BookRepository;
 use App\Domain\Library\Chapter;
 use PHPUnit\Framework\TestCase;
@@ -42,5 +43,41 @@ class GetChapterHandlerTest extends TestCase
         $result  = $handler->handle(99, 0);
 
         $this->assertNull($result);
+    }
+
+    public function testTitlesFromTheBookTocReplaceTheStoredOnes(): void
+    {
+        $ch1 = new Chapter(1, 42, 1, 'Chapter 1', '<p>a</p>');
+        $ch2 = new Chapter(2, 42, 2, 'Stored two', '<p>b</p>');
+
+        $repo = $this->createMock(BookRepository::class);
+        $repo->method('findChapter')->with(42, 1)->willReturn($ch1);
+        $repo->method('findChaptersByBook')->with(42)->willReturn([$ch1, $ch2]);
+
+        $titles = $this->createMock(ChapterTitleSource::class);
+        // Only chapter 1 has a better title; chapter 2 keeps the stored one.
+        $titles->method('titlesFor')->with(42)->willReturn([1 => 'Prefacio — Campeones']);
+
+        $result = (new GetChapterHandler($repo, $titles))->handle(42, 1);
+
+        $this->assertNotNull($result);
+        $this->assertSame('Prefacio — Campeones', $result['title']);
+        $this->assertSame('Prefacio — Campeones', $result['toc'][0]['title']);
+        $this->assertSame('Stored two', $result['toc'][1]['title']);
+    }
+
+    public function testStoredTitlesStayWhenTheBookHasNoEpub(): void
+    {
+        $ch1 = new Chapter(1, 7, 1, 'https://example.com', '<p>a</p>');
+        $repo = $this->createMock(BookRepository::class);
+        $repo->method('findChapter')->willReturn($ch1);
+        $repo->method('findChaptersByBook')->willReturn([$ch1]);
+        $titles = $this->createMock(ChapterTitleSource::class);
+        $titles->method('titlesFor')->willReturn(null);
+
+        $result = (new GetChapterHandler($repo, $titles))->handle(7, 1);
+
+        $this->assertSame('https://example.com', $result['title']);
+        $this->assertSame('https://example.com', $result['toc'][0]['title']);
     }
 }

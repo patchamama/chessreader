@@ -13,12 +13,15 @@ use App\Application\Library\SetLastReadBookHandler;
 use App\Application\Library\UpdateBookCommand;
 use App\Application\Library\UpdateBookHandler;
 use App\Domain\Auth\Role;
+use App\Infrastructure\Epub\EpubPackage;
 use App\Infrastructure\Epub\OpfManifestParser;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
 final class LibraryController
 {
+    private const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
+
     public function __construct(
         private readonly ListBooksHandler      $listBooks,
         private readonly GetChapterHandler     $getChapter,
@@ -137,6 +140,12 @@ final class LibraryController
         if (str_contains($innerPath, '..')) {
             return $response->withStatus(400);
         }
+        // Public route (an <img> cannot send the token): images only, never
+        // the book's text documents.
+        $ext = strtolower(pathinfo($innerPath, PATHINFO_EXTENSION));
+        if (!in_array($ext, self::IMAGE_EXTENSIONS, true)) {
+            return $response->withStatus(404);
+        }
 
         $zip = new \ZipArchive();
         if ($zip->open($epubFile) !== true) {
@@ -162,7 +171,6 @@ final class LibraryController
             return $response->withStatus(404);
         }
 
-        $ext  = strtolower(pathinfo($innerPath, PATHINFO_EXTENSION));
         $mime = match ($ext) {
             'png'  => 'image/png',
             'gif'  => 'image/gif',
@@ -174,7 +182,10 @@ final class LibraryController
         $response->getBody()->write($content);
         return $response
             ->withHeader('Content-Type', $mime)
-            ->withHeader('Cache-Control', 'public, max-age=86400');
+            ->withHeader('Cache-Control', 'public, max-age=86400')
+            ->withHeader('X-Content-Type-Options', 'nosniff')
+            // A book SVG opened directly must not run scripts on the API origin.
+            ->withHeader('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox");
     }
 
     public function cover(ServerRequestInterface $request, ResponseInterface $response, int $id): ResponseInterface
@@ -189,43 +200,18 @@ final class LibraryController
             return $response->withStatus(500);
         }
 
-        // Resolve the OPF path via META-INF/container.xml, then find the cover.
-        $opfPath = $this->resolveOpfPathInZip($zip);
-        if ($opfPath === null) {
+        // The cover the EPUB metadata declares (cover-image property, <meta
+        // name="cover">, the guide's cover page); the first image only last.
+        $innerPath = EpubPackage::fromZip($zip)->coverPath();
+        if ($innerPath === null) {
             $zip->close();
             return $response->withStatus(404);
         }
-
-        $opfXml = $zip->getFromName($opfPath);
-        if ($opfXml === false) {
-            $zip->close();
-            return $response->withStatus(404);
-        }
-
-        try {
-            $opf = $this->opfParser->parseXml($opfXml);
-        } catch (\RuntimeException) {
-            $zip->close();
-            return $response->withStatus(404);
-        }
-
-        $coverHref = $opf['cover'] ?? null;
-        if ($coverHref === null) {
-            $zip->close();
-            return $response->withStatus(404);
-        }
-
-        // Cover href is relative to the OPF directory.
-        $opfDir    = dirname($opfPath);
-        $innerPath = ($opfDir === '.' || $opfDir === '')
-            ? $coverHref
-            : $opfDir . '/' . $coverHref;
-        $innerPath = $this->normalizeZipPath($innerPath);
 
         $content = $zip->getFromName($innerPath);
         if ($content === false) {
             // Fall back to matching by basename.
-            $basename = basename($coverHref);
+            $basename = basename($innerPath);
             for ($i = 0; $i < $zip->numFiles; $i++) {
                 $name = $zip->getNameIndex($i);
                 if ($name !== false && basename($name) === $basename) {
@@ -253,52 +239,10 @@ final class LibraryController
         $response->getBody()->write($content);
         return $response
             ->withHeader('Content-Type', $mime)
-            ->withHeader('Cache-Control', 'public, max-age=86400');
-    }
-
-    /** Resolve the content.opf path inside the zip via META-INF/container.xml. */
-    private function resolveOpfPathInZip(\ZipArchive $zip): ?string
-    {
-        $containerXml = $zip->getFromName('META-INF/container.xml');
-        if ($containerXml !== false) {
-            $dom = new \DOMDocument();
-            if (@$dom->loadXML($containerXml)) {
-                $rootfiles = $dom->getElementsByTagName('rootfile');
-                if ($rootfiles->length > 0) {
-                    /** @var \DOMElement $rootfile */
-                    $rootfile = $rootfiles->item(0);
-                    $fullPath = $rootfile->getAttribute('full-path');
-                    if ($fullPath !== '') {
-                        return $fullPath;
-                    }
-                }
-            }
-        }
-        // Fallback: first *.opf entry in the archive.
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $name = $zip->getNameIndex($i);
-            if ($name !== false && str_ends_with(strtolower($name), '.opf')) {
-                return $name;
-            }
-        }
-        return null;
-    }
-
-    /** Collapse "dir/../" segments so a zip lookup matches stored entry names. */
-    private function normalizeZipPath(string $path): string
-    {
-        $parts = [];
-        foreach (explode('/', $path) as $segment) {
-            if ($segment === '' || $segment === '.') {
-                continue;
-            }
-            if ($segment === '..') {
-                array_pop($parts);
-                continue;
-            }
-            $parts[] = $segment;
-        }
-        return implode('/', $parts);
+            ->withHeader('Cache-Control', 'public, max-age=86400')
+            ->withHeader('X-Content-Type-Options', 'nosniff')
+            // A book SVG opened directly must not run scripts on the API origin.
+            ->withHeader('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox");
     }
 
     public function touch(ServerRequestInterface $request, ResponseInterface $response, int $id): ResponseInterface

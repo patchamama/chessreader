@@ -226,7 +226,10 @@ return [
     },
 
     GetChapterHandler::class => function (ContainerInterface $c) {
-        return new GetChapterHandler($c->get(BookRepository::class));
+        return new GetChapterHandler(
+            $c->get(BookRepository::class),
+            new \App\Infrastructure\Epub\StoredEpubChapterTitles(__DIR__ . '/../storage/books'),
+        );
     },
 
     LibraryController::class => function (ContainerInterface $c) {
