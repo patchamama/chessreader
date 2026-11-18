@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { matchChapterLetters } from './regenerateNotation'
 import { useNavigate } from 'react-router-dom'
 import { Chess } from 'chess.js'
 import { annotateGame, coachGame, extractPlayers, numberLine, openingName, reviewGame, treeToPgn } from '@chess-ebook/chess-shared'
@@ -259,7 +260,8 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
     const nl = text.indexOf('\n', last)
     const lineEnd = nl < 0 ? text.length : nl
     // The annotated text opens with a title line: the text already names the game.
-    const body = annotated.split('\n').slice(1).join('\n')
+    // In the chapter's own piece letters, so the whole game is read again (S6).
+    const body = matchChapterLetters(annotated.split('\n').slice(1).join('\n'), lang, text.slice(lineStart, lineEnd))
     const rewritten = `${text.slice(0, lineStart)}${body}${text.slice(lineEnd)}`
       .split('\n').filter((l) => l.trim() !== '\uFFFC').join('\n')
     const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
