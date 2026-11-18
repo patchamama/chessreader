@@ -182,6 +182,8 @@ export interface AppSettings {
   commentDbUrl: string
   /** Token for a private commentary database (GitHub fine-grained token, contents:read). Kept in this browser. */
   commentDbToken: string
+  /** Example books of the demo the reader closed (✕); Settings shows them again. */
+  hiddenExamples: number[]
   /** Borrow book remarks on the same position when writing an annotated game. */
   humanComments: boolean
   /** Book diagrams: show the engine's evaluation under each (when it has one). */
@@ -292,6 +294,7 @@ const DEFAULT: AppSettings = {
   statusFooter: true,
   commentDbUrl: DEFAULT_RESOURCES_URL,
   commentDbToken: '',
+  hiddenExamples: [],
   humanComments: true,
   diagramEvalShow: true,
   diagramEvalBar: false,

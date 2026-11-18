@@ -42,3 +42,11 @@ export function openRepoGame(book: RepoBook, chapters: ExternalChapter[], game: 
   saveProgress(EXTERNAL_BOOK_ID, game.chapter)
   saveBoardMemory(EXTERNAL_BOOK_ID, { chapter: game.chapter, gameIndex: game.gameIndex, nodeId: null, annotations: {} })
 }
+
+/** Open a whole repository book in the reader (as the browser's own book), at its first chapter. */
+export async function openRepoBook(book: Pick<RepoBook, 'id' | 'title'>): Promise<void> {
+  const { chapters } = textBookChapters(await getText(`books/text/${encodeURIComponent(book.id)}.txt`), book.title)
+  useExternalBookStore.getState().open(book.title, chapters)
+  saveProgress(EXTERNAL_BOOK_ID, 1)
+  saveBoardMemory(EXTERNAL_BOOK_ID, { chapter: 1, gameIndex: 0, nodeId: null, annotations: {} })
+}

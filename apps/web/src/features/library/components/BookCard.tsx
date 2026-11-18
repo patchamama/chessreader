@@ -7,6 +7,8 @@ import { getProgress } from '../store/readingStore'
 interface Props {
   book: Book
   totalChapters?: number
+  /** An example book of the demo: a ✕ hides it (Settings shows it again). */
+  onHide?: () => void
 }
 
 function formatRelativeDate(iso: string): string {
@@ -21,7 +23,7 @@ function formatRelativeDate(iso: string): string {
   return new Date(iso).toLocaleDateString()
 }
 
-export default function BookCard({ book, totalChapters }: Props) {
+export default function BookCard({ book, totalChapters, onHide }: Props) {
   const [editing, setEditing] = useState(false)
   const [hasCover, setHasCover] = useState(true)
   const progress = getProgress(book.id)
@@ -50,6 +52,17 @@ export default function BookCard({ book, totalChapters }: Props) {
         >
           ✎
         </button>
+        {onHide && (
+          <button
+            type="button"
+            onClick={onHide}
+            className="text-xs text-slate-400 hover:text-slate-600 shrink-0 ml-1"
+            aria-label={`Hide the example ${book.title}`}
+            title="Hide this example (Settings shows it again)"
+          >
+            ✕
+          </button>
+        )}
       </div>
       <p className="text-sm text-gray-600">{book.author}</p>
       {book.description && (

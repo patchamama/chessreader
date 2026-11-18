@@ -8,6 +8,7 @@ import { isLocalhostHost } from '../../../shared/env/devMode'
 
 vi.mock('../../../shared/env/devMode', () => ({
   isLocalhostHost: vi.fn(() => false),
+  isDemoHost: vi.fn(() => false),
 }))
 
 describe('RequireApproved', () => {

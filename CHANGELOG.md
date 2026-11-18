@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.93.0 — 2026-11-18
+
+- feat: the demo opens without login; example books can be hidden (✕) and shown again from Settings; the library lists the books of the resources repository; the study board has the braces ⇄ paragraphs switch for the current game
+
 ## v0.92.0 — 2026-11-18
 
 - fix: resources repository URL defaults to github.com/patchamama/chessreader-resources and accepts github.com URLs (read through the contents API: fixes "Failed to fetch"); Settings checks the URL and token

@@ -96,7 +96,10 @@ function NavButton({
   )
 }
 
-export function StudyBoard() {
+/** The switch of the current game's comments: braces (PGN style) ⇄ paragraphs. */
+export interface LayoutToggle { braces: boolean; onToggle: () => void }
+
+export function StudyBoard({ layoutToggle }: { layoutToggle?: LayoutToggle } = {}) {
   const evalDirection = useSettingsStore((s) => s.evalBarDirection)
   const showEval = useSettingsStore((s) => s.showEval)
   const showEngineArrow = useSettingsStore((s) => s.showEngineArrow)
@@ -494,6 +497,14 @@ export function StudyBoard() {
           </svg>
         </NavButton>
         {fullScreen && <BoardModal onClose={() => setFullScreen(false)} />}
+        {layoutToggle && (
+          <NavButton
+            onClick={layoutToggle.onToggle}
+            title={layoutToggle.braces ? 'Show the comments as paragraphs' : 'Show the comments in braces (PGN style)'}
+          >
+            <span className="text-xs font-semibold" aria-hidden="true">{layoutToggle.braces ? '¶' : '{ }'}</span>
+          </NavButton>
+        )}
 
         <NavButton onClick={flip} title="Flip board">
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

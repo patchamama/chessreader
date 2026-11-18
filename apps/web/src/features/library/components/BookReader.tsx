@@ -852,7 +852,13 @@ export default function BookReader() {
             showStudy ? 'px-4 py-5' : 'w-0 overflow-hidden px-0 py-0'
           }`}
         >
-          {showStudy && <StudyBoard />}
+          {showStudy && (
+            <StudyBoard
+              layoutToggle={activeGameIndex >= 0 && games[activeGameIndex]
+                ? { braces: games[activeGameIndex].source.includes('{'), onToggle: () => toggleLayout(activeGameIndex) }
+                : undefined}
+            />
+          )}
           {showStudy && games.length > 0 && <NarrationPanel games={games} text={plainText} />}
           {showStudy && games.length > 0 && (
             <TrackPlayer games={games} text={plainText} sample={demoTrackFor(id, currentChapter)} />

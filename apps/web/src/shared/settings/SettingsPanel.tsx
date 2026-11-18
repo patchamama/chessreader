@@ -426,6 +426,11 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               className={inputClass}
             />
             <ResourcesCheck url={s.commentDbUrl} token={s.commentDbToken} />
+            {s.hiddenExamples.length > 0 && (
+              <button className="self-start text-[11px] text-gray-300 underline" onClick={() => s.set({ hiddenExamples: [] })}>
+                Show all examples ({s.hiddenExamples.length} hidden)
+              </button>
+            )}
             {s.commentDbUrl !== DEFAULT_RESOURCES_URL && (
               <button className="self-start text-[11px] text-gray-300 underline" onClick={() => s.set({ commentDbUrl: DEFAULT_RESOURCES_URL })}>Use the default repository</button>
             )}
