@@ -23,23 +23,28 @@ Delivery: one commit + tag per phase on main, pushed (user's standing instructio
 - S18 "puede ser que aparezcan miniaturas y a partir de ahí sigue la partida con esa miniatura pero el fen falta, sería posible analizar las imagenes extraer el fen por ocr a partir de la miniatura e insertar en los epub el fen en caso de ser esa la causa si las jugadas después son correctas?"
 - S19 (added 2026-11-18) "cuando se muestre una partida con comentarios entre corchetes, mostrar icono que permita al principio de la partida cambiar el formato para que aparezcan los comentarios como párrafo y lo contrario también."
 - S20 (added 2026-11-18) "También pon opción de descargar fen de la partida que siempre esté también disponible junto con la opción de descargar pdf y otros formatos." Assumption: FEN of the current position plus the game's PGN.
+- S21 (added 2026-11-18) "si se pone el token de gh en la app solo en el frontend deployado en gh, deseo que se muestren las opciones relacionadas a los recursos en el gh privado, y que se muestren en card los libros que se pueden abrir para su reproducción y visualización, poniendo el cover del libro y demás datos del libro, una información de cantidad de partidas, los jugadores más representados en el libro y si se puede poner el periodo de las fechas de la mayoría de las partidas"
+- S22 (added 2026-11-18) "en las estadísticas ... por jugador ... una evaluación usando el motor stockfish de las jugadas registradas en ese jugador en la base de datos para evaluar el nivel de eficiencia o de aceptación en relación con el motor (también según Maia u otro motor) poniendo un ranking con los jugadores registrados, y tambien que se pongan los juegos que son casi perfectos por un jugador segun los motores."
+- S23 (added 2026-11-18) "que se instalen otros motores de juego en el backend o en el frontend que se puedan integrar también a elegir si es posible para poder jugar con diferentes si uno desea."
 
 ## Tasks
 - [x] T1 S1–S2 FEN fragments + algorithm choice — inline — v0.78.0
-- [ ] T2 S8–S9, S11 persistence, hover restore, scroll to board, coloured arrows/marks — inline — v0.79.0
+- [x] T2 S8–S9, S11 persistence, hover restore, scroll to board, coloured arrows/marks — inline — v0.79.0
 - [ ] T3 S10, S7 fullscreen board modal; thumbnails in diagram eval footers — inline — v0.80.0
 - [ ] T4 S5 width setting + status footer — inline — v0.81.0
 - [ ] T5 S12–S13 accounts in Settings, my games by year/month, move counts — inline — v0.82.0
 - [ ] T6 S3, S6 Play random colour, ideas, targets, traps — inline — v0.83.0
 - [ ] T7 S4 pattern DB + trainer + labels — inline — v0.84.0
 - [ ] T8 S16 trap DB + trainer — inline — v0.85.0
-- [ ] T9 S15 resources repo, game DB, search, players, openings, exercises, stats — inline — v0.86–0.87
+- [ ] T9 S15, S21–S22 resources repo, game DB, search, players, openings, exercises, stats — inline — v0.86–0.87
 - [ ] T10 S14 level test — inline — v0.88.0
 - [ ] T11 S18 diagram images → FEN — inline — v0.89.0
 - [ ] T13 S19–S20 comment layout toggle in the reader, FEN/PGN download always available — inline — v0.79.x
+- [ ] T14 S23 other engines to play against (backend UCI + browser) — inline
 - [ ] T12 S17 start.sh / start.bat, lc0 + Maia install — inline — v0.90.0
 
 ## Log
 - L1 2026-11-18 user request (verbatim fragments in S1–S18; full text in session transcript 59547ab6).
 - L2 Evidence: recognizeGames ignores FEN lines (fragment "26 Qe3…" after a FEN → 0 games); Kasparov I–V ~240 FEN lines, Gude 1 31, Tal 4. chess.com API is read-only (no play/login). Lichess puzzle DB CC0, 6.19M puzzles with themes.
 - L3 T1: FEN lines start a game from their position (tokenizer `fen` token, builder numbers plies from the FEN's move counter, FEN read from the original text so Spanish letters never touch it). Differential: 3164 PGN games 0 differences. Kasparov I–V games 728 → 943 (+215), plies +2114; Gude 1 +29 games/+572 plies. Errors rose (e.g. Kasparov II 569 → 803) because analysis lines of fragments that used to be dropped silently are now read; new errors are inside deep analysis, same kinds as before. Algorithm 3 retired from the UI (settings v2 migrates 3 → 2), Settings → Recognition: with variations / main line only.
+- L4 T2: the book shown and the board place (chapter, game, move, arrows and marks) survive a refresh (external book persisted under `chessreader-external-book`, place under `chessreader-board-v1`); hovering a square/line named in the text previews it and mouse-out restores the board unless clicked; clicking a move scrolls the board into view; arrows in 4 colours (Shift green, Ctrl red). User reports fixed (2026-11-18): "Reanalizar y regenerar" left a blank page — the reader kept the previous book's chapter number when the route changed to the one-chapter regenerated book; regeneration now rewrites only the active game in place (first to last move), keeps the other games, and selects its first move. "la diagonal a2-g8" now lights the whole diagonal (dashed square pairs that form a line), a plan "d4-d5" shows an arrow.

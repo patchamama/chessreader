@@ -4,6 +4,8 @@ import { useChapter, useTouchBook } from '../api/libraryApi'
 import { recognizeGames } from '@chess-ebook/chess-shared'
 import type { GameTree, GameNode, IsolatedMove } from '@chess-ebook/chess-shared'
 import { MoveTooltipCard } from './MoveTooltipCard'
+import { loadBoardMemory, saveBoardMemory } from '../store/boardMemory'
+import { dashedPair, squareLine } from '../utils/squareLine'
 import { StudyBoard } from './StudyBoard'
 import { StudyPanelResizer } from './StudyPanelResizer'
 import { VariationChooser } from './VariationChooser'
@@ -119,9 +121,17 @@ export default function BookReader() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
+  // Another book in the same reader (the route changed, the component stayed):
+  // its own chapter, not the previous book's (S8: a regenerated game was blank).
+  const [shownBook, setShownBook] = useState(id)
+  if (shownBook !== id) {
+    setShownBook(id)
+    setCurrentChapter(getProgress(id)?.chapter ?? 1)
+  }
+
   useEffect(() => {
-    saveProgress(id, currentChapter)
-  }, [id, currentChapter])
+    if (shownBook === id) saveProgress(id, currentChapter)
+  }, [id, currentChapter, shownBook])
 
   const goTo = useCallback((n: number) => {
     setCurrentChapter(n)
@@ -131,8 +141,15 @@ export default function BookReader() {
 
   const loadStudyNode = useCallback(
     (tree: GameTree, node: GameNode) => {
+      useStudyBoardStore.getState().commitPreview()
       loadStudyPosition(tree, node.id, !tree.mainline.includes(node.id))
       setShowStudy(true)
+      // Bring the board into view when it is off screen (S10).
+      const board = document.querySelector('[data-study-board]')
+      if (board) {
+        const r = board.getBoundingClientRect()
+        if (r.top < 0 || r.bottom > window.innerHeight) board.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+      }
     },
     [loadStudyPosition],
   )
@@ -176,13 +193,27 @@ export default function BookReader() {
   // A square named in the text only makes sense on the position the text is
   // talking about: put the board at the last move written before it, then light
   // the square.
-  const showMention = (entry: { iso: IsolatedMove; tree: GameTree }) => {
+  const showMention = (entry: { iso: IsolatedMove; tree: GameTree }, preview = false) => {
     const at = nodeBeforeOffset(entry.tree, entry.iso.charStart ?? 0)
     const board = useStudyBoardStore.getState()
+    // "a2-g8": the whole diagonal (or file, rank) lights up; "d4-d5": an arrow for the plan.
+    const pair = dashedPair(entry.iso.rawSan ?? '')
+    const line = pair ? squareLine(pair.from, pair.to) : null
+    const mark = {
+      square: entry.iso.square, piece: entry.iso.piece,
+      ...(line && line.length > 2 ? { line } : {}),
+      ...(pair && !(line && line.length > 2) ? { arrow: [pair.from, pair.to] as [string, string] } : {}),
+    }
+    // Hovering only previews: the board goes back when the mouse leaves (S8).
+    if (preview) {
+      board.previewPosition(entry.tree, at ? at.id : null, !!at && !entry.tree.mainline.includes(at.id), mark)
+      return
+    }
+    board.commitPreview()
     if (board.activeGame !== entry.tree || board.currentNodeId !== (at?.id ?? null) || board.playFen) {
       loadStudyPosition(entry.tree, at ? at.id : null, !!at && !entry.tree.mainline.includes(at.id))
     }
-    setIsolatedHighlight({ square: entry.iso.square, piece: entry.iso.piece })
+    setIsolatedHighlight(mark)
   }
   const showMentionRef = useRef(showMention)
   useEffect(() => { showMentionRef.current = showMention })
@@ -221,14 +252,35 @@ export default function BookReader() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recognitionAlgorithm])
 
-  // Opening a chapter selects its first move, so the arrow keys work at once.
+  // Opening a chapter selects its first move, so the arrow keys work at once —
+  // or the move the reader was at before a refresh, with its arrows and marks (S11).
   useEffect(() => {
     if (games.length === 0) return
     const board = useStudyBoardStore.getState()
     if (games.some((g) => g.tree === board.activeGame)) return
+    const memory = loadBoardMemory(id)
+    if (memory && memory.chapter === currentChapter && games[memory.gameIndex]) {
+      const tree = games[memory.gameIndex].tree
+      const nodeId = memory.nodeId && tree.nodes.has(memory.nodeId) ? memory.nodeId : tree.mainline[0] ?? null
+      board.setAnnotationsByNode(memory.annotations ?? {})
+      board.loadPosition(tree, nodeId, !!nodeId && !tree.mainline.includes(nodeId))
+      return
+    }
     const first = games[0].tree
     board.loadPosition(first, first.mainline[0] ?? null, false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [games])
+
+  // Remember where the reader is (and what was drawn), to come back after a refresh.
+  useEffect(() => useStudyBoardStore.subscribe((s, prev) => {
+    if (s.previewBase || (s.currentNodeId === prev.currentNodeId && s.annotations === prev.annotations && s.activeGame === prev.activeGame)) return
+    const gameIndex = games.findIndex((g) => g.tree === s.activeGame)
+    if (gameIndex < 0) return
+    saveBoardMemory(id, {
+      chapter: currentChapter, gameIndex, nodeId: s.currentNodeId,
+      annotations: { ...s.annotationsByNode, [s.currentNodeId ?? '@start']: { ...s.annotations, pen: null } },
+    })
+  }), [games, id, currentChapter])
 
   // Flatten every game's recognition errors for the error panel.
   const recognitionErrors = useMemo<FlatError[]>(
@@ -465,7 +517,7 @@ export default function BookReader() {
             lastMove: null, highlight: entry.iso.square,
           })
         } else {
-          showMentionRef.current(entry)
+          showMentionRef.current(entry, true)
         }
         return
       }
@@ -490,6 +542,8 @@ export default function BookReader() {
     const onOut = (e: Event) => {
       const span = findSpan(e.target)
       if (!span || (!span.dataset.fen && !span.dataset.isoKey)) return
+      // The hover preview ends: the board shows again what it showed (unless clicked).
+      if (span.dataset.isoKey) useStudyBoardStore.getState().endPreview()
       // Don't hide if moving into the tooltip itself.
       const related = (e as MouseEvent).relatedTarget as HTMLElement | null
       if (related?.closest?.('[data-move-tooltip]')) return

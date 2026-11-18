@@ -3,6 +3,10 @@ import type { ToolMode } from '../store/studyBoardStore'
 
 const HIGHLIGHT_COLORS = ['#22c55e', '#ef4444', '#3b82f6', '#eab308', '#a855f7']
 const BRUSH_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#000000']
+/** Arrow colours, as study boards use them (green good, red danger, blue idea, yellow alternative). */
+const ARROW_COLORS: { color: string; name: string }[] = [
+  { color: '#16a34a', name: 'green' }, { color: '#dc2626', name: 'red' }, { color: '#2563eb', name: 'blue' }, { color: '#ca8a04', name: 'yellow' },
+]
 
 interface ToolButtonProps {
   active: boolean
@@ -37,6 +41,8 @@ export function AnnotationToolbar() {
   const brushSize = useStudyBoardStore((s) => s.brushSize)
   const setBrush = useStudyBoardStore((s) => s.setBrush)
   const clearAnnotations = useStudyBoardStore((s) => s.clearAnnotations)
+  const arrowColor = useStudyBoardStore((s) => s.arrowColor)
+  const setArrowColor = useStudyBoardStore((s) => s.setArrowColor)
 
   const is = (m: ToolMode) => toolMode === m
 
@@ -71,6 +77,24 @@ export function AnnotationToolbar() {
           Clear
         </button>
       </div>
+
+      {/* Arrow colour picker */}
+      {is('arrows') && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] uppercase tracking-wide text-slate-400">Arrow</span>
+          {ARROW_COLORS.map((c) => (
+            <button
+              key={c.color}
+              onClick={() => setArrowColor(c.color)}
+              aria-label={`Arrow colour ${c.name}`}
+              aria-pressed={arrowColor === c.color}
+              className={`h-5 w-5 rounded-full border-2 ${arrowColor === c.color ? 'border-slate-700' : 'border-white'}`}
+              style={{ backgroundColor: c.color }}
+            />
+          ))}
+          <span className="text-[10px] text-slate-400">Shift: green · Ctrl: red</span>
+        </div>
+      )}
 
       {/* Highlight color picker */}
       {is('highlight') && (

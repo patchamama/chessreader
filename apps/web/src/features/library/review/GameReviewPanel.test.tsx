@@ -161,6 +161,29 @@ describe('GameReviewPanel', () => {
     expect(html).toMatch(/class="diagram-eval">[^<]*· Stockfish 18 lite, depth \d+/)
   })
 
+  it('regenerating rewrites only the active game, in place, and selects its first move (S8)', async () => {
+    const MULTI = 'Immortals\nAnderssen – Kieseritzky\n1. e4 e5 2. Qh5\nA wild queen sortie.\n2... Nc6 3. Bc4 Nf6 4. Qxf7#\nSecond game\n1. d4 d5 2. c4 e6'
+    const multi = recognizeGames(MULTI, { algorithm: 2 })
+    useSettingsStore.setState({ commentDiagrams: false })
+    render(
+      <MemoryRouter initialEntries={['/read/7']}>
+        <Routes>
+          <Route path="/read/7" element={<GameReviewPanel games={multi} text={MULTI} bookId={7} chapter={1} />} />
+          <Route path="/read/-1" element={<p>annotated book</p>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Re-analyse and regenerate all comments' }))
+    await waitFor(() => expect(screen.getByText('annotated book')).toBeInTheDocument())
+    const html = useExternalBookStore.getState().chapters[0].html
+    expect(html).toContain('Anderssen – Kieseritzky')
+    expect(html).not.toContain('A wild queen sortie.')
+    expect(html).toContain('Second game')
+    expect(html).toContain('1. d4 d5 2. c4 e6')
+    expect(html.indexOf('Qxf7#')).toBeLessThan(html.indexOf('Second game'))
+    expect(JSON.parse(localStorage.getItem('chessreader-board-v1') ?? '{}')['-1']).toMatchObject({ chapter: 1, gameIndex: 0, nodeId: null })
+  })
+
   it('borrows what a book says about a position of the game, with its source (S5)', async () => {
     const lookup = await import('../commentdb/commentLookup')
     const spy = vi.spyOn(lookup, 'humanCommentsForGame').mockResolvedValue({ 4: { text: 'La dama sale demasiado pronto.', source: 'Kasparov, Mis geniales predecesores I, Partida 3' } })

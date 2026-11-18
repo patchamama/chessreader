@@ -208,7 +208,9 @@ export function StudyBoard() {
   // While cues are lit the engine/next-move arrows are hidden: every arrow on
   // the board then belongs to what is being said.
   const cuesLit = narrationCues.length > 0 || solving
-  const boardArrows = [...cueBoard.arrows, ...buildBoardArrows({
+  // A plan written in the text ("d4-d5"): its arrow.
+  const planArrow = isolatedHighlight?.arrow ? [{ startSquare: isolatedHighlight.arrow[0], endSquare: isolatedHighlight.arrow[1], color: '#ca8a04' }] : []
+  const boardArrows = [...planArrow, ...cueBoard.arrows, ...buildBoardArrows({
     userArrows: annotations.arrows,
     showEval: showEval && !cuesLit,
     showEngineArrow,
@@ -289,7 +291,11 @@ export function StudyBoard() {
       boxShadow: `inset 0 0 0 3px ${color}`,
     }
   }
-  if (isolatedHighlight) {
+  // A line named in the text ("la diagonal a2-g8") lights every square on it.
+  for (const sq of isolatedHighlight?.line ?? []) {
+    highlightStyles[sq] = { ...highlightStyles[sq], backgroundColor: 'rgba(250, 204, 21, 0.4)' }
+  }
+  if (isolatedHighlight && !isolatedHighlight.line) {
     highlightStyles[isolatedHighlight.square] = {
       ...highlightStyles[isolatedHighlight.square],
       backgroundColor: 'rgba(250, 204, 21, 0.55)',
@@ -320,12 +326,14 @@ export function StudyBoard() {
     }
   }
 
+  const arrowColor = useStudyBoardStore((s) => s.arrowColor)
   // Pieces are draggable only when no annotation tool is active (play mode).
   const playMode = toolMode === 'none'
 
   const boardWrapper = (
-    <div className="relative w-full">
+    <div className="relative w-full" data-study-board>
       <ChessBoard
+        arrowColor={arrowColor}
         fen={fen}
         orientation={orientation}
         lastMove={!playFen && activeGame ? nav.lastMove : null}

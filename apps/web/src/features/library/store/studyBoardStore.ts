@@ -25,6 +25,8 @@ export interface StudyBoardState {
   orientation: 'white' | 'black'
 
   toolMode: ToolMode
+  /** Colour of the arrows drawn next (Shift and Ctrl give two more, as on Lichess). */
+  arrowColor: string
   highlightColor: string
   brushColor: string
   brushSize: number
@@ -46,9 +48,21 @@ export interface StudyBoardState {
    * CURRENT board position (the piece colour alternates white/black because the
    * side to move is unknown for a bare prose token). null = no overlay.
    */
-  isolatedHighlight: { square: string; piece: 'p' | 'n' | 'b' | 'r' | 'q' | 'k' } | null
+  isolatedHighlight: { square: string; piece: 'p' | 'n' | 'b' | 'r' | 'q' | 'k'; line?: string[]; arrow?: [string, string] } | null
+
+  /** What the board showed before a hover preview (restored when the hover ends). */
+  previewBase: { game: GameTree | null; nodeId: string | null; inVariation: boolean; highlight: StudyBoardState['isolatedHighlight'] } | null
 
   loadPosition: (game: GameTree, nodeId: string | null, inVariation: boolean) => void
+  /** Show a position while the mouse is over a move in the text. */
+  previewPosition: (game: GameTree, nodeId: string | null, inVariation: boolean, highlight: StudyBoardState['isolatedHighlight']) => void
+  /** The hover ended: back to what the board showed, unless the preview was kept. */
+  endPreview: () => void
+  /** Keep the previewed position (a click). */
+  commitPreview: () => void
+  setArrowColor: (c: string) => void
+  /** Restore remembered annotations (after a refresh). */
+  setAnnotationsByNode: (byNode: Record<string, StudyAnnotations>) => void
   clearGame: () => void
   setCurrentNode: (nodeId: string | null, inVariation: boolean) => void
   /** Click-to-move: select a piece (showing legal targets) or play a move onto a target. */
@@ -58,9 +72,7 @@ export interface StudyBoardState {
   /** Discard the free-play position and any selection. */
   resetPlay: () => void
   /** Show an isolated prose move as a square overlay (null clears it). */
-  setIsolatedHighlight: (
-    h: { square: string; piece: 'p' | 'n' | 'b' | 'r' | 'q' | 'k' } | null,
-  ) => void
+  setIsolatedHighlight: (h: StudyBoardState['isolatedHighlight']) => void
   flip: () => void
   setTool: (m: ToolMode) => void
   setHighlightColor: (c: string) => void
@@ -80,6 +92,7 @@ const INITIAL = {
   isInVariation: false,
   orientation: 'white' as const,
   toolMode: 'none' as ToolMode,
+  arrowColor: '#16a34a',
   highlightColor: '#22c55e',
   brushColor: '#ef4444',
   brushSize: 3,
@@ -89,7 +102,8 @@ const INITIAL = {
   playFen: null as string | null,
   selectedSquare: null as string | null,
   legalTargets: [] as string[],
-  isolatedHighlight: null as { square: string; piece: 'p' | 'n' | 'b' | 'r' | 'q' | 'k' } | null,
+  isolatedHighlight: null as StudyBoardState['isolatedHighlight'],
+  previewBase: null as StudyBoardState['previewBase'],
 }
 
 /** Try a move from `fen`; returns the resulting FEN, or null if illegal. */
@@ -147,6 +161,44 @@ export const useStudyBoardStore = create<StudyBoardState>((set) => ({
         isolatedHighlight: null,
       }
     }),
+
+  previewPosition: (game, nodeId, inVariation, highlight) =>
+    set((s) => {
+      const base = s.previewBase ?? { game: s.activeGame, nodeId: s.currentNodeId, inVariation: s.isInVariation, highlight: s.isolatedHighlight }
+      const byNode = persistCurrent(s)
+      return {
+        previewBase: base,
+        activeGame: game,
+        currentNodeId: nodeId,
+        isInVariation: inVariation,
+        annotationsByNode: byNode,
+        annotations: restore(byNode, nodeId),
+        playFen: null,
+        selectedSquare: null,
+        legalTargets: [],
+        isolatedHighlight: highlight,
+      }
+    }),
+
+  endPreview: () =>
+    set((s) => {
+      const base = s.previewBase
+      if (!base) return {}
+      return {
+        previewBase: null,
+        activeGame: base.game,
+        currentNodeId: base.nodeId,
+        isInVariation: base.inVariation,
+        annotations: restore(s.annotationsByNode, base.nodeId),
+        isolatedHighlight: base.highlight,
+      }
+    }),
+
+  commitPreview: () => set({ previewBase: null }),
+
+  setArrowColor: (c) => set({ arrowColor: c }),
+
+  setAnnotationsByNode: (byNode) => set((s) => ({ annotationsByNode: byNode, annotations: restore(byNode, s.currentNodeId) })),
 
   clearGame: () =>
     set((s) => ({

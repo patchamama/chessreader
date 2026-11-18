@@ -7,6 +7,8 @@ import { useStudyBoardStore } from '../store/studyBoardStore'
 import { useSettingsStore, STOCKFISH_VERSIONS } from '../../../shared/settings/settingsStore'
 import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
 import { textToChapters } from '../utils/textToChapters'
+import { saveBoardMemory } from '../store/boardMemory'
+import { saveProgress } from '../store/readingStore'
 import { analyseGame } from './reviewEngine'
 import { commentWithModel, configuredModel } from './aiCommentary'
 import { lichessOpening } from '../../gamesearch/sources'
@@ -203,11 +205,37 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
    * Forget the review of this game and every comment written from it, run the
    * engine again over the whole game and write the comments and diagrams anew.
    */
+  /**
+   * Forget the review of the active game, run the engine again over it and
+   * write its comments anew IN PLACE: from its first move to its last, the
+   * text is replaced by the new commentary; the other games of the text stay
+   * as they are. The board then shows the first move of that game.
+   */
   async function regenerate() {
     useReviewStore.getState().forget(game.tree)
     await run([gameIndex])
     const fresh = useReviewStore.getState().byTree.get(game.tree)
-    if (fresh) openAnnotated(fresh)
+    if (!fresh) return
+    annotatedText(fresh, (annotated) => {
+      // From the line of its first move to the line of its last one.
+      const main = game.tree.mainline.map((id) => game.tree.nodes.get(id)!)
+      const first = main.find((n) => n.charStart !== undefined)?.charStart ?? game.charStart
+      const last = [...main].reverse().find((n) => n.charEnd !== undefined)?.charEnd ?? game.charEnd
+      const lineStart = text.lastIndexOf('\n', first - 1) + 1
+      const nl = text.indexOf('\n', last)
+      const lineEnd = nl < 0 ? text.length : nl
+      // The annotated text opens with a title line: the text already names the game.
+      const body = annotated.split('\n').slice(1).join('\n')
+      const rewritten = `${text.slice(0, lineStart)}${body}${text.slice(lineEnd)}`
+        .split('\n').filter((l) => l.trim() !== '\uFFFC').join('\n')
+      const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
+      const { title, chapters } = textToChapters(rewritten, names)
+      useStudyBoardStore.getState().clearGame()
+      saveBoardMemory(EXTERNAL_BOOK_ID, { chapter: 1, gameIndex, nodeId: null, annotations: {} })
+      saveProgress(EXTERNAL_BOOK_ID, 1)
+      openBook(title, chapters)
+      navigate(`/read/${EXTERNAL_BOOK_ID}`)
+    })
   }
 
   function openAnnotated(r = reviewed) {
@@ -215,6 +243,7 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
     const names = players.white && players.black ? `${players.white} – ${players.black}` : `${t.white} – ${t.black}`
     annotatedText(r, (annotated) => {
       const { title, chapters } = textToChapters(annotated, `${names} (${t.title.toLowerCase()})`)
+      saveProgress(EXTERNAL_BOOK_ID, 1)
       openBook(title, chapters)
       navigate(`/read/${EXTERNAL_BOOK_ID}`)
     })

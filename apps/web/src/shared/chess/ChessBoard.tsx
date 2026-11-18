@@ -17,6 +17,8 @@ interface ChessBoardProps {
   arrows?: Arrow[]
   /** Allow the user to drag-draw arrows on the board. */
   allowDrawingArrows?: boolean
+  /** Colour of the arrows the user draws (Shift: green, Ctrl: red, as on Lichess). */
+  arrowColor?: string
   /** Fired when the user adds/removes an arrow. */
   onArrowsChange?: (arrows: Arrow[]) => void
   /** Extra square styles (e.g. annotation highlights), merged AFTER lastMove. */
@@ -33,6 +35,13 @@ interface ChessBoardProps {
   legalTargets?: string[]
   /** Force-hide coordinate labels regardless of the global setting (thumbnails). */
   hideLabels?: boolean
+}
+
+/** react-chessboard's arrow look, with our colour for the arrows the user draws. */
+const ARROW_OPTIONS = {
+  secondaryColor: '#16a34a', tertiaryColor: '#dc2626',
+  arrowLengthReducerDenominator: 8, sameTargetArrowLengthReducerDenominator: 4, arrowWidthDenominator: 5,
+  activeArrowWidthMultiplier: 0.9, opacity: 0.8, activeOpacity: 0.5, arrowStartOffset: 0,
 }
 
 const HIGHLIGHT_STYLE: CSSProperties = {
@@ -61,6 +70,7 @@ export default function ChessBoard({
   lastMove,
   arrows,
   allowDrawingArrows,
+  arrowColor,
   onArrowsChange,
   customSquareStyles,
   onSquareClick,
@@ -108,6 +118,7 @@ export default function ChessBoard({
         allowDragging: allowDragging ?? false,
         showAnimations: false,
         allowDrawingArrows: allowDrawingArrows ?? false,
+        ...(arrowColor ? { arrowOptions: { ...ARROW_OPTIONS, color: arrowColor } } : {}),
         ...(arrows ? { arrows } : {}),
         ...(onArrowsChange ? { onArrowsChange: ({ arrows }) => onArrowsChange(arrows) } : {}),
         ...(onSquareClick ? { onSquareClick: ({ square }) => onSquareClick(square) } : {}),
