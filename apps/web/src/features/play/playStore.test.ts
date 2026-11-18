@@ -140,4 +140,16 @@ describe('voice (S13)', () => {
     useSettingsStore.setState({ playVoice: 'none' })
     vi.unstubAllGlobals()
   })
+
+  it('against an engine on the server: its moves come from the server (S23)', async () => {
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => { calls.push(url); return new Response(JSON.stringify(url.includes('/api/engine/play') ? { move: 'e7e5' } : {}), { status: 200 }) }))
+    usePlayStore.getState().start({ mode: 'server', serverEngine: 'maia-1500', color: 'white', strength: 3, lang: 'en' })
+    usePlayStore.getState().move('e2', 'e4')
+    await settle(() => usePlayStore.getState().sans.length === 2)
+    expect(usePlayStore.getState().sans).toEqual(['e4', 'e5'])
+    expect(calls.some((u) => u.startsWith('/api/engine/play?engine=maia-1500&fen='))).toBe(true)
+    expect(usePlayStore.getState().players?.black.name).toBe('maia-1500')
+    vi.unstubAllGlobals()
+  })
 })

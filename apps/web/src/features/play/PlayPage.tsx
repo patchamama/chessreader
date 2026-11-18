@@ -8,6 +8,9 @@ import { usePlayStore, type Clocks, type PlayerInfo, type PlayMode } from './pla
 import { LICHESS_BOTS, LICHESS_CLOCKS, LICHESS_PLAY_TOKEN_URL } from './lichessBoard'
 import { MOVE_KIND_COLORS, type MoveKind } from './moveJudge'
 import { usePageWidth } from '../../shared/layout/pageWidth'
+import { httpClient } from '../../shared/api/httpClient'
+import { isDemoHost } from '../../shared/env/devMode'
+import { useAuthStore } from '../auth/store/authStore'
 import { useStatusStore } from '../../shared/layout/statusStore'
 import { humanMoves, type HumanMoves } from './humanMoves'
 import { lichessThemes, playIdeas } from './playIdeas'
@@ -15,7 +18,7 @@ import { loadTraps, trapsAt, type Trap } from '../training/traps'
 
 const TEXT = {
   en: {
-    title: 'Play with a tutor', mode: 'Opponent', engine: 'The engine', human: 'A person at this board', lichess: 'Someone on Lichess (casual)', lichessAi: 'The Lichess AI (Stockfish)', lichessBot: 'A Maia bot on Lichess (plays like a person)', bot: 'Bot', clock: 'Clock', level: 'Lichess AI level', color: 'I play', white: 'White', black: 'Black', random: 'Random', strength: 'Engine strength', start: 'New game', tutor: 'Tutor', token: 'Set your Lichess token in Settings → Accounts', create: 'Create a token for playing ↗', thinking: 'The engine is thinking…', you: 'You', opp: 'Opponent',
+    title: 'Play with a tutor', mode: 'Opponent', engine: 'The engine', human: 'A person at this board', lichess: 'Someone on Lichess (casual)', lichessAi: 'The Lichess AI (Stockfish)', lichessBot: 'A Maia bot on Lichess (plays like a person)', serverEngine: 'An engine on the server (Stockfish, Maia, GNU Chess…)', engineName: 'Engine', bot: 'Bot', clock: 'Clock', level: 'Lichess AI level', color: 'I play', white: 'White', black: 'Black', random: 'Random', strength: 'Engine strength', start: 'New game', tutor: 'Tutor', token: 'Set your Lichess token in Settings → Accounts', create: 'Create a token for playing ↗', thinking: 'The engine is thinking…', you: 'You', opp: 'Opponent',
     humanHint: 'What a player of my rating would play (Maia, server)', humanSays: (r: number) => `A ${r} player would play:`,
     ideas: 'Ideas: opening, targets, chances, traps', targets: 'Targets', chances: 'Chances', themes: 'Pattern', trap: 'Trap you can set', falls: 'they fall',
     options: 'Options', hints: 'Colour the moves of the selected piece', status: 'Say how good each move is', bar: 'Evaluation bar', legend: 'Legend of the colours', voice: 'Say the moves aloud', voiceNone: 'No', voiceOpp: "Only the opponent's", voiceBoth: 'Both sides', resign: 'Resign', colours: 'Colours', rated: 'rated', casual: 'casual',
@@ -24,7 +27,7 @@ const TEXT = {
     tb: { win: 'winning (tablebase)', draw: 'drawn (tablebase)', loss: 'losing (tablebase)' },
   },
   es: {
-    title: 'Jugar con un tutor', mode: 'Rival', engine: 'El motor', human: 'Una persona en este tablero', lichess: 'Alguien en Lichess (amistosa)', lichessAi: 'La IA de Lichess (Stockfish)', lichessBot: 'Un bot Maia en Lichess (juega como una persona)', bot: 'Bot', clock: 'Ritmo', level: 'Nivel de la IA de Lichess', color: 'Juego con', white: 'Blancas', black: 'Negras', random: 'Al azar', strength: 'Fuerza del motor', start: 'Nueva partida', tutor: 'Tutor', token: 'Pon tu token de Lichess en Ajustes → Cuentas', create: 'Crear un token para jugar ↗', thinking: 'El motor está pensando…', you: 'Tú', opp: 'Rival',
+    title: 'Jugar con un tutor', mode: 'Rival', engine: 'El motor', human: 'Una persona en este tablero', lichess: 'Alguien en Lichess (amistosa)', lichessAi: 'La IA de Lichess (Stockfish)', lichessBot: 'Un bot Maia en Lichess (juega como una persona)', serverEngine: 'Un motor del servidor (Stockfish, Maia, GNU Chess…)', engineName: 'Motor', bot: 'Bot', clock: 'Ritmo', level: 'Nivel de la IA de Lichess', color: 'Juego con', white: 'Blancas', black: 'Negras', random: 'Al azar', strength: 'Fuerza del motor', start: 'Nueva partida', tutor: 'Tutor', token: 'Pon tu token de Lichess en Ajustes → Cuentas', create: 'Crear un token para jugar ↗', thinking: 'El motor está pensando…', you: 'Tú', opp: 'Rival',
     humanHint: 'Qué jugaría alguien de mi nivel (Maia, servidor)', humanSays: (r: number) => `Un jugador de ${r} jugaría:`,
     ideas: 'Ideas: apertura, objetivos, oportunidades, celadas', targets: 'Objetivos', chances: 'Oportunidades', themes: 'Patrón', trap: 'Celada posible', falls: 'caen',
     options: 'Opciones', hints: 'Colorear las jugadas de la pieza elegida', status: 'Decir qué tan buena es cada jugada', bar: 'Barra de evaluación', legend: 'Leyenda de los colores', voice: 'Decir las jugadas en voz alta', voiceNone: 'No', voiceOpp: 'Solo las del rival', voiceBoth: 'Las de ambos', resign: 'Abandonar', colours: 'Colores', rated: 'con rating', casual: 'amistosa',
@@ -33,7 +36,7 @@ const TEXT = {
     tb: { win: 'ganada (tablas de finales)', draw: 'tablas (tablas de finales)', loss: 'perdida (tablas de finales)' },
   },
   de: {
-    title: 'Spielen mit Trainer', mode: 'Gegner', engine: 'Die Engine', human: 'Eine Person an diesem Brett', lichess: 'Jemand auf Lichess (ungewertet)', lichessAi: 'Die Lichess-KI (Stockfish)', lichessBot: 'Ein Maia-Bot auf Lichess (spielt wie ein Mensch)', bot: 'Bot', clock: 'Bedenkzeit', level: 'Stufe der Lichess-KI', color: 'Ich spiele', white: 'Weiß', black: 'Schwarz', random: 'Zufällig', strength: 'Engine-Stärke', start: 'Neue Partie', tutor: 'Trainer', token: 'Lichess-Token in Einstellungen → Konten eintragen', create: 'Token zum Spielen erstellen ↗', thinking: 'Die Engine denkt…', you: 'Du', opp: 'Gegner',
+    title: 'Spielen mit Trainer', mode: 'Gegner', engine: 'Die Engine', human: 'Eine Person an diesem Brett', lichess: 'Jemand auf Lichess (ungewertet)', lichessAi: 'Die Lichess-KI (Stockfish)', lichessBot: 'Ein Maia-Bot auf Lichess (spielt wie ein Mensch)', serverEngine: 'Eine Engine auf dem Server (Stockfish, Maia, GNU Chess…)', engineName: 'Engine', bot: 'Bot', clock: 'Bedenkzeit', level: 'Stufe der Lichess-KI', color: 'Ich spiele', white: 'Weiß', black: 'Schwarz', random: 'Zufällig', strength: 'Engine-Stärke', start: 'Neue Partie', tutor: 'Trainer', token: 'Lichess-Token in Einstellungen → Konten eintragen', create: 'Token zum Spielen erstellen ↗', thinking: 'Die Engine denkt…', you: 'Du', opp: 'Gegner',
     humanHint: 'Was ein Spieler meiner Stärke spielen würde (Maia, Server)', humanSays: (r: number) => `Ein Spieler mit ${r} würde spielen:`,
     ideas: 'Ideen: Eröffnung, Ziele, Chancen, Fallen', targets: 'Ziele', chances: 'Chancen', themes: 'Muster', trap: 'Mögliche Falle', falls: 'Fall-Chance',
     options: 'Optionen', hints: 'Züge der gewählten Figur einfärben', status: 'Sagen, wie gut jeder Zug ist', bar: 'Bewertungsbalken', legend: 'Legende der Farben', voice: 'Züge vorlesen', voiceNone: 'Nein', voiceOpp: 'Nur die des Gegners', voiceBoth: 'Beide Seiten', resign: 'Aufgeben', colours: 'Farben', rated: 'gewertet', casual: 'ungewertet',
@@ -114,6 +117,14 @@ export default function PlayPage() {
   const [color, setColor] = useState<'white' | 'black' | 'random'>('white')
   const [strength, setStrength] = useState(3)
   const [bot, setBot] = useState<string>(LICHESS_BOTS[1].id)
+  // Engines on the server (Stockfish, Maia nets, GNU Chess), when there is a server.
+  const [serverEngines, setServerEngines] = useState<{ id: string; name: string; style: string }[]>([])
+  const [serverEngine, setServerEngine] = useState('')
+  useEffect(() => {
+    if (isDemoHost() || !useAuthStore.getState().token) return
+    httpClient<{ engines: { id: string; name: string; style: string }[] }>('/api/engine/players', { method: 'GET' })
+      .then((r) => { setServerEngines(r.engines); if (r.engines[0]) setServerEngine(r.engines[0].id) }, () => setServerEngines([]))
+  }, [])
   // One Lichess token, kept in Settings → Accounts.
   const token = useSettingsStore((s) => s.lichessToken || s.lichessPlayToken)
   const [clock, setClock] = useState(`${LICHESS_CLOCKS[0].minutes}+${LICHESS_CLOCKS[0].increment}`)
@@ -265,9 +276,10 @@ export default function PlayPage() {
               <option value="lichess">{t.lichess}</option>
               <option value="lichess-ai">{t.lichessAi}</option>
               <option value="lichess-bot">{t.lichessBot}</option>
+              {serverEngines.length > 0 && <option value="server">{t.serverEngine}</option>}
             </select>
           </label>
-          {(mode === 'engine' || mode === 'lichess-ai' || mode === 'lichess-bot') && (
+          {(mode === 'engine' || mode === 'lichess-ai' || mode === 'lichess-bot' || mode === 'server') && (
             <label className="flex flex-col text-xs text-slate-600">{t.color}
               <select aria-label={t.color} className={field} value={color} onChange={(e) => setColor(e.target.value as 'white' | 'black' | 'random')}>
                 <option value="white">{t.white}</option>
@@ -276,9 +288,16 @@ export default function PlayPage() {
               </select>
             </label>
           )}
-          {(mode === 'engine' || mode === 'lichess-ai') && (
+          {(mode === 'engine' || mode === 'lichess-ai' || (mode === 'server' && !serverEngine.startsWith('maia'))) && (
             <label className="flex flex-col text-xs text-slate-600">{t.strength} ({strength}/8)
               <input aria-label={t.strength} type="range" min={1} max={8} value={strength} onChange={(e) => setStrength(Number(e.target.value))} />
+            </label>
+          )}
+          {mode === 'server' && (
+            <label className="flex flex-col text-xs text-slate-600">{t.engineName}
+              <select aria-label={t.engineName} className={field} value={serverEngine} onChange={(e) => setServerEngine(e.target.value)}>
+                {serverEngines.map((e) => <option key={e.id} value={e.id} title={e.style}>{e.name}</option>)}
+              </select>
             </label>
           )}
           {mode === 'lichess-bot' && (
@@ -308,7 +327,7 @@ export default function PlayPage() {
               const [minutes, increment] = clock.split('+').map(Number)
               setSelected(null)
               const side = color === 'random' ? (Math.random() < 0.5 ? 'white' : 'black') : color
-              p.start({ mode, color: side, strength, lang, token: token.trim(), ...(online ? { clock: { minutes, increment } } : {}), ...(mode === 'lichess-bot' ? { bot } : {}) })
+              p.start({ mode, color: side, strength, lang, token: token.trim(), ...(online ? { clock: { minutes, increment } } : {}), ...(mode === 'lichess-bot' ? { bot } : {}), ...(mode === 'server' ? { serverEngine } : {}) })
             }}
           >
             {t.start}

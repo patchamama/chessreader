@@ -8,6 +8,7 @@ import {
   type LichessGameFull, type LichessGameState, type LichessPlayer,
 } from './lichessBoard'
 import { useSettingsStore, STOCKFISH_VERSIONS } from '../../shared/settings/settingsStore'
+import { httpClient } from '../../shared/api/httpClient'
 import { browserSpeaker } from '../library/narration/speaker'
 import { judgeByEngine, judgeByTablebase, lichessTablebase, type MoveJudgement } from './moveJudge'
 import { bookMove } from './openingBook'
@@ -19,7 +20,7 @@ import { bookMove } from './openingBook'
  * opponent is up to, what the move leaves to the opponent and the chances the
  * side to move has.
  */
-export type PlayMode = 'engine' | 'human' | 'lichess' | 'lichess-ai' | 'lichess-bot'
+export type PlayMode = 'engine' | 'human' | 'lichess' | 'lichess-ai' | 'lichess-bot' | 'server'
 export type Clock = { minutes: number; increment: number }
 export interface TutorNote { ply: number; who: 'you' | 'opponent' | 'tutor'; text: string }
 
@@ -79,7 +80,9 @@ interface PlayState {
   judgements: Judged[]
   /** Increases with every new game: a late answer for an old game is dropped. */
   gameId: number
-  start: (o: { mode: PlayMode; color: 'white' | 'black'; strength: number; lang: Lang; token?: string; clock?: Clock; bot?: string }) => void
+  /** 'server' mode: the engine on the server that plays (stockfish, maia-1500, gnuchess…). */
+  serverEngine: string | null
+  start: (o: { mode: PlayMode; color: 'white' | 'black'; strength: number; lang: Lang; token?: string; clock?: Clock; bot?: string; serverEngine?: string }) => void
   resign: () => void
   /** The user's move on the board; false when it is not theirs or not legal. */
   move: (from: string, to: string, promotion?: string) => boolean
@@ -158,7 +161,10 @@ export const usePlayStore = create<PlayState>((set, get) => {
 
   async function engineTurn() {
     set({ status: 'thinking' })
-    const uci = await engineMove(engine().analyse, chess.fen(), get().strength)
+    const { mode, serverEngine, strength } = get()
+    const uci = mode === 'server' && serverEngine
+      ? await httpClient<{ move: string }>(`/api/engine/play?engine=${encodeURIComponent(serverEngine)}&fen=${encodeURIComponent(chess.fen())}&level=${strength}`, { method: 'GET' }).then((r) => r.move, (e: Error) => { set({ error: e.message }); return null })
+      : await engineMove(engine().analyse, chess.fen(), strength)
     if (get().status !== 'thinking') return
     if (uci) apply(uci.slice(0, 2), uci.slice(2, 4), uci[4], false)
     if (get().status === 'thinking') set({ status: 'playing' })
@@ -227,22 +233,23 @@ export const usePlayStore = create<PlayState>((set, get) => {
 
   return {
     mode: 'engine', color: 'white', strength: 3, lang: 'en', fen: START, sans: [], lastMove: null, log: [],
-    status: 'idle', result: '', error: null, lichess: null, players: null, clocks: null, gameInfo: null, judgement: null, judgements: [], gameId: 0,
+    status: 'idle', result: '', error: null, lichess: null, serverEngine: null, players: null, clocks: null, gameInfo: null, judgement: null, judgements: [], gameId: 0,
     start: (o) => {
       abort?.abort()
       chess = new Chess()
       // Lichess games learn their players from the game stream.
       const me = { name: o.lang === 'es' ? 'Tú' : o.lang === 'de' ? 'Du' : 'You' }
       const sf = { name: `Stockfish (${o.strength}/8)` }
-      const players = o.mode === 'engine'
-        ? (o.color === 'white' ? { white: me, black: sf } : { white: sf, black: me })
+      const opponent = o.mode === 'server' ? { name: o.serverEngine ?? 'Engine' } : sf
+      const players = o.mode === 'engine' || o.mode === 'server'
+        ? (o.color === 'white' ? { white: me, black: opponent } : { white: opponent, black: me })
         : o.mode === 'human' ? { white: me, black: me } : null
       set({ mode: o.mode, color: o.color, strength: o.strength, lang: o.lang, fen: START, sans: [], lastMove: null, log: [], status: 'playing', result: '', error: null, lichess: null,
-        players, clocks: null, gameInfo: null, judgement: null, judgements: [], gameId: get().gameId + 1 })
+        players, clocks: null, gameInfo: null, judgement: null, judgements: [], gameId: get().gameId + 1, serverEngine: o.serverEngine ?? null })
       if (o.mode === 'lichess') { void lichessGame(o.token ?? '', o.clock ?? LICHESS_CLOCKS[0]); return }
       if (o.mode === 'lichess-ai') { void lichessAi(o.token ?? '', o.clock ?? LICHESS_CLOCKS[0]); return }
       if (o.mode === 'lichess-bot') { void lichessBot(o.token ?? '', o.bot ?? 'maia5', o.clock ?? LICHESS_CLOCKS[0]); return }
-      if (o.mode === 'engine' && o.color === 'black') void engineTurn()
+      if ((o.mode === 'engine' || o.mode === 'server') && o.color === 'black') void engineTurn()
     },
     move: (from, to, promotion) => {
       const s = get()
@@ -251,7 +258,7 @@ export const usePlayStore = create<PlayState>((set, get) => {
       if (s.mode !== 'human' && turn !== s.color) return false
       const before = chess.history().length
       if (!apply(from, to, promotion, true)) return false
-      if (s.mode === 'engine' && get().status === 'playing') void engineTurn()
+      if ((s.mode === 'engine' || s.mode === 'server') && get().status === 'playing') void engineTurn()
       if ((s.mode === 'lichess' || s.mode === 'lichess-ai' || s.mode === 'lichess-bot') && s.lichess?.gameId) {
         const m = chess.history({ verbose: true })[before]
         lichessMakeMove(s.lichess.token, s.lichess.gameId, `${m.from}${m.to}${m.promotion ?? ''}`).catch((err) => set({ error: String(err.message ?? err) }))

@@ -79,6 +79,8 @@ return function (App $app): void {
     // How people play: Maia's prediction for a rating (require JWT + Approved)
     $app->group('/api/engine', function (RouteCollectorProxy $group) {
         $group->get('/human', [HumanMoveController::class, 'predict']);
+        $group->get('/players', [HumanMoveController::class, 'engines']);
+        $group->get('/play', [HumanMoveController::class, 'play']);
     })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
 
     // Private resources from the books (require JWT + Approved)

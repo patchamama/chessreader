@@ -386,6 +386,21 @@ return [
         return new \App\Presentation\Resources\ResourcesController($storageDir . '/resources');
     },
 
+    \App\Application\Engine\Port\PlayingEngines::class => function (ContainerInterface $c) {
+        $storageDir = $c->get('settings')['storage_dir'] ?? dirname(__DIR__) . '/storage';
+        $which = function (string $bin): ?string { $p = trim(shell_exec('which ' . escapeshellarg($bin) . ' 2>/dev/null') ?? ''); return $p !== '' && is_executable($p) ? $p : null; };
+        return new \App\Infrastructure\Chess\Engine\UciPlayingEngines([
+            'stockfish' => $c->get(\App\Application\Engine\StockfishVersions::class)->activeBinary(),
+            'lc0' => $which('lc0'),
+            'gnuchess' => $which('gnuchess'),
+        ], new \App\Infrastructure\Chess\Engine\MaiaWeights($storageDir . '/maia'));
+    },
+
+    \App\Presentation\Engine\HumanMoveController::class => fn(ContainerInterface $c) => new \App\Presentation\Engine\HumanMoveController(
+        $c->get(\App\Application\Engine\Port\HumanMoveModel::class),
+        $c->get(\App\Application\Engine\Port\PlayingEngines::class),
+    ),
+
     \App\Application\Comments\Port\PositionCommentStore::class => function (ContainerInterface $c) {
         $storageDir = $c->get('settings')['storage_dir'] ?? dirname(__DIR__) . '/storage';
         return new \App\Infrastructure\Comments\SqlitePositionCommentStore($storageDir . '/comments.sqlite');

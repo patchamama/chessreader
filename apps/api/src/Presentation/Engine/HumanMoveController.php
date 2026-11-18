@@ -12,8 +12,26 @@ use Psr\Http\Message\ServerRequestInterface;
 /** What a player of a given rating would play (Maia), for the tutor. */
 final class HumanMoveController
 {
-    public function __construct(private readonly HumanMoveModel $model)
+    public function __construct(private readonly HumanMoveModel $model, private readonly ?\App\Application\Engine\Port\PlayingEngines $engines = null)
     {
+    }
+
+    /** The engines that can play on this server. */
+    public function engines(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        return $this->json($response, ['engines' => $this->engines?->list() ?? []]);
+    }
+
+    /** An engine's move: ?engine=maia-1500&fen=…&level=3 */
+    public function play(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        $q = $request->getQueryParams();
+        $fen = trim((string) ($q['fen'] ?? ''));
+        if (!Fen::isWellFormed($fen) || !preg_match('/^[a-z0-9-]{2,30}$/', (string) ($q['engine'] ?? ''))) {
+            return $this->json($response, ['error' => 'engine and a valid fen are required'], 400);
+        }
+        $move = $this->engines?->move((string) $q['engine'], Fen::fromString($fen), (int) ($q['level'] ?? 3));
+        return $move === null ? $this->json($response, ['error' => 'that engine is not available'], 404) : $this->json($response, ['move' => $move]);
     }
 
     public function predict(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface

@@ -68,4 +68,28 @@ final class HumanMoveControllerTest extends TestCase
         self::assertSame(400, $status);
         self::assertSame([], $model->asked);
     }
+
+    public function test_lists_the_engines_and_plays_a_move(): void
+    {
+        $engines = new class implements \App\Application\Engine\Port\PlayingEngines {
+            public function list(): array { return [['id' => 'maia-1500', 'name' => 'Maia 1500', 'style' => 'human']]; }
+            public function move(string $engineId, Fen $fen, int $level): ?string { return $engineId === 'maia-1500' ? 'e7e5' : null; }
+        };
+        $model = new class implements HumanMoveModel {
+            public function ratings(): array { return []; }
+            public function predict(Fen $fen, int $rating, int $limit): array { return ['rating' => 0, 'moves' => []]; }
+        };
+        $app = $this->createAppWithOverrides([
+            \App\Presentation\Engine\HumanMoveController::class => fn() => new \App\Presentation\Engine\HumanMoveController($model, $engines),
+        ]);
+        $c = $app->getContainer();
+        $repo = $c->get(UserRepository::class);
+        $repo->save(new User(new UserId(0), 'e@test.com', $c->get(PasswordHasher::class)->hash('pw'), Role::User, RegistrationStatus::Approved, new \DateTimeImmutable()));
+        $token = (new JwtTokenIssuer($c->get('settings')['jwt']['secret']))->issue($repo->findByEmail('e@test.com'));
+        $get = fn(string $p) => $app->handle((new ServerRequestFactory())->createServerRequest('GET', $p)->withHeader('Authorization', "Bearer {$token}"));
+        self::assertSame('Maia 1500', json_decode((string) $get('/api/engine/players')->getBody(), true)['engines'][0]['name']);
+        $fen = rawurlencode('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1');
+        self::assertSame(['move' => 'e7e5'], json_decode((string) $get("/api/engine/play?engine=maia-1500&fen={$fen}&level=3")->getBody(), true));
+        self::assertSame(404, $get("/api/engine/play?engine=crafty&fen={$fen}")->getStatusCode());
+    }
 }
