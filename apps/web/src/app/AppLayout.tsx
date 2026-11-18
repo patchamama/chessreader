@@ -68,6 +68,9 @@ export default function AppLayout() {
             <NavLink to="/training" className={navLinkClass}>
               Training
             </NavLink>
+            <NavLink to="/database" className={navLinkClass}>
+              Database
+            </NavLink>
             <NavLink to="/webparser" className={navLinkClass}>
               Webparser
             </NavLink>

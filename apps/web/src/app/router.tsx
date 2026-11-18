@@ -12,6 +12,7 @@ import WebparserView from '../features/webparser/components/WebparserView'
 import GameSearchPage from '../features/gamesearch/GameSearchPage'
 import PlayPage from '../features/play/PlayPage'
 import TrainingPage from '../features/training/TrainingPage'
+import DatabasePage from '../features/database/DatabasePage'
 import { isDemoHost } from '../shared/env/devMode'
 import PendingPage from '../features/auth/components/PendingPage'
 
@@ -45,6 +46,14 @@ const routes = [
         element: (
           <RequireApproved>
             <GameSearchPage />
+          </RequireApproved>
+        ),
+      },
+      {
+        path: '/database',
+        element: (
+          <RequireApproved>
+            <DatabasePage />
           </RequireApproved>
         ),
       },

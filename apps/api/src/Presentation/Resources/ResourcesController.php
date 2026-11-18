@@ -20,7 +20,7 @@ final class ResourcesController
 
     public function get(ServerRequestInterface $request, ResponseInterface $response, string $name): ResponseInterface
     {
-        if (!preg_match('/^[a-z][a-z0-9-]{0,40}$/', $name)) {
+        if (!preg_match('/^[a-z][a-z0-9-]{0,90}$/', $name)) {
             return $this->json($response, '{"error":"bad name"}', 400);
         }
         $file = rtrim($this->dir, '/') . "/{$name}.json";
