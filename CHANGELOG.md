@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.110.0 — 2026-11-18
+
+- fix: game headings are found after the previous game (its span no longer swallows the next heading); a FEN line starts a new game numbered from the first move that follows it; engine lines are no longer lost to a stray bracket; hyphenated surnames in headings
+
 ## v0.109.0 — 2026-11-18
 
 - feat: the book's own stylesheet is applied to its chapters (italics, sub-headings, hidden FEN lines), sub-headings written as styled spans are shown as headings, multi-line chapter titles are joined with a separator chosen in Settings ("Capítulo dos - Emanuel II"), a FEN next to a diagram is hidden with a FEN symbol showing it and its board; a wide reading width also widens the page

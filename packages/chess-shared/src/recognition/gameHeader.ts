@@ -33,6 +33,8 @@ const DATE = /\b(\d{1,2})\.(\d{1,2})\.(1[5-9]\d\d|20\d\d)\b/
 const YEAR = /\b(1[5-9]\d\d|20\d\d)\b/
 const NAME = "[A-ZÁÉÍÓÚÑÄÖÜÇŠŽČ][A-Za-zÁÉÍÓÚÑÄÖÜÇŠŽČáéíóúñäöüßçšžčćłńśźżàèìòùâêîôûëïÿ.'’ ]{0,38}"
 const PAIR = new RegExp(`^(${NAME}?)\\s*[-–—]\\s*(${NAME})$`)
+// A hyphenated surname ("A. Dyin-Zhenevsky-E. Lasker"): the players split at the dash before an initial.
+const HYPHENATED = new RegExp(`^(${NAME}(?:-${NAME})?)\\s*[-–—]\\s*([A-ZÁÉÍÓÚÑÄÖÜÇŠŽČ]\\.\\s*${NAME}(?:-${NAME})?)$`)
 
 /** "T. Petrosian" for "T. PETROSIAN": books name the same player in capitals or not. */
 const tidy = (n: string) => n.trim().replace(/\s+/g, ' ').split(' ')
@@ -64,7 +66,7 @@ export function parseGameHeader(lines: string[]): GameHeader | null {
       if (place) h.place = place
       seen.add('date')
     }
-    else if (!seen.has('players') && !/\d/.test(l) && (m = PAIR.exec(l)) && m[1].trim().length > 2 && m[2].trim().length > 2) {
+    else if (!seen.has('players') && !/\d/.test(l) && (m = PAIR.exec(l) ?? HYPHENATED.exec(l)) && m[1].trim().length > 2 && m[2].trim().length > 2) {
       h.white = tidy(m[1]); h.black = tidy(m[2]); seen.add('players')
     }
     else if ((!seen.has('event') || eventWithoutYear) && (m = YEAR.exec(l)) && l.length <= 90) {

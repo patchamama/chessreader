@@ -51,6 +51,46 @@ function validFen(fen: string): boolean {
   try { new Chess(full); return true; } catch { return false; }
 }
 
+/**
+ * A FEN set before a fragment often carries a placeholder move number ("… w - - 0 1")
+ * while the book goes on at its own one ("41 Rf5"); its engine line is numbered as
+ * the FEN. When the first top-level numbered move after the FEN is of the side to
+ * move and legal from it, that move's number is the game's: the FEN takes it and
+ * the numbered moves between the FEN and that move (the engine line) are shifted by
+ * the same amount. Moves that cannot follow the FEN leave everything as written.
+ */
+function renumberFromFens(tokens: SanToken[]): void {
+  tokens.forEach((fenToken, i) => {
+    if (fenToken.type !== 'fen' || !validFen(fenToken.fen!)) return;
+    const parts = (fenToken.fen!.split(' ').length >= 6 ? fenToken.fen! : `${fenToken.fen} 0 1`).split(' ');
+    const fullmove = Number(parts[5]);
+    const color = parts[1] === 'b' ? 'black' : 'white';
+    let depth = 0;
+    // The numbered tokens written inside brackets before the first move (the engine line).
+    const inside: SanToken[] = [];
+    for (let j = i + 1; j < tokens.length; j++) {
+      const t = tokens[j];
+      if (t.type === 'fen' || t.type === 'result') return;
+      if (t.type === 'variation-open') depth++;
+      else if (t.type === 'variation-close') depth = Math.max(0, depth - 1);
+      else if (depth > 0) inside.push(t);
+      // A move named in a remark ("con la jugada 3…dxe4") is not where the game goes on.
+      if (depth > 0 || t.type !== 'move' || t.isolated || t.moveNumber === undefined || !t.atParagraphStart) continue;
+      const shift = t.moveNumber - fullmove;
+      if (t.color !== color || shift === 0) return;
+      let legal = false;
+      try { legal = new Chess(parts.join(' ')).move(t.san!) !== null; } catch { legal = false; }
+      if (!legal) return;
+      parts[5] = String(t.moveNumber);
+      fenToken.fen = parts.join(' ');
+      for (const u of inside) {
+        if ((u.type === 'move' || u.type === 'move-number') && u.moveNumber !== undefined) u.moveNumber += shift;
+      }
+      return;
+    }
+  });
+}
+
 export function recognizeGames(text: string, options: RecognizeOptions = {}): RecognizedGame[] {
   const algorithm = options.algorithm ?? 2;
   // Normalise figurine glyphs (♘→N) and then Spanish notation (Cf3→Nf3).
@@ -75,6 +115,8 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
       token.fen = text.slice(token.charStart, token.charEnd);
     }
   }
+
+  renumberFromFens(tokens);
 
   // Split token stream into candidate game sequences.
   //
@@ -151,8 +193,9 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
   // paragraphs say how far the game has got (analysis paragraphs do not).
   let mainParagraph = false;
 
-  // The start position of each sequence that begins at a FEN of the text.
-  const startOf = new Map<SanToken[], string>();
+  // The start position of each sequence that begins at a FEN of the text, and
+  // the FEN token itself (the game's span starts there, under its heading).
+  const startOf = new Map<SanToken[], { fen: string; token: SanToken }>();
 
   for (const token of tokens) {
     // A FEN at top level starts a new game from that position, numbered as the
@@ -161,7 +204,7 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
       if (depth > 0 || !validFen(token.fen!)) continue;
       startNewGame();
       const full = token.fen!.split(' ').length >= 6 ? token.fen! : `${token.fen} 0 1`;
-      startOf.set(current, full);
+      startOf.set(current, { fen: full, token });
       const [, side, , , , fullmove] = full.split(' ');
       lastMainPly = (Number(fullmove) - 1) * 2 + (side === 'b' ? 1 : 0);
       maxTopPly = lastMainPly;
@@ -279,10 +322,33 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
     const moveTokens = seq.filter(t => t.type === 'move');
     if (moveTokens.length === 0) continue;
 
-    const charStart = seq[0].charStart;
-    const charEnd = seq[seq.length - 1].charEnd;
+    // The span runs from the game's first token to its last one. The line breaks
+    // (and a diagram) collected after the last move belong to whatever follows —
+    // often the next game's heading, which must not fall inside this game.
+    // A bracket after the last move that holds no move ("Apertura Española (C62)")
+    // is heading text too; one that closes a line of the game is kept.
+    let first = 0;
+    while (first < seq.length - 1 && seq[first].type === 'paragraph-break') first++;
+    const content = (t: SanToken) => t.type === 'move' || t.type === 'move-number' || t.type === 'result'
+      || t.type === 'annotation' || t.type === 'fen';
+    let last = seq.length - 1;
+    while (last > first && !content(seq[last])) last--;
+    let open = 0;
+    for (let k = first; k <= last; k++) {
+      if (seq[k].type === 'variation-open') open++;
+      else if (seq[k].type === 'variation-close') open = Math.max(0, open - 1);
+    }
+    for (let k = last + 1, empty = 0; k < seq.length && open > 0; k++) {
+      if (seq[k].type === 'variation-open') empty++;
+      else if (seq[k].type === 'variation-close') {
+        if (empty > 0) empty--;
+        else { open--; last = k; }
+      }
+    }
+    const charStart = startOf.get(seq)?.token.charStart ?? seq[first].charStart;
+    const charEnd = seq[last].charEnd;
 
-    const start = startOf.get(seq) ?? STANDARD_START_FEN;
+    const start = startOf.get(seq)?.fen ?? STANDARD_START_FEN;
     const tree =
       algorithm === 1 ? buildGameTreeTwoPass(seq, start, true) // mainline only
       : algorithm === 2 ? buildGameTreeTwoPass(seq, start)

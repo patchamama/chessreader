@@ -30,4 +30,10 @@ describe('game header lines before a game (books)', () => {
     })
     expect(parseGameHeader(['Partida 5', 'Tal-Botvinnik', 'Torneo de Candidatos'])).toMatchObject({ number: 5, event: 'Torneo de Candidatos', lines: 3 })
   })
+
+  it('reads a hyphenated surname in the players line (Capítulo dos: "A. Dyin-Zhenevsky-E. Lasker")', () => {
+    expect(parseGameHeader(['Partida 72', 'A. Dyin-Zhenevsky-E. Lasker', 'Moscú 1925'])).toMatchObject({
+      number: 72, white: 'A. Dyin-Zhenevsky', black: 'E. Lasker', lines: 3,
+    })
+  })
 })

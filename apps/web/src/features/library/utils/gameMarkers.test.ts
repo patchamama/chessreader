@@ -54,3 +54,39 @@ describe('gameMarkers', () => {
     expect(extractProseText(root).text).toBe(prose.text)
   })
 })
+
+describe('game headings in "Mis geniales predecesores I", Capítulo dos (S7)', () => {
+  const p = (lines: string[]) => lines.map((l) => `<p>${l}</p>`).join('\n')
+
+  it('finds the heading of a game that follows another game', () => {
+    const html = p([
+      '1 f4 d5 2 e3 Cf6 3 b3?!',
+      'El comienzo del duelo fue intrigante y dramático. En la primera partida, Lasker superó a su oponente.',
+      'Partida 37',
+      'E. Lasker-W. Steinitz',
+      'EEUU-Canadá 1894',
+      'Campeonato Mundial, Match, 7ª partida',
+      'Apertura Española (C62)',
+      '1 e4 e5 2 Cf3 Cc6 3 Ab5 d6 4 d4 Ad7 5 Cc3 Cge7',
+      'La Defensa Steinitz propiamente dicha.',
+    ])
+    const { text, games: g } = games(html)
+    const s = describeGames(text, g)[1]
+    expect(s.header).toMatchObject({ number: 37, white: 'E. Lasker', black: 'W. Steinitz', eco: 'C62' })
+    expect(text.slice(s.headingStart, s.headingStart + 10)).toBe('Partida 37')
+  })
+
+  it.each([
+    ['Partida 39', ['S. Tarrasch-E. Lasker', 'Hastings 1895, 19ª ronda', '3b4/pp6/8/8/2k1K1P1/2p5/P3N2P/8 w - - 0 1', '<img alt="" src="d.jpg">',
+      'Stockfish 13 eval: [-0.38] 1 Cxc3 Rxc3 2 Rf5 b5', '41 Rf5?!', '41…Rd3??'], 39, 'S. Tarrasch', 'E. Lasker'],
+    ['Partida 46', ['S. Tarrasch-I. Gunsberg', 'Francfort 1887', '5º Congreso de la Asociación Alemana',
+      'k1br3r/ppq3pp/2p1pp1n/2P5/3P4/1R1B1N1P/P2Q1PP1/1R4K1 w - - 0 21', '<img alt="" src="d.jpg">',
+      'Stockfish 13 eval: [+2.44] 21 Aa6 Td5 22 Axb7+ Axb7', '22 Tb6!', '22…e5!'], 46, 'S. Tarrasch', 'I. Gunsberg'],
+  ])('finds the heading above the FEN of %s', (first, rest, number, white, black) => {
+    const html = p(['1 e4 e5 2 Cf3 Cc6', '0-1', 'Una partida que se recordaría durante años en la historia del ajedrez mundial.', first, ...rest])
+    const { text, games: g } = games(html)
+    const s = describeGames(text, g).at(-1)!
+    expect(s.header).toMatchObject({ number, white, black })
+    expect(text.slice(s.headingStart, s.headingStart + 10)).toBe(first)
+  })
+})

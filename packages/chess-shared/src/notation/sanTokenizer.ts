@@ -136,6 +136,7 @@ export function tokenize(text: string): SanToken[] {
   const OPENERS = '([{';
   const CLOSERS = ')]}';
   const openStack: { ch: string; match: RawMatch }[] = [];
+  const lineBraces: { ch: string; match: RawMatch }[] = [];
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     const top = openStack.length > 0 ? openStack[openStack.length - 1].ch : null;
@@ -155,8 +156,14 @@ export function tokenize(text: string): SanToken[] {
       let at = openStack.length - 1;
       while (at >= 0 && openStack[at].ch !== opener) at--;
       if (at < 0) continue; // stray closer: plain text
-      // Openers left unclosed inside this bracket were plain text too.
-      for (const stray of openStack.splice(at + 1)) matches.splice(matches.indexOf(stray.match), 1);
+      // Openers left unclosed inside this bracket were plain text too — except a
+      // "{" whose paragraph already ended (an engine line's label, a cut comment):
+      // it is closed at the end of its paragraph below, like any unclosed "{".
+      for (const stray of openStack.splice(at + 1)) {
+        const nl = text.indexOf('\n', stray.match.end);
+        if (stray.ch === '{' && nl >= 0 && nl < i) lineBraces.push(stray);
+        else matches.splice(matches.indexOf(stray.match), 1);
+      }
       openStack.pop();
       matches.push({
         start: i, end: i + 1,
@@ -166,7 +173,7 @@ export function tokenize(text: string): SanToken[] {
   }
   // A "{" never closed (a typo, a cut comment) would swallow the rest of the
   // text: it ends where its paragraph ends.
-  for (const open of openStack) {
+  for (const open of [...lineBraces, ...openStack]) {
     if (open.ch !== '{') continue;
     const nl = text.indexOf('\n', open.match.end);
     if (nl < 0) continue;
