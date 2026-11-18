@@ -1,7 +1,7 @@
 import { useMemo, useEffect, useState, useCallback, useRef, memo, forwardRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useChapter, useTouchBook } from '../api/libraryApi'
-import { recognizeGames } from '@chess-ebook/chess-shared'
+import { numberLine, recognizeGames } from '@chess-ebook/chess-shared'
 import type { GameTree, GameNode, IsolatedMove } from '@chess-ebook/chess-shared'
 import { MoveTooltipCard } from './MoveTooltipCard'
 import { loadBoardMemory, saveBoardMemory } from '../store/boardMemory'
@@ -40,6 +40,9 @@ import { TrackPlayer } from '../track/TrackPlayer'
 import { demoTrackFor } from '../../../demo/demoTracks'
 import { CorrectionWorkbench } from '../correction/CorrectionWorkbench'
 import { extractProseText, htmlToProseText, planMoveTargets, piecesByTextNode, nodeBeforeOffset } from '../utils/proseText'
+import { playLine } from '../../../shared/chess/playLine'
+import { openAnalysisBoard } from '../analysis/analysisBoards'
+import { CommentSourceMenu, type CommentSourceTarget } from './CommentSourceMenu'
 
 // The reading pane's innerHTML is set ONCE per chapter and then mutated
 // imperatively (SAN spans, highlight classes) by effects. If React re-rendered
@@ -78,8 +81,34 @@ interface MoveTooltip {
   lastMove: { from: string; to: string } | null
   /** A square to mark on the thumbnail (a square the text names). */
   highlight?: string
+  /** A line of squares the text names ("the diagonal a2-g8"). */
+  line?: string[]
+  /** A plan the text names ("d4-d5"), as an arrow. */
+  arrow?: [string, string]
+  /** What is hovered: a move of the game, a move of a line in a comment, or a named square. */
+  kind?: 'move' | 'line' | 'square'
   /** The hovered move, to show the engine's view of it. */
   move?: { tree: GameTree; node: GameNode }
+}
+
+/** The board marks of a square, line or plan named in the text ("a2-g8", "d4-d5", "e4"). */
+function mentionMark(iso: IsolatedMove) {
+  const pair = dashedPair(iso.rawSan ?? '')
+  const line = pair ? squareLine(pair.from, pair.to) : null
+  return {
+    square: iso.square, piece: iso.piece,
+    ...(line && line.length > 2 ? { line } : {}),
+    ...(pair && !(line && line.length > 2) ? { arrow: [pair.from, pair.to] as [string, string] } : {}),
+  }
+}
+
+/** A line of moves written in a comment (markup contract: span.chess-line / button.line-to-board). */
+function lineOf(el: HTMLElement): { startFen: string; moves: string[]; title: string } | null {
+  const startFen = el.dataset.lineStart
+  const moves = (el.dataset.lineMoves ?? '').split(/\s+/).filter(Boolean)
+  if (!startFen || moves.length === 0) return null
+  const [, turn, , , , number] = startFen.split(' ')
+  return { startFen, moves, title: numberLine(moves, Number(number) || 1, turn === 'b' ? 'black' : 'white') }
 }
 
 interface ResolvedNode {
@@ -116,6 +145,9 @@ export default function BookReader() {
   const [showStudy, setShowStudy] = useState(true)
   const [chooser, setChooser] = useState<ProseChooser | null>(null)
   const [tooltip, setTooltip] = useState<MoveTooltip | null>(null)
+  const [sourceMenu, setSourceMenu] = useState<CommentSourceTarget | null>(null)
+  const setSourceMenuRef = useRef(setSourceMenu)
+  const closeSourceMenu = useCallback(() => setSourceMenu(null), [])
   const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Stable ref so the wrapping effect can call setTooltip without being in deps.
   const setTooltipRef = useRef(setTooltip)
@@ -210,28 +242,14 @@ export default function BookReader() {
   const loadStudyNodeRef = useRef(loadStudyNode)
   const setChooserRef = useRef(setChooser)
   const solvingProblem = useProblemStore((s) => s.phase === 'solving')
-  const mentionPreview = useSettingsStore((s) => s.mentionPreview)
-  const mentionPreviewRef = useRef(mentionPreview)
-  useEffect(() => { mentionPreviewRef.current = mentionPreview }, [mentionPreview])
   // A square named in the text only makes sense on the position the text is
-  // talking about: put the board at the last move written before it, then light
-  // the square.
-  const showMention = (entry: { iso: IsolatedMove; tree: GameTree }, preview = false) => {
+  // talking about: a click puts the board at the last move written before it,
+  // then lights the square ("a2-g8": the whole diagonal; "d4-d5": an arrow).
+  // Hovering only shows it on a thumbnail (S7).
+  const showMention = (entry: { iso: IsolatedMove; tree: GameTree }) => {
     const at = nodeBeforeOffset(entry.tree, entry.iso.charStart ?? 0)
     const board = useStudyBoardStore.getState()
-    // "a2-g8": the whole diagonal (or file, rank) lights up; "d4-d5": an arrow for the plan.
-    const pair = dashedPair(entry.iso.rawSan ?? '')
-    const line = pair ? squareLine(pair.from, pair.to) : null
-    const mark = {
-      square: entry.iso.square, piece: entry.iso.piece,
-      ...(line && line.length > 2 ? { line } : {}),
-      ...(pair && !(line && line.length > 2) ? { arrow: [pair.from, pair.to] as [string, string] } : {}),
-    }
-    // Hovering only previews: the board goes back when the mouse leaves (S8).
-    if (preview) {
-      board.previewPosition(entry.tree, at ? at.id : null, !!at && !entry.tree.mainline.includes(at.id), mark)
-      return
-    }
+    const mark = mentionMark(entry.iso)
     board.commitPreview()
     if (board.activeGame !== entry.tree || board.currentNodeId !== (at?.id ?? null) || board.playFen) {
       loadStudyPosition(entry.tree, at ? at.id : null, !!at && !entry.tree.mainline.includes(at.id))
@@ -244,9 +262,10 @@ export default function BookReader() {
    * renders, from the game's first move to its last one (S11).
    */
   const toggleLayout = (gameIndex: number) => {
-    const g = games[gameIndex]
-    if (!g) return
-    saveGameLayout(id, currentChapter, gameIndex, g.source.includes('{') ? 'paragraphs' : 'braces')
+    // How the game is written NOW (read from the text, not the recogniser's source).
+    const summary = gameSummaries[gameIndex]
+    if (!summary) return
+    saveGameLayout(id, currentChapter, gameIndex, summary.braces ? 'paragraphs' : 'braces')
     // The board reopens the same game on its rewritten text.
     saveBoardMemory(id, { chapter: currentChapter, gameIndex, nodeId: null, annotations: {} })
     useStudyBoardStore.getState().clearGame()
@@ -611,25 +630,46 @@ export default function BookReader() {
       return null
     }
 
+    /** A move of a line written in a comment (S5). */
+    const findLineMove = (target: EventTarget | null): HTMLElement | null => {
+      const el = (target as HTMLElement | null)?.closest?.('span.line-move') as HTMLElement | null
+      return el && container.contains(el) ? el : null
+    }
+
     const onOver = (e: Event) => {
+      const lineMove = findLineMove(e.target)
+      if (lineMove) {
+        const line = lineOf(lineMove.closest('span.chess-line') as HTMLElement ?? lineMove)
+        const ply = Number(lineMove.dataset.ply)
+        const shown = line && ply > 0 ? playLine(line.startFen, line.moves, ply).positions[ply - 1] : undefined
+        if (!shown) return
+        if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
+        tooltipTimer.current = setTimeout(() => {
+          const rect = lineMove.getBoundingClientRect()
+          setTooltipRef.current({
+            top: rect.bottom + 6, left: rect.left, fen: shown.fen,
+            lastMove: { from: shown.from, to: shown.to }, kind: 'line',
+          })
+        }, 200)
+        return
+      }
       const span = findSpan(e.target)
       if (!span) return
-      // Isolated prose move → preview its square on the study board on hover.
+      // A square, line or plan named in the text → shown on a thumbnail of the
+      // game at that point; the study board is left alone (S7).
       const isoKey = span.dataset.isoKey
       if (isoKey) {
         const entry = isoRegistry.current.get(isoKey)
         if (!entry) return
-        if (mentionPreviewRef.current === 'thumbnail') {
-          // Leave the main board alone: a thumbnail of the game at this point.
-          const at = nodeBeforeOffset(entry.tree, entry.iso.charStart ?? 0)
-          const rect = span.getBoundingClientRect()
-          setTooltipRef.current({
-            top: rect.bottom + 6, left: rect.left, fen: at ? at.fen : entry.tree.startFen,
-            lastMove: null, highlight: entry.iso.square,
-          })
-        } else {
-          showMentionRef.current(entry, true)
-        }
+        if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
+        const at = nodeBeforeOffset(entry.tree, entry.iso.charStart ?? 0)
+        const mark = mentionMark(entry.iso)
+        const rect = span.getBoundingClientRect()
+        setTooltipRef.current({
+          top: rect.bottom + 6, left: rect.left, fen: at ? at.fen : entry.tree.startFen,
+          lastMove: null, highlight: entry.iso.square, kind: 'square',
+          ...(mark.line ? { line: mark.line } : {}), ...(mark.arrow ? { arrow: mark.arrow } : {}),
+        })
         return
       }
       const fen = span.dataset.fen
@@ -651,10 +691,8 @@ export default function BookReader() {
     }
 
     const onOut = (e: Event) => {
-      const span = findSpan(e.target)
-      if (!span || (!span.dataset.fen && !span.dataset.isoKey)) return
-      // The hover preview ends: the board shows again what it showed (unless clicked).
-      if (span.dataset.isoKey) useStudyBoardStore.getState().endPreview()
+      const span = findLineMove(e.target) ?? findSpan(e.target)
+      if (!span || (!span.dataset.fen && !span.dataset.isoKey && !span.classList.contains('line-move'))) return
       // Don't hide if moving into the tooltip itself.
       const related = (e as MouseEvent).relatedTarget as HTMLElement | null
       if (related?.closest?.('[data-move-tooltip]')) return
@@ -665,6 +703,38 @@ export default function BookReader() {
     const onClick = (e: Event) => {
       const toggle = (e.target as HTMLElement | null)?.closest?.('[data-layout-toggle]') as HTMLElement | null
       if (toggle) { toggleLayoutRef.current(Number(toggle.dataset.layoutToggle)); return }
+      const target = e.target as HTMLElement | null
+      // A comment's line to a NEW analysis board; the study board is kept (S5).
+      const toBoard = target?.closest?.('button.line-to-board') as HTMLElement | null
+      if (toBoard) {
+        const line = lineOf(toBoard)
+        if (line) openAnalysisBoard({ title: line.title, startFen: line.startFen, moves: line.moves, ply: 0 })
+        return
+      }
+      const lineMove = findLineMove(target)
+      if (lineMove) {
+        if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
+        setTooltipRef.current(null)
+        const line = lineOf(lineMove.closest('span.chess-line') as HTMLElement ?? lineMove)
+        if (line) openAnalysisBoard({ title: line.title, startFen: line.startFen, moves: line.moves, ply: Number(lineMove.dataset.ply) || 0 })
+        return
+      }
+      // The source of a book comment: open its game in a new tab or a new analysis board (S5).
+      const source = target?.closest?.('a.comment-source') as HTMLElement | null
+      if (source) {
+        e.preventDefault()
+        const quote = source.closest('blockquote, [data-no-recognition]')
+        const footer = source.closest('footer')?.cloneNode(true) as HTMLElement | undefined
+        footer?.querySelectorAll('a.comment-source').forEach((a) => a.remove())
+        const rect = source.getBoundingClientRect()
+        setSourceMenuRef.current({
+          top: rect.bottom + 4, left: rect.left,
+          gameId: source.dataset.commentGame ?? '', ply: Number(source.dataset.commentPly) || 0,
+          text: (quote?.querySelector('p')?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+          source: (footer?.textContent ?? '').replace(/^[\s—–-]+/, '').replace(/\s+/g, ' ').trim(),
+        })
+        return
+      }
       const span = findSpan(e.target)
       if (!span) return
       if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
@@ -1018,6 +1088,10 @@ export default function BookReader() {
       {tooltip && (
         <div
           data-move-tooltip
+          data-testid={tooltip.kind === 'line' ? 'line-move-thumb' : tooltip.kind === 'square' ? 'square-hint-thumb' : 'move-thumb'}
+          data-fen={tooltip.fen}
+          data-last-move={tooltip.lastMove ? `${tooltip.lastMove.from}${tooltip.lastMove.to}` : undefined}
+          data-squares={tooltip.kind === 'square' ? (tooltip.line ?? (tooltip.highlight ? [tooltip.highlight] : [])).join(' ') : undefined}
           className="fixed z-50 shadow-xl rounded-lg overflow-hidden border border-slate-200 bg-white"
           style={{ top: tooltip.top, left: tooltip.left }}
           onMouseEnter={() => { if (tooltipTimer.current) clearTimeout(tooltipTimer.current) }}
@@ -1027,11 +1101,16 @@ export default function BookReader() {
             fen={tooltip.fen}
             lastMove={tooltip.lastMove}
             highlight={tooltip.highlight}
+            line={tooltip.line}
+            arrow={tooltip.arrow}
             tree={tooltip.move?.tree}
             node={tooltip.move?.node}
           />
         </div>
       )}
+
+      {/* A book comment's source: new tab or new analysis board (S5) */}
+      {sourceMenu && <CommentSourceMenu target={sourceMenu} onClose={closeSourceMenu} />}
 
       {/* Prose variation chooser — anchored under the clicked move */}
       {chooser && (

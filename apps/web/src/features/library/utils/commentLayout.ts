@@ -1,3 +1,5 @@
+import { DIAGRAM_MARK } from '@chess-ebook/chess-shared'
+
 /**
  * The two ways a game's comments are written: in braces among the moves
  * ("2. Nf3 { The knight attacks e5. } Nc6") or as paragraphs after the moves,
@@ -45,18 +47,33 @@ export function bracesToParagraphs(text: string): string {
 /** A line with words and no move number at its start is a comment. */
 const isProse = (line: string) => line.trim() !== '' && !NUMBERED.test(line) && /[A-Za-zÀ-ÿ]{3,}/.test(line.replace(MOVE, ' '))
 
-/** Paragraphs between the moves → comments in braces after their move. */
-export function paragraphsToBraces(text: string): string {
+/**
+ * Paragraphs between the moves → comments in braces after their move. Which
+ * lines hold moves is read from their move numbers, or told by `isMoveLine`
+ * (line index → the line holds the game's own moves) when the caller knows
+ * the game: books print moves without a dot ("8 axb5") and open comments with
+ * a move ("13 h4!? (Petrosian-Ignatiev)").
+ */
+export function paragraphsToBraces(text: string, isMoveLine?: (index: number) => boolean): string {
   const lines = text.split('\n')
+  const moves = (i: number) => (isMoveLine ? isMoveLine(i) : NUMBERED.test(lines[i]))
+  const comment = (i: number) => {
+    if (!isMoveLine) return isProse(lines[i])
+    const line = lines[i].trim()
+    return !isMoveLine(i) && line !== '' && line !== DIAGRAM_MARK
+  }
   const out: string[] = []
-  for (const line of lines) {
-    if (isProse(line) && out.length && NUMBERED.test(out[out.length - 1].replace(/\{[^}]*\}/g, ''))) {
-      out[out.length - 1] = `${out[out.length - 1]} { ${line.trim()} }`
-    } else if (NUMBERED.test(line) && out.length && /\}\s*$/.test(out[out.length - 1])) {
-      out[out.length - 1] = `${out[out.length - 1]} ${line.trim()}`
+  const moveLine: boolean[] = []
+  lines.forEach((line, i) => {
+    const last = out.length - 1
+    if (last >= 0 && moveLine[last] && comment(i)) {
+      out[last] = `${out[last]} { ${line.trim()} }`
+    } else if (last >= 0 && moveLine[last] && moves(i) && /\}\s*$/.test(out[last])) {
+      out[last] = `${out[last]} ${line.trim()}`
     } else {
       out.push(line)
+      moveLine.push(moves(i))
     }
-  }
+  })
   return out.join('\n')
 }

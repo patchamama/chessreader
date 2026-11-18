@@ -52,6 +52,24 @@ export function gameStart(text: string, g: RecognizedGame): number {
   return number ? first - (before.length - number.index) : first
 }
 
+/**
+ * How the game's comments are written in the text: in braces when a "{" is
+ * written between its first move and its end. The recogniser's own source
+ * can't tell: it turns an engine line added to the book ("Stockfish 14 eval:
+ * [-0.82] …") into an unclosed "{", which made a book written in paragraphs
+ * look as if it were in braces (S10).
+ */
+export function writtenLayout(text: string, g: RecognizedGame): CommentLayout {
+  return text.slice(gameStart(text, g), g.charEnd).includes('{') ? 'braces' : 'paragraphs'
+}
+
+/** Prose offsets of the game's own moves (its mainline). */
+function mainlineStarts(g: RecognizedGame): number[] {
+  return g.tree.mainline
+    .map((id) => g.tree.nodes.get(id)?.charStart)
+    .filter((n): n is number => n !== undefined)
+}
+
 const surname = (name: string) => name.trim().split(/\s+/).pop() ?? name
 
 /** Read the heading before every game (via the shared parseGameHeader) and summarise it. */
@@ -80,7 +98,7 @@ export function describeGames(text: string, games: RecognizedGame[]): GameSummar
       moveLineStart,
       label: `Game ${number}${header?.white && header.black ? ` · ${surname(header.white)} – ${surname(header.black)}` : ''}`,
       title: [String(number), players, opening].filter(Boolean).join(' · '),
-      braces: g.source.includes('{'),
+      braces: writtenLayout(text, g) === 'braces',
     }
   })
 }
@@ -155,14 +173,16 @@ export function applyGameLayouts(
   games: RecognizedGame[],
   layouts: Record<number, CommentLayout>,
 ): string {
-  const wanted = Object.entries(layouts)
+  const chosen = Object.entries(layouts)
     .map(([i, layout]) => ({ game: games[Number(i)], layout }))
-    .filter(({ game, layout }) => game && (game.source.includes('{') ? 'braces' : 'paragraphs') !== layout)
-  if (wanted.length === 0 || !html) return html
+    .filter(({ game }) => game)
+  if (chosen.length === 0 || !html) return html
 
   const doc = new DOMParser().parseFromString(html, 'text/html')
   const body = doc.body
   const prose = extractProseText(body)
+  const wanted = chosen.filter(({ game, layout }) => writtenLayout(prose.text, game) !== layout)
+  if (wanted.length === 0) return html
   const edits: { blocks: Element[]; lines: string[] }[] = []
   for (const { game, layout } of wanted) {
     const lineStart = prose.text.lastIndexOf('\n', gameStart(prose.text, game) - 1) + 1
@@ -177,7 +197,19 @@ export function applyGameLayouts(
     })
     if (s < 0) continue
     const part = prose.text.slice(s, e + 1)
-    const changed = layout === 'paragraphs' ? bracesToParagraphs(part) : paragraphsToBraces(part)
+    // A line holding one of the game's own moves is a line of moves; any other
+    // line is a comment — books often print moves without a dot ("8 axb5") and
+    // comments that open with a move ("13 h4!? (Petrosian-Ignatiev)").
+    const starts = mainlineStarts(game)
+    const lineStarts: number[] = []
+    let at = s
+    for (const line of part.split('\n')) { lineStarts.push(at); at += line.length + 1 }
+    const isMoveLine = (index: number) => {
+      const from = lineStarts[index]
+      const to = index + 1 < lineStarts.length ? lineStarts[index + 1] : e + 1
+      return starts.some((n) => n >= from && n < to)
+    }
+    const changed = layout === 'paragraphs' ? bracesToParagraphs(part) : paragraphsToBraces(part, isMoveLine)
     if (changed === part) continue
     edits.push({ blocks, lines: changed.split('\n').filter((l) => l.trim() !== '') })
   }

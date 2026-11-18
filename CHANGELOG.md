@@ -2,6 +2,11 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.105.0 — 2026-11-18
+
+- feat: moves in comments, variations and engine lines show a thumbnail on hover and open in a new analysis board on click; book comment sources open in a new tab or a new analysis board; hovering a square, diagonal or plan in a comment shows it on a thumbnail only (click applies it to the study board)
+- fix: the braces ⇄ paragraphs switch reads the game's real layout and converts books that print moves without dots
+
 ## v0.104.1 — 2026-11-18
 
 - fix: covers of the resources books in the library are shown whole (no cropping or stretching)

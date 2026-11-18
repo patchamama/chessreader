@@ -93,6 +93,10 @@ function GhostArrow({ from, to }: { from: string; to: string }) {
  */
 export function MoveTooltipCard(p: {
   tree?: GameTree; node?: GameNode; fen: string; lastMove: { from: string; to: string } | null; highlight?: string
+  /** Squares of a line the text names ("the diagonal a2-g8"), lit on the thumbnail. */
+  line?: string[]
+  /** A plan the text names ("d4-d5"), drawn as an arrow. */
+  arrow?: [string, string]
 }) {
   const lang = useSettingsStore((s) => s.language)
   const on = useSettingsStore((s) => s.hintEval)
@@ -103,6 +107,7 @@ export function MoveTooltipCard(p: {
   const loss = judged ? Math.max(0, Math.round(mover * (winPercent(judged.before) - winPercent(judged.after)) * 10) / 10) : 0
   const fenBefore = node && p.tree ? (node.parentId ? p.tree.nodes.get(node.parentId)?.fen : p.tree.startFen) : undefined
   const themes = node && fenBefore ? lichessThemes(fenBefore, node.san) : []
+  const marked = p.line && p.line.length > 0 ? p.line : p.highlight ? [p.highlight] : []
   const sameAsBest = judged?.best && node && judged.best.from === node.from && judged.best.to === node.to
   return (
     <div style={{ width: BOARD }}>
@@ -112,9 +117,10 @@ export function MoveTooltipCard(p: {
           orientation="white"
           lastMove={p.lastMove}
           hideLabels
-          customSquareStyles={p.highlight
-            ? { [p.highlight]: { backgroundColor: 'rgba(250, 204, 21, 0.55)', boxShadow: 'inset 0 0 0 3px rgba(202, 138, 4, 0.9)' } }
+          customSquareStyles={marked.length > 0
+            ? Object.fromEntries(marked.map((sq) => [sq, { backgroundColor: 'rgba(250, 204, 21, 0.55)', boxShadow: 'inset 0 0 0 3px rgba(202, 138, 4, 0.9)' }]))
             : undefined}
+          arrows={p.arrow ? [{ startSquare: p.arrow[0], endSquare: p.arrow[1], color: '#ca8a04' }] : undefined}
         />
         {judged?.best && !sameAsBest && <GhostArrow from={judged.best.from} to={judged.best.to} />}
       </div>
