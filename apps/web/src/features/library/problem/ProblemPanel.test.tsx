@@ -30,6 +30,15 @@ describe('ProblemPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Finish' }))
     await waitFor(() => expect(screen.getByText('Done: 0 of 1')).toBeInTheDocument())
   })
+
+  it('the revealed move can be replayed with the moves of the game that follow it (S5)', async () => {
+    render(<ProblemPanel games={games} text={TEXT} />)
+    fireEvent.click(screen.getByRole('button', { name: /Start problems/ }))
+    await waitFor(() => screen.getByText(/Find the move played in the game/))
+    fireEvent.click(screen.getByRole('button', { name: 'Show the move' }))
+    expect(screen.getByTestId('problem-line-moves')).toHaveTextContent('7. Qb3 Qe7 8. Nc3 c6')
+    expect(screen.getByRole('button', { name: 'Next move' })).toBeInTheDocument()
+  })
 })
 
 describe('the book text during a problem', () => {

@@ -3,6 +3,8 @@ import { act, render, screen, fireEvent } from '@testing-library/react'
 import PlayPage from './PlayPage'
 import { usePlayStore, setPlayRuntime } from './playStore'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
+import { Chess } from 'chess.js'
+import { positionHash } from '@chess-ebook/chess-shared'
 
 vi.mock('./humanMoves', () => ({ humanMoves: vi.fn(async () => ({ rating: 1500, moves: [{ san: 'e4', probability: 0.41 }, { san: 'd4', probability: 0.32 }] })) }))
 vi.mock('../viewer/components/EvalBar', () => ({ default: () => <div data-testid="evalbar" /> }))
@@ -137,5 +139,23 @@ describe('PlayPage', () => {
     act(() => usePlayStore.setState({ status: 'playing', mode: 'engine', color: 'white', sans: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Nd4'],
       fen: 'r1bqkbnr/pppp1ppp/8/4p3/2BnP3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4' }))
     expect(screen.getByTestId('play-ideas')).toHaveTextContent('e5')
+  })
+  it('a trap I can set is written as a line that can be replayed, with info about the ideas (S5, S6)', async () => {
+    const c = new Chess(); const keys = [positionHash(c.fen())]
+    const sans = 'e4 e5 Bc4 Nc6 Qh5 Nf6 Qxf7#'.split(' ').map((m) => { const r = c.move(m); keys.push(positionHash(c.fen())); return r.san })
+    const trap = { id: 's', title: "Scholar's mate", category: 'Classic', opening: 'Italian Game', side: 'white', trapMove: 3, setup: 4, fall: 4, tactic: 1, themes: [], intro: 'f7 is weak.', sans, keys, source: { title: 'Classic', author: null } }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([trap]), { status: 200 })))
+    useSettingsStore.setState({ playIdeas: true })
+    render(<PlayPage />)
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+    act(() => usePlayStore.setState({ status: 'playing', mode: 'engine', color: 'white', sans: ['e4', 'e5'],
+      fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2' }))
+    expect(await screen.findByTestId('play-trap-line-moves')).toHaveTextContent('2. Bc4 Nc6 3. Qh5 Nf6 4. Qxf7#')
+    fireEvent.click(screen.getByRole('button', { name: 'Replay the line' }))
+    expect(screen.getByTestId('play-trap-line-board')).toHaveTextContent('rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2')
+    fireEvent.click(screen.getByText(/About these ideas/))
+    expect(screen.getByTestId('play-info')).toHaveTextContent('The idea: f7 is weak.')
+    vi.unstubAllGlobals()
+    useSettingsStore.setState({ playIdeas: false })
   })
 })

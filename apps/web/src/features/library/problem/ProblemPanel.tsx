@@ -5,6 +5,7 @@ import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { useReviewStore } from '../review/reviewStore'
 import { findProblems, hintFor, type ProblemReason } from './problems'
 import { MAX_ATTEMPTS, useProblemStore } from './problemStore'
+import { LinePlayer } from '../../../shared/chess/LinePlayer'
 
 const T: Record<Lang, Record<string, string>> = {
   en: {
@@ -33,6 +34,9 @@ const T: Record<Lang, Record<string, string>> = {
   },
 }
 
+/** Plies of the game shown with the answer of a problem. */
+const ANSWER_PLIES = 6
+
 /**
  * Problem mode for the game on the board: it is played up to each important
  * position and the reader has to find the move — with attempts and hints.
@@ -58,6 +62,15 @@ export function ProblemPanel({ games, text }: { games: RecognizedGame[]; text: s
   const problem = running && p.phase !== 'finished' ? p.problems[p.index] : null
   const node = problem ? game.tree.nodes.get(problem.nodeId) : undefined
   const last = running && p.index >= p.problems.length - 1
+  // The answer as a line: the move and the game's next moves, from the position before it (S5).
+  const answer = (() => {
+    if (!node) return null
+    const at = game.tree.mainline.indexOf(node.id)
+    const ids = at >= 0 ? game.tree.mainline.slice(at, at + ANSWER_PLIES) : [node.id]
+    const sans = ids.map((id) => game.tree.nodes.get(id)?.san).filter((x): x is string => !!x)
+    const fen = node.parentId ? game.tree.nodes.get(node.parentId)?.fen ?? game.tree.startFen : game.tree.startFen
+    return { fen, sans }
+  })()
 
   return (
     <section aria-label={t.title} className="rounded-lg border border-amber-200 bg-amber-50/50 p-3">
@@ -104,6 +117,9 @@ export function ProblemPanel({ games, text }: { games: RecognizedGame[]; text: s
           {p.phase === 'solved' ? t.solved : t.revealed}{' '}
           <span className="font-mono">{node.moveNumber}{node.color === 'white' ? '.' : '...'} {node.rawSan ?? node.san}</span>
         </p>
+      )}
+      {running && answer && (p.phase === 'solved' || p.phase === 'revealed') && (
+        <LinePlayer key={node!.id} fen={answer.fen} moves={answer.sans} testId="problem-line" className="mt-1" />
       )}
 
       {running && p.phase === 'finished' && (

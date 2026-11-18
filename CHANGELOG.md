@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.95.0 — 2026-11-18
+
+- feat: answers in notation (puzzle and problem solutions, traps, Play ideas) with move thumbnails and a replay board; collapsible "About this…" sections that explain patterns, traps and openings in the selected language, with Wikipedia and Lichess links
+
 ## v0.94.0 — 2026-11-18
 
 - feat: my games show only the years and months with games, with their counts, and an "All games" list

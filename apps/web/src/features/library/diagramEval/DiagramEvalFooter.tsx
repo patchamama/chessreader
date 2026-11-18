@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Chess } from 'chess.js'
-import ChessBoardThemed from '../../../shared/chess/ChessBoard'
+import { HoverLine } from '../../../shared/chess/HoverLine'
+import { playLine } from '../../../shared/chess/playLine'
 import { evalText, localLine, numberLine, shortScore, type Lang, type Score } from '@chess-ebook/chess-shared'
 import EvalBar from '../../viewer/components/EvalBar'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
@@ -26,45 +26,9 @@ function bookLine(fen: string, l: DiagramLine, lang: Lang, max: number): string 
   return localLine(numberLine(sans, Number(moveNo) || 1, turn === 'b' ? 'black' : 'white'), lang)
 }
 
-/** Each move of the line with the position after it (for its thumbnail). */
-function linePositions(fen: string, l: DiagramLine, max: number): { fen: string; from: string; to: string }[] {
-  const chess = new Chess(fen)
-  const out: { fen: string; from: string; to: string }[] = []
-  for (const m of l.pv.slice(0, max)) {
-    try { chess.move({ from: m.slice(0, 2), to: m.slice(2, 4), promotion: m[4] ?? 'q' }) } catch { break }
-    out.push({ fen: chess.fen(), from: m.slice(0, 2), to: m.slice(2, 4) })
-  }
-  return out
-}
-
-/** A line whose moves show the position on hover (S7). */
-function HoverLine({ fen, line, lang, max, className, testId, suffix }: { fen: string; line: DiagramLine; lang: Lang; max: number; className: string; testId: string; suffix?: string }) {
-  const thumbs = useSettingsStore((s) => s.diagramEvalThumbs)
-  const [hover, setHover] = useState<{ i: number; x: number; y: number } | null>(null)
-  const text = bookLine(fen, line, lang, max)
-  if (!thumbs) return <span data-testid={testId} className={className}>{text}{suffix}</span>
-  const positions = linePositions(fen, line, max)
-  // The text tokens that are moves (not numbers) map, in order, to the positions.
-  let k = -1
-  const parts = text.split(/(\s+)/).map((tok, j) => {
-    if (/^\s+$/.test(tok) || /^\d+\.(\.\.)?$/.test(tok)) return <span key={j}>{tok}</span>
-    const at = ++k
-    return (
-      <span key={j} data-move-thumb className="cursor-default rounded hover:bg-amber-100"
-        onMouseEnter={(e) => setHover({ i: at, x: e.clientX, y: e.clientY })} onMouseLeave={() => setHover(null)}>{tok}</span>
-    )
-  })
-  const shown = hover ? positions[hover.i] : null
-  return (
-    <span data-testid={testId} className={className}>
-      {parts}{suffix}
-      {shown && hover && (
-        <span className="pointer-events-none fixed z-50 block overflow-hidden rounded border border-slate-300 bg-white shadow-lg" style={{ left: hover.x + 8, top: hover.y + 12, width: 160 }}>
-          <ChessBoardThemed fen={shown.fen} orientation="white" lastMove={{ from: shown.from, to: shown.to }} hideLabels />
-        </span>
-      )}
-    </span>
-  )
+/** A line of the engine whose moves show the position on hover (S7). */
+function EngineLine({ fen, line, lang, max, className, testId, suffix }: { fen: string; line: DiagramLine; lang: Lang; max: number; className: string; testId: string; suffix?: string }) {
+  return <HoverLine text={bookLine(fen, line, lang, max)} positions={playLine(fen, line.pv, max).positions} className={className} testId={testId} suffix={suffix} />
 }
 
 /**
@@ -94,9 +58,9 @@ export function DiagramEvalFooter({ fen }: { fen: string }) {
             </span>
           )}
           <span data-testid="diagram-eval-words" className="block">{evalText(whiteBest, lang)} · {e.engine}, {t.depth} {e.depth}</span>
-          <HoverLine fen={fen} line={best} lang={lang} max={6} testId="diagram-eval-line" className="block text-slate-800" />
+          <EngineLine fen={fen} line={best} lang={lang} max={6} testId="diagram-eval-line" className="block text-slate-800" />
           {e.lines.slice(1, 3).map((l, i) => (
-            <HoverLine key={i} fen={fen} line={l} lang={lang} max={4} testId="diagram-eval-alt" className="block italic text-slate-500" suffix={` (${shortScore(fromWhite(l, fen))})`} />
+            <EngineLine key={i} fen={fen} line={l} lang={lang} max={4} testId="diagram-eval-alt" className="block italic text-slate-500" suffix={` (${shortScore(fromWhite(l, fen))})`} />
           ))}
         </>
       )}

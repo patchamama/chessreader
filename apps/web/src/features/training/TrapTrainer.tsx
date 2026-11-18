@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Chess } from 'chess.js'
 import ChessBoard from '../../shared/chess/ChessBoard'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
+import { LinePlayer } from '../../shared/chess/LinePlayer'
+import { InfoSection } from '../../shared/info/InfoSection'
 import { dueTraps, filterTraps, loadTraps, recordPractice, trapProgress, type Trap } from './traps'
 
 const stars = (n: number | null) => (n ? '●'.repeat(n) + '○'.repeat(5 - n) : '—')
@@ -51,6 +53,8 @@ export function TrapPractice({ trap, onDone }: { trap: Trap; onDone: (clean: boo
         <p data-testid="trap-progress" className="mt-2 font-mono text-xs">{trap.sans.slice(0, ply).map((m, i) => `${i % 2 === 0 ? `${i / 2 + 1}. ` : ''}${m}`).join(' ')}</p>
         {message && <p role="alert" className="text-red-700">{message}</p>}
         {ply >= trap.sans.length && <p role="status" className="font-semibold text-emerald-700">{mistakes === 0 ? 'Trap set perfectly!' : `Done, with ${mistakes} mistake(s).`}</p>}
+        {ply >= trap.sans.length && <LinePlayer fen={new Chess().fen()} moves={trap.sans} orientation={trap.side} testId="trap-line" className="mt-2" />}
+        <InfoSection topic="trap" idea={lang === 'es' && trap.introEs ? trap.introEs : trap.intro} opening={trap.opening} themes={trap.themes} testId="trap-info" />
         <p className="mt-2 text-[11px] text-slate-500">{trap.source.author ? `${trap.source.author}, ` : ''}{trap.source.title}</p>
       </div>
     </div>
@@ -80,6 +84,7 @@ export function TrapTrainer() {
   const field = 'rounded border border-slate-300 px-1 py-0.5 text-sm'
   return (
     <div className="flex flex-col gap-3">
+      <InfoSection topic="traps" testId="traps-info" />
       {current && <TrapPractice key={current.id} trap={current} onDone={(clean) => { recordPractice(current.id, clean); setTick((t) => t + 1) }} />}
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <input aria-label="Search traps" placeholder="Name, opening, theme…" className={field} value={q} onChange={(e) => setQ(e.target.value)} />

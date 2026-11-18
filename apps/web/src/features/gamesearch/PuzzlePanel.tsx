@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { loadPatternIndex, patternPuzzle, type PatternTheme } from './patterns'
-import { Chess } from 'chess.js'
 import ChessBoard from '../../shared/chess/ChessBoard'
+import { LinePlayer } from '../../shared/chess/LinePlayer'
+import { InfoSection } from '../../shared/info/InfoSection'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { lichessDailyPuzzle, lichessNextPuzzle, puzzleMove, puzzlePosition, type Puzzle } from './puzzles'
 
@@ -9,19 +10,6 @@ const primary = 'rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white ho
 const plain = 'rounded border border-slate-300 bg-white px-3 py-1 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50'
 
 type Status = 'solving' | 'wrong' | 'solved'
-
-/** The solution written as moves, from the puzzle's position. */
-function solutionText(p: Puzzle): string {
-  const chess = new Chess(p.fen)
-  const parts: string[] = []
-  for (const m of p.solution) {
-    const [, , , , , moveNo] = chess.fen().split(' ')
-    const white = chess.turn() === 'w'
-    const san = chess.move({ from: m.slice(0, 2), to: m.slice(2, 4), promotion: m[4] }).san
-    parts.push(white ? `${moveNo}. ${san}` : parts.length === 0 ? `${moveNo}... ${san}` : san)
-  }
-  return parts.join(' ')
-}
 
 /**
  * Lichess puzzles: the puzzle of the day, or a new one chosen for the user's
@@ -120,6 +108,7 @@ export function PuzzlePanel({ initialTheme }: { initialTheme?: string } = {}) {
           </label>
           <button className={plain} disabled={busy} onClick={() => void loadPattern()}>Pattern puzzle</button>
           <span className="text-xs text-slate-500">Lichess puzzle database (CC0)</span>
+          <InfoSection topic="pattern" themes={[theme]} testId="pattern-info" />
         </div>
       )}
       {error && <p role="alert" className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-800">{error}</p>}
@@ -141,7 +130,13 @@ export function PuzzlePanel({ initialTheme }: { initialTheme?: string } = {}) {
             <div>
               <button className={plain} onClick={() => setShowSolution(true)}>Show the solution</button>
             </div>
-            {showSolution && <p className="text-xs text-slate-700">Solution: {solutionText(puzzle)}</p>}
+            {showSolution && (
+              <div data-testid="puzzle-solution" className="text-xs text-slate-700">
+                <span>Solution: </span>
+                <LinePlayer key={puzzle.id} fen={puzzle.fen} moves={puzzle.solution} orientation={solver} testId="puzzle-solution-player" />
+              </div>
+            )}
+            <InfoSection key={puzzle.id} topic="puzzle" themes={puzzle.themes} testId="puzzle-info" />
           </div>
         </div>
       )}

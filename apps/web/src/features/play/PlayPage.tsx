@@ -15,6 +15,8 @@ import { useStatusStore } from '../../shared/layout/statusStore'
 import { humanMoves, type HumanMoves } from './humanMoves'
 import { lichessThemes, playIdeas } from './playIdeas'
 import { loadTraps, trapsAt, type Trap } from '../training/traps'
+import { LinePlayer } from '../../shared/chess/LinePlayer'
+import { InfoSection } from '../../shared/info/InfoSection'
 
 const TEXT = {
   en: {
@@ -233,8 +235,13 @@ export default function PlayPage() {
             {ideas.targets.length > 0 && <p>🎯 {t.targets}: {ideas.targets.map((x) => `${x.square} (${x.why})`).join(', ')}</p>}
             {ideas.chances.length > 0 && <p>⚡ {t.chances}: {ideas.chances.join(' ')}</p>}
             {trapHere.map(({ trap, ply }) => (
-              <p key={trap.id}>🪤 {t.trap}: <strong>{lang === 'es' && trap.titleEs ? trap.titleEs : trap.title}</strong> — {trap.sans[ply]}{trap.fall ? ` (${t.falls} ${trap.fall}/5)` : ''}</p>
+              <div key={trap.id}>
+                <p>🪤 {t.trap}: <strong>{lang === 'es' && trap.titleEs ? trap.titleEs : trap.title}</strong> — {trap.sans[ply]}{trap.fall ? ` (${t.falls} ${trap.fall}/5)` : ''}</p>
+                <LinePlayer key={p.fen} fen={p.fen} moves={trap.sans.slice(ply)} orientation={p.color} initiallyOpen={false} testId="play-trap-line" className="ml-4" />
+              </div>
             ))}
+            <InfoSection topic="ideas" opening={ideas.opening} themes={lastThemes}
+              idea={trapHere.map(({ trap }) => (lang === 'es' && trap.introEs ? trap.introEs : trap.intro)).join(' ') || undefined} testId="play-info" />
           </div>
         )}
         {humanHere && humanHere.moves.length > 0 && (
