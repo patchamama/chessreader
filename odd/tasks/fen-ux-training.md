@@ -26,6 +26,12 @@ Delivery: one commit + tag per phase on main, pushed (user's standing instructio
 - S21 (added 2026-11-18) "si se pone el token de gh en la app solo en el frontend deployado en gh, deseo que se muestren las opciones relacionadas a los recursos en el gh privado, y que se muestren en card los libros que se pueden abrir para su reproducción y visualización, poniendo el cover del libro y demás datos del libro, una información de cantidad de partidas, los jugadores más representados en el libro y si se puede poner el periodo de las fechas de la mayoría de las partidas"
 - S22 (added 2026-11-18) "en las estadísticas ... por jugador ... una evaluación usando el motor stockfish de las jugadas registradas en ese jugador en la base de datos para evaluar el nivel de eficiencia o de aceptación en relación con el motor (también según Maia u otro motor) poniendo un ranking con los jugadores registrados, y tambien que se pongan los juegos que son casi perfectos por un jugador segun los motores."
 - S23 (added 2026-11-18) "que se instalen otros motores de juego en el backend o en el frontend que se puedan integrar también a elegir si es posible para poder jugar con diferentes si uno desea."
+- S24 (2026-11-18) "si se abre una partida comentada como una de las inmortales y se da a la opción "Reanalizar y regenerar todos los comentarios" se queda el texto en blanco ... debe de eliminarse en la partida que se está mostrando todos los comentarios a partir de la jugada 1 y hasta la última jugada y regenerarse todos y ponerse ahí, más seleccionar la jugada 1 ... si se muestra un texto que contiene muchas partidas, debe de regenerarse solo la partida activa." (done v0.79.0)
+- S25 (2026-11-18) "documenta en el chessreader-resources en el readme en inglés y castellano, como se creo la base de datos, fuentes de todos los recursos, como se han extraido las partidas, correcciones, como se extrajeron los comentarios ... como se hacen los request para obtener comentarios humanos (con el json y la base de datos sqlite), también agrega un script python flask y php que permita abrir un endpoint sencillo ... como se ha hecho el afinamiento para crear comentarios más humanos y un todo de ideas ... limpiar ... comentarios ... que hagan referencias a otras jugadas del libro o cosas externas ... con un LLM ... traducir los comentarios" + "¿existe una base de datos de patrones de reconocimiento de jugadas?"
+- S26 (2026-11-18) "al ejecutar el start.bat o start.sh si no se encuentran los recursos y si se tiene acceso a chessreader-resources con el token o credenciales de github, que se descarguen los recursos"
+- S27 (2026-11-18) "Agrega al Readme un historial con los cambios insertados en cada versión ... en un archivo de historial aparte pero referenciado en el readme"
+- S28 (2026-11-18) "La dama y el alfil de c4 atacan f7 por la diagonal a2-g8 ... al poner el mouse sobre a2-g8 no se resalta o ilumina la diagona" (done v0.79.0)
+- S29 (2026-11-18) "agrega opción de mostrar una tabla con todos los libros con errores, y un ranking de cantidad de errores por partida, que me permita abrir partidas con errores en el frontend y revisarlos ... al final de todas las tareas levanta el backend para poder revisarlo."
 
 ## Tasks
 - [x] T1 S1–S2 FEN fragments + algorithm choice — inline — v0.78.0
@@ -39,9 +45,11 @@ Delivery: one commit + tag per phase on main, pushed (user's standing instructio
 - [ ] T9 S15, S21–S22 resources repo, game DB, search, players, openings, exercises, stats — inline — v0.86–0.87
 - [ ] T10 S14 level test — inline — v0.88.0
 - [ ] T11 S18 diagram images → FEN — inline — v0.89.0
-- [ ] T13 S19–S20 comment layout toggle in the reader, FEN/PGN download always available — inline — v0.79.x
+- [x] T13 S19–S20 comment layout toggle in the reader, FEN/PGN download always available — inline — v0.79.x
 - [ ] T14 S23 other engines to play against (backend UCI + browser) — inline
-- [ ] T12 S17 start.sh / start.bat, lc0 + Maia install — inline — v0.90.0
+- [ ] T15 S29 errors table + ranking page — inline
+- [ ] T16 S25–S27 resources repo docs (en/es), query servers (Flask, PHP), CHANGELOG — inline
+- [ ] T12 S17, S26 start.sh / start.bat, lc0 + Maia install — inline — v0.90.0
 
 ## Log
 - L1 2026-11-18 user request (verbatim fragments in S1–S18; full text in session transcript 59547ab6).

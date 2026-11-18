@@ -1,11 +1,14 @@
 import { useMemo, useEffect, useState, useCallback, useRef, memo, forwardRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { useChapter, useTouchBook } from '../api/libraryApi'
 import { recognizeGames } from '@chess-ebook/chess-shared'
 import type { GameTree, GameNode, IsolatedMove } from '@chess-ebook/chess-shared'
 import { MoveTooltipCard } from './MoveTooltipCard'
 import { loadBoardMemory, saveBoardMemory } from '../store/boardMemory'
 import { dashedPair, squareLine } from '../utils/squareLine'
+import { bracesToParagraphs, paragraphsToBraces } from '../utils/commentLayout'
+import { textToChapters } from '../utils/textToChapters'
+import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
 import { StudyBoard } from './StudyBoard'
 import { StudyPanelResizer } from './StudyPanelResizer'
 import { VariationChooser } from './VariationChooser'
@@ -83,6 +86,7 @@ interface ResolvedNode {
 export default function BookReader() {
   const { bookId } = useParams<{ bookId: string }>()
   const id = Number(bookId)
+  const navigate = useNavigate()
 
   const [currentChapter, setCurrentChapter] = useState<number>(() => {
     const p = getProgress(id)
@@ -215,6 +219,25 @@ export default function BookReader() {
     }
     setIsolatedHighlight(mark)
   }
+  /** Rewrite one game's comments in the other form (braces ⇄ paragraphs) and show the text again. */
+  const toggleLayout = (gameIndex: number) => {
+    const g = games[gameIndex]
+    if (!g) return
+    const start = plainText.lastIndexOf('\n', g.charStart - 1) + 1
+    const nl = plainText.indexOf('\n', g.charEnd)
+    const end = nl < 0 ? plainText.length : nl
+    const part = plainText.slice(start, end)
+    const changed = part.includes('{') ? bracesToParagraphs(part) : paragraphsToBraces(part)
+    const rewritten = `${plainText.slice(0, start)}${changed}${plainText.slice(end)}`.split('\n').filter((l) => l.trim() !== '\uFFFC').join('\n')
+    const { title, chapters } = textToChapters(rewritten, data?.title ?? 'Game')
+    useStudyBoardStore.getState().clearGame()
+    saveBoardMemory(EXTERNAL_BOOK_ID, { chapter: 1, gameIndex, nodeId: null, annotations: {} })
+    saveProgress(EXTERNAL_BOOK_ID, 1)
+    useExternalBookStore.getState().open(title, chapters)
+    navigate(`/read/${EXTERNAL_BOOK_ID}`)
+  }
+  const toggleLayoutRef = useRef(toggleLayout)
+  useEffect(() => { toggleLayoutRef.current = toggleLayout })
   const showMentionRef = useRef(showMention)
   useEffect(() => { showMentionRef.current = showMention })
 
@@ -414,6 +437,20 @@ export default function BookReader() {
         textNode.parentNode?.replaceChild(frag, textNode)
       }
     }
+    // At the start of each game: switch its comments between braces and paragraphs (S19).
+    games.forEach((g, gameIndex) => {
+      const first = container.querySelector(`span[data-game-index="${gameIndex}"]`)
+      if (!first || first.previousElementSibling?.hasAttribute('data-layout-toggle')) return
+      const braces = g.source.includes('{')
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.setAttribute('data-layout-toggle', String(gameIndex))
+      button.textContent = braces ? '¶' : '{ }'
+      button.title = braces ? 'Show the comments as paragraphs' : 'Show the comments in braces'
+      button.setAttribute('aria-label', button.title)
+      button.className = 'mr-1 rounded border border-slate-300 bg-white px-1 text-[0.7em] text-slate-600 hover:bg-slate-100 align-middle'
+      first.parentNode?.insertBefore(button, first)
+    })
   }, [html, games, plainText, bookConfig.moveLineIndent.zeroIndent])
 
   // Wrap each book diagram <img> with an interactive DiagramImage overlay
@@ -552,6 +589,8 @@ export default function BookReader() {
     }
 
     const onClick = (e: Event) => {
+      const toggle = (e.target as HTMLElement | null)?.closest?.('[data-layout-toggle]') as HTMLElement | null
+      if (toggle) { toggleLayoutRef.current(Number(toggle.dataset.layoutToggle)); return }
       const span = findSpan(e.target)
       if (!span) return
       if (tooltipTimer.current) clearTimeout(tooltipTimer.current)

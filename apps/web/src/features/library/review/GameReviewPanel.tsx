@@ -26,7 +26,7 @@ interface GameReviewPanelProps {
 
 const T: Record<Lang, Record<string, string>> = {
   en: {
-    title: 'Engine review', run: 'Review and comment the game', all: 'Review and comment every game of the chapter', cancel: 'Cancel', lichess: 'Analyse on Lichess', regenerate: 'Re-analyse and regenerate all comments',
+    title: 'Engine review', run: 'Review and comment the game', all: 'Review and comment every game of the chapter', cancel: 'Cancel', lichess: 'Analyse on Lichess', pgn: 'Download PGN', fen: 'Download FEN', regenerate: 'Re-analyse and regenerate all comments',
     analysing: 'Analysing position', accuracy: 'accuracy', white: 'White', black: 'Black', opening: 'Opening',
     moments: 'Key moments', none: 'No turning points: a steady game.', go: 'Go to', line: 'Play the line',
     better: 'Better was', follow: 'There followed', level: 'Commentary level', l1: '1 · marks only', l2: '2 · remarks and better lines',
@@ -38,7 +38,7 @@ const T: Record<Lang, Record<string, string>> = {
     players: 'Players are read from PGN tags, from lines "White: … / Black: …" or from a heading "White – Black".',
   },
   es: {
-    title: 'Revisión con el motor', run: 'Revisar y comentar la partida', all: 'Revisar y comentar todas las partidas del capítulo', cancel: 'Cancelar', lichess: 'Analizar en Lichess', regenerate: 'Reanalizar y regenerar todos los comentarios',
+    title: 'Revisión con el motor', run: 'Revisar y comentar la partida', all: 'Revisar y comentar todas las partidas del capítulo', cancel: 'Cancelar', lichess: 'Analizar en Lichess', pgn: 'Descargar PGN', fen: 'Descargar FEN', regenerate: 'Reanalizar y regenerar todos los comentarios',
     analysing: 'Analizando posición', accuracy: 'de precisión', white: 'Blancas', black: 'Negras', opening: 'Apertura',
     moments: 'Momentos clave', none: 'Sin puntos de inflexión: una partida pareja.', go: 'Ir a', line: 'Reproducir la línea',
     better: 'Era mejor', follow: 'Siguió', level: 'Nivel de comentario', l1: '1 · solo signos', l2: '2 · comentarios y líneas mejores',
@@ -50,7 +50,7 @@ const T: Record<Lang, Record<string, string>> = {
     players: 'Los jugadores se leen de las etiquetas PGN, de líneas "Blancas: … / Negras: …" o de un encabezado "Blancas – Negras".',
   },
   de: {
-    title: 'Engine-Analyse', run: 'Partie prüfen und kommentieren', all: 'Alle Partien des Kapitels prüfen und kommentieren', cancel: 'Abbrechen', lichess: 'Auf Lichess analysieren', regenerate: 'Neu analysieren und alle Kommentare neu schreiben',
+    title: 'Engine-Analyse', run: 'Partie prüfen und kommentieren', all: 'Alle Partien des Kapitels prüfen und kommentieren', cancel: 'Abbrechen', lichess: 'Auf Lichess analysieren', pgn: 'PGN herunterladen', fen: 'FEN herunterladen', regenerate: 'Neu analysieren und alle Kommentare neu schreiben',
     analysing: 'Analysiere Stellung', accuracy: 'Genauigkeit', white: 'Weiß', black: 'Schwarz', opening: 'Eröffnung',
     moments: 'Schlüsselmomente', none: 'Keine Wendepunkte: eine ausgeglichene Partie.', go: 'Gehe zu', line: 'Variante abspielen',
     better: 'Besser war', follow: 'Es folgte', level: 'Kommentarstufe', l1: '1 · nur Zeichen', l2: '2 · Anmerkungen und bessere Varianten',
@@ -144,6 +144,34 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
     } finally {
       if (abort.current === ctrl) { abort.current = null; setProgress(null) }
     }
+  }
+
+  /** Save a small text file in the browser. */
+  function saveText(name: string, text: string, mime: string) {
+    const url = URL.createObjectURL(new Blob([text], { type: mime }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  /** The game as PGN, with the players as tags (always available, S20). */
+  function downloadPgn() {
+    const tags = [`[White "${players.white ?? '?'}"]`, `[Black "${players.black ?? '?'}"]`]
+    if (game.tree.startFen !== 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') tags.push('[SetUp "1"]', `[FEN "${game.tree.startFen}"]`)
+    saveText(`${players.white ?? 'game'}-${players.black ?? ''}.pgn`.replace(/[\\/:*?"<>|]+/g, ''), `${tags.join('\n')}\n\n${treeToPgn(game.tree)}\n`, 'application/x-chess-pgn')
+  }
+
+  /** The position on the board (or the game's final position) as FEN. */
+  function downloadFen() {
+    const board = useStudyBoardStore.getState()
+    const node = board.activeGame === game.tree && board.currentNodeId ? game.tree.nodes.get(board.currentNodeId) : null
+    const fen = board.activeGame === game.tree && board.playFen ? board.playFen
+      : node?.fen ?? game.tree.nodes.get(game.tree.mainline[game.tree.mainline.length - 1])?.fen ?? game.tree.startFen
+    saveText('position.fen', `${fen}\n`, 'text/plain')
   }
 
   /** Import the game into Lichess and open its analysis board (server analysis, explorer, sharing). */
@@ -352,6 +380,8 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
               <button className={button} onClick={() => void run(games.map((_, i) => i))}>{t.all}</button>
             )}
             <button className={button} onClick={() => void regenerate()}><span aria-hidden="true">⟳ </span>{t.regenerate}</button>
+            <button className={button} onClick={downloadPgn}>{t.pgn}</button>
+            <button className={button} onClick={downloadFen}>{t.fen}</button>
             <button className={button} disabled={lichessBusy} onClick={() => void analyseOnLichess()}>{t.lichess}<span aria-hidden="true"> ↗</span></button>
           </>
         )}

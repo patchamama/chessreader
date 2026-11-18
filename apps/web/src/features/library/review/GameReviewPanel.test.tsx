@@ -184,6 +184,25 @@ describe('GameReviewPanel', () => {
     expect(JSON.parse(localStorage.getItem('chessreader-board-v1') ?? '{}')['-1']).toMatchObject({ chapter: 1, gameIndex: 0, nodeId: null })
   })
 
+  it('the game as PGN and the position shown as FEN can always be downloaded (S20)', async () => {
+    const blobs: Blob[] = []
+    const original = { create: URL.createObjectURL, revoke: URL.revokeObjectURL }
+    URL.createObjectURL = vi.fn((b: Blob) => { blobs.push(b); return 'blob:x' }) as typeof URL.createObjectURL
+    URL.revokeObjectURL = vi.fn()
+    useStudyBoardStore.getState().loadPosition(games[0].tree, main[1], false)
+    renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: 'Download PGN' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Download FEN' }))
+    expect(blobs).toHaveLength(2)
+    const read = (b: Blob) => new Promise<string>((res) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.readAsText(b) })
+    const saved = await Promise.all(blobs.map(async (b) => ({ text: await read(b) })))
+    URL.createObjectURL = original.create
+    URL.revokeObjectURL = original.revoke
+    expect(saved[0].text).toContain('[White "Tutor"]')
+    expect(saved[0].text).toContain('1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#')
+    expect(saved[1].text.trim()).toBe(games[0].tree.nodes.get(main[1])!.fen)
+  })
+
   it('borrows what a book says about a position of the game, with its source (S5)', async () => {
     const lookup = await import('../commentdb/commentLookup')
     const spy = vi.spyOn(lookup, 'humanCommentsForGame').mockResolvedValue({ 4: { text: 'La dama sale demasiado pronto.', source: 'Kasparov, Mis geniales predecesores I, Partida 3' } })
