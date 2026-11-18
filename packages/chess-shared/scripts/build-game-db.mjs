@@ -20,13 +20,15 @@ import { tmpdir } from 'node:os'
 import { extname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { recognizeGames, extractPlayers, treeToPgn, openingName, spanishToEnglish, parseGameHeader } from '../dist/index.js'
-import { bookChapters, chapterProse, commentCount, commentedPgn, coverHref, gameEnding, headingLines, matchGame, readGameHeading } from './gameDbExtract.mjs'
+import { bookChapters, chapterProse, commentCount, commentedPgn, coverHref, gameEnding, headingLines, keptRows, matchGame, readGameHeading, restoreRows } from './gameDbExtract.mjs'
 
 const [manifestPath, outDir] = process.argv.slice(2)
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
 const base = manifestPath.replace(/[^/]*$/, '')
 for (const d of ['covers', 'games']) mkdirSync(join(outDir, d), { recursive: true })
 const dbFile = join(outDir, 'games.sqlite')
+// The engine ratings of players take hours to compute: kept across rebuilds.
+const ratings = keptRows(DatabaseSync, dbFile, 'db_player_ratings')
 if (existsSync(dbFile)) execFileSync('rm', [dbFile])
 const db = new DatabaseSync(dbFile)
 // Games are written before their book's card (it needs the games): keys are checked by the data, not here.
@@ -34,6 +36,7 @@ db.exec('PRAGMA foreign_keys = OFF')
 db.exec(readFileSync(new URL('../../../apps/api/migrations/006_games_db.sql', import.meta.url), 'utf8'))
 // Columns added after the migration: the file is rebuilt from scratch every time.
 for (const col of ['place TEXT', 'date TEXT', 'white_elo INTEGER', 'black_elo INTEGER', 'termination TEXT', 'commented_pgn TEXT', 'chapter INTEGER', 'game_index INTEGER', 'start_fen TEXT']) db.exec(`ALTER TABLE db_games ADD COLUMN ${col}`)
+restoreRows(db, 'db_player_ratings', ratings)
 const insBook = db.prepare('INSERT INTO db_books (id, title, author, lang, cover, games, period_from, period_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
 const insGame = db.prepare('INSERT INTO db_games (id, book_id, white, black, year, event, opening, result, moves, pgn, place, date, white_elo, black_elo, termination, commented_pgn, chapter, game_index, start_fen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
 

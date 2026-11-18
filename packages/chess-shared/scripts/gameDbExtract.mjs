@@ -1,6 +1,7 @@
 // Pure helpers of scripts/build-game-db.mjs: the heading printed before a game
 // (players, Elo, place, date, event, opening), how the game ended (from the
 // words after its last move) and which image of an EPUB is its cover.
+import { existsSync } from 'node:fs'
 import { posix } from 'node:path'
 
 const FEN = /^(?:[rnbqkpRNBQKP1-8]+\/){7}[rnbqkpRNBQKP1-8]+(?:\s|$)/
@@ -241,4 +242,29 @@ export function matchGame(sans, games, taken = new Set()) {
     if (k > bestLen) { best = i; bestLen = k }
   })
   return bestLen >= Math.min(6, sans.length) && bestLen > 0 ? best : null
+}
+
+/**
+ * The rows of a table of an existing database (e.g. the engine ratings of
+ * players, which take hours to compute), read before the file is rebuilt.
+ * `DatabaseSync` is passed in: test runners cannot import node:sqlite here.
+ */
+export function keptRows(DatabaseSync, file, table) {
+  if (!existsSync(file)) return []
+  const db = new DatabaseSync(file)
+  try {
+    return db.prepare(`SELECT * FROM ${table}`).all()
+  } catch {
+    return [] // an older file without that table
+  } finally {
+    db.close()
+  }
+}
+
+/** Write rows read with keptRows back into the rebuilt table. */
+export function restoreRows(db, table, rows) {
+  if (!rows.length) return
+  const cols = Object.keys(rows[0])
+  const ins = db.prepare(`INSERT OR IGNORE INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`)
+  for (const r of rows) ins.run(...cols.map((c) => r[c]))
 }
