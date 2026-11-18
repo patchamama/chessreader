@@ -61,6 +61,12 @@ if ! have pnpm; then
   if have corepack; then corepack enable >/dev/null 2>&1 || true; fi
   have pnpm || { info "Installing pnpm (npm)..."; npm install -g pnpm >/dev/null 2>&1 || true; }
 fi
+# The workspace needs pnpm 9 or later.
+if have pnpm && [ "$(pnpm -v | cut -d. -f1)" -lt 9 ]; then
+  info "pnpm $(pnpm -v) is too old (need 9+): updating..."
+  npm install -g pnpm@9 >/dev/null 2>&1 || corepack prepare pnpm@9 --activate >/dev/null 2>&1 || info "could not update pnpm"
+  hash -r
+fi
 command -v php       >/dev/null 2>&1 || fail "php not found (need PHP 8.x)"
 command -v composer  >/dev/null 2>&1 || fail "composer not found"
 command -v pnpm      >/dev/null 2>&1 || fail "pnpm not found (npm i -g pnpm)"
@@ -95,12 +101,15 @@ install_resources() {
 if [ ! -f "$RES_DIR/books.json" ]; then
   TMP_RES="$API_DIR/storage/.resources-repo"
   rm -rf "$TMP_RES"
+  trap 'rm -rf "$TMP_RES"' EXIT
   if have gh && gh auth status >/dev/null 2>&1 && gh repo view "$RES_REPO" >/dev/null 2>&1; then
     info "Downloading private resources ($RES_REPO) with gh..."
     gh repo clone "$RES_REPO" "$TMP_RES" -- --depth 1 --quiet && install_resources "$TMP_RES"
   elif [ -n "${GITHUB_TOKEN:-}" ]; then
     info "Downloading private resources ($RES_REPO) with GITHUB_TOKEN..."
-    git clone --depth 1 --quiet "https://x-access-token:${GITHUB_TOKEN}@github.com/${RES_REPO}.git" "$TMP_RES" && install_resources "$TMP_RES"
+    # The token goes in an environment-only git setting: never in argv or in .git/config.
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer ${GITHUB_TOKEN}" \
+      git clone --depth 1 --quiet "https://github.com/${RES_REPO}.git" "$TMP_RES" && install_resources "$TMP_RES"
   else
     info "Private resources not found and no GitHub access (gh login or GITHUB_TOKEN): the app runs without them."
   fi

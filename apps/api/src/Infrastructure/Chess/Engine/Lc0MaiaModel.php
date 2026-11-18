@@ -50,9 +50,7 @@ final class Lc0MaiaModel implements HumanMoveModel
         fclose($pipes[0]);
         fclose($pipes[1]);
         // A search still running (no bestmove before the deadline) must not hold the request.
-        if (proc_get_status($proc)['running']) {
-            proc_terminate($proc, 9);
-        }
+        proc_terminate($proc, 9);
         proc_close($proc);
         return ['rating' => $net, 'moves' => MaiaPolicyParser::parse($lines, $limit)];
     }

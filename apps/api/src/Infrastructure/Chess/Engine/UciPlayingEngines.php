@@ -81,9 +81,8 @@ final class UciPlayingEngines implements PlayingEngines
         @fwrite($pipes[0], "quit\n");
         fclose($pipes[0]);
         fclose($pipes[1]);
-        if (proc_get_status($proc)['running']) {
-            proc_terminate($proc, 9);
-        }
+        // Always: a slow engine must not hold the request after its deadline.
+        proc_terminate($proc, 9);
         proc_close($proc);
         return $move;
     }

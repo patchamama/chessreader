@@ -56,7 +56,14 @@ set TMP_RES=%API_DIR%\storage\.resources-repo
 if not exist "%RES_DIR%\books.json" (
     if exist "%TMP_RES%" rmdir /s /q "%TMP_RES%"
     gh auth status >nul 2>&1 && gh repo clone %RESOURCES_REPO% "%TMP_RES%" -- --depth 1 --quiet
-    if not exist "%TMP_RES%" if not "%GITHUB_TOKEN%"=="" git clone --depth 1 --quiet https://x-access-token:%GITHUB_TOKEN%@github.com/%RESOURCES_REPO%.git "%TMP_RES%"
+    if not exist "%TMP_RES%" if not "%GITHUB_TOKEN%"=="" (
+        set "GIT_CONFIG_COUNT=1"
+        set "GIT_CONFIG_KEY_0=http.extraHeader"
+        set "GIT_CONFIG_VALUE_0=Authorization: Bearer %GITHUB_TOKEN%"
+        git clone --depth 1 --quiet "https://github.com/%RESOURCES_REPO%.git" "%TMP_RES%"
+        set "GIT_CONFIG_COUNT="
+        set "GIT_CONFIG_VALUE_0="
+    )
     if exist "%TMP_RES%" (
         if not exist "%RES_DIR%" mkdir "%RES_DIR%"
         for %%F in (books games traps ratings) do if exist "%TMP_RES%\%%F.json" copy /y "%TMP_RES%\%%F.json" "%RES_DIR%\" >nul
