@@ -122,3 +122,14 @@ describe('practiceStore', () => {
     expect(usePracticeStore.getState().status).toBe('finished')
   })
 })
+
+describe('practiceStore promotion (study-tools-round S7)', () => {
+  it('the move to guess keeps its promotion piece from the notation', () => {
+    const fen = '8/4P3/8/8/8/8/k7/7K w - - 0 1'
+    const t = createGameTree(fen)
+    t.nodes.set('p1', { id: 'p1', san: 'e8=Q+', fen: '4Q3/8/8/8/8/8/k7/7K b - - 0 1', from: 'e7', to: 'e8', moveNumber: 1, color: 'white', parentId: null })
+    t.mainline = ['p1']
+    usePracticeStore.getState().start(t, null)
+    expect(usePracticeStore.getState().targetUci).toBe('e7e8q')
+  })
+})

@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState, useCallback, useRef, memo, forwardRef } from 'react'
+import { useMemo, useEffect, useLayoutEffect, useState, useCallback, useRef, memo, forwardRef } from 'react'
 import { formatChapterTitle, prepareChapterHtml } from '../utils/epubContent'
 import { useParams } from 'react-router-dom'
 import { useChapter, useTouchBook } from '../api/libraryApi'
@@ -12,13 +12,14 @@ import { detectHeadings } from '../utils/headingDetect'
 import { clearGameLayout, loadGameLayouts, saveGameLayout } from '../store/gameLayoutStore'
 import { rewriteKey, useGameRewriteStore } from '../store/gameRewriteStore'
 import { useReaderViewStore } from '../store/readerViewStore'
-import { applyGameRewrites, pickBookComments } from '../utils/gameRewrite'
+import { applyGameRewrites, pickBookComments, unwrapGameContainers, wrapGameContainers } from '../utils/gameRewrite'
 import { recommentGame } from '../review/recommentGame'
-import { withBusy } from '../../../shared/layout/busyStore'
-import { BookCommentsToggle } from './ReaderToolbar'
+import { nextPaint, withBusy } from '../../../shared/layout/busyStore'
+import { captureOffset, captureTopAnchor, restoreOffset, restoreTopAnchor, type ScrollAnchor } from '../../../shared/layout/scrollAnchor'
+import { flashElement } from '../../../shared/layout/flash'
+import { BookCommentsToggle, StudyTools } from './ReaderToolbar'
 import { WidthControl } from './WidthControl'
 import { ReaderToc } from './toc/ReaderToc'
-import { FOOTER_HEIGHT } from '../../../shared/layout/StatusFooter'
 import { StudyBoard } from './StudyBoard'
 import { StudyPanelResizer } from './StudyPanelResizer'
 import { VariationChooser } from './VariationChooser'
@@ -75,6 +76,9 @@ const ProseContent = memo(
 function unmountLater(roots: Root[]) {
   if (roots.length) setTimeout(() => roots.forEach((r) => r.unmount()), 0)
 }
+
+/** The blocks of the text that can hold the first visible line (S10). */
+const ANCHOR_BLOCKS = 'p, li, h1, h2, h3, h4, h5, h6, blockquote, pre, table, [data-game-marker], [data-diagram-overlay]'
 
 /** Whether the desktop table-of-contents panel is open (kept per browser). */
 const TOC_OPEN_KEY = 'reader-toc-open'
@@ -133,7 +137,6 @@ interface ResolvedNode {
 export default function BookReader() {
   const { bookId } = useParams<{ bookId: string }>()
   const id = Number(bookId)
-  const statusFooter = useSettingsStore((s) => s.statusFooter)
 
   const [currentChapter, setCurrentChapter] = useState<number>(() => {
     const p = getProgress(id)
@@ -270,19 +273,40 @@ export default function BookReader() {
     setIsolatedHighlight(mark)
   }
   /**
+   * A game about to be rewritten in place (S6): remember where its container is
+   * on screen, so it stays there after the chapter renders again, and flash it.
+   */
+  const pendingRefresh = useRef<{ gameIndex: number; offset: number | null } | null>(null)
+  /** The active move is not followed (scrolled to) right after a rewrite: the reader keeps their place. */
+  const followPausedUntil = useRef(0)
+  const markGameRefresh = (gameIndex: number) => {
+    const main = mainRef.current
+    const box = contentRef.current?.querySelector(`[data-game-container="${gameIndex}"]`)
+    pendingRefresh.current = { gameIndex, offset: main && box ? captureOffset(main, box) : null }
+    followPausedUntil.current = Date.now() + 2500
+  }
+  /**
    * Switch one game's comments to the other form (braces ⇄ paragraphs), in place:
    * the choice is kept per book, chapter and game and applied when the chapter
-   * renders, from the game's first move to its last one (S11).
+   * renders, from the game's first move to its last one (S11). Runs under the
+   * spinner, keeping the game where it was on screen (S6).
    */
   const toggleLayout = (gameIndex: number) => {
     // How the game is written NOW (read from the text, not the recogniser's source).
     const summary = gameSummaries[gameIndex]
     if (!summary) return
-    saveGameLayout(id, currentChapter, gameIndex, summary.braces ? 'paragraphs' : 'braces')
-    // The board reopens the same game on its rewritten text.
-    saveBoardMemory(id, { chapter: currentChapter, gameIndex, nodeId: null, annotations: {} })
-    useStudyBoardStore.getState().clearGame()
-    setLayoutVersion((v) => v + 1)
+    const book = id
+    const chapter = currentChapter
+    markGameRefresh(gameIndex)
+    void withBusy('Switching the comment layout', async () => {
+      await nextPaint()
+      saveGameLayout(book, chapter, gameIndex, summary.braces ? 'paragraphs' : 'braces')
+      // The board reopens the same game on its rewritten text.
+      saveBoardMemory(book, { chapter, gameIndex, nodeId: null, annotations: {} })
+      useStudyBoardStore.getState().clearGame()
+      setLayoutVersion((v) => v + 1)
+      await nextPaint()
+    })
   }
   const toggleLayoutRef = useRef(toggleLayout)
   useEffect(() => { toggleLayoutRef.current = toggleLayout })
@@ -290,7 +314,8 @@ export default function BookReader() {
    * Comment one game again, in place (S3): its comments, variations and images
    * from its first move to its last are replaced by its main line commented
    * with the options selected in the review panel; the book's text is kept and
-   * a second click on the same icon restores it exactly as it was.
+   * a second click on the same icon restores it exactly as it was. Both run
+   * under the spinner, keeping the game where it was on screen (S6).
    */
   const toggleRecomment = (gameIndex: number) => {
     const store = useGameRewriteStore.getState()
@@ -301,25 +326,35 @@ export default function BookReader() {
       useStudyBoardStore.getState().clearGame()
     }
     if (store.rewrites[rewriteKey(book, chapter)]?.[gameIndex]) {
-      const previous = store.clear(book, chapter, gameIndex)
-      if (previous?.layout) saveGameLayout(book, chapter, gameIndex, previous.layout)
-      resetBoard()
-      setLayoutVersion((v) => v + 1)
+      markGameRefresh(gameIndex)
+      void withBusy('Restoring the book\'s text', async () => {
+        await nextPaint()
+        const previous = useGameRewriteStore.getState().clear(book, chapter, gameIndex)
+        if (previous?.layout) saveGameLayout(book, chapter, gameIndex, previous.layout)
+        resetBoard()
+        setLayoutVersion((v) => v + 1)
+        await nextPaint()
+      })
       return
     }
     if (!games[gameIndex]) return
     const chapterGames = games
     const text = plainText
+    markGameRefresh(gameIndex)
     void withBusy('Commenting the game again', async () => {
       const body = await recommentGame(chapterGames, gameIndex, text)
-      if (!body.trim()) return
+      if (!body.trim()) { pendingRefresh.current = null; return }
       // The layout chosen before is given back on restore; the new text shows as the panel writes it.
       const layoutBefore = loadGameLayouts(book, chapter)[gameIndex]
       clearGameLayout(book, chapter, gameIndex)
       useGameRewriteStore.getState().save(book, chapter, gameIndex, { text: body, ...(layoutBefore ? { layout: layoutBefore } : {}) })
       resetBoard()
       setLayoutVersion((v) => v + 1)
-    }).catch((e: unknown) => console.warn('[BookReader] could not comment the game again', e))
+      await nextPaint()
+    }).catch((e: unknown) => {
+      pendingRefresh.current = null
+      console.warn('[BookReader] could not comment the game again', e)
+    })
   }
   const toggleRecommentRef = useRef(toggleRecomment)
   useEffect(() => { toggleRecommentRef.current = toggleRecomment })
@@ -475,6 +510,7 @@ export default function BookReader() {
     if (!container || !shownHtml) return
 
     // Remove the game frames and previous markers (idempotent re-wrap).
+    unwrapGameContainers(container)
     clearGameDecorations(container)
     container.querySelectorAll('span[data-san], span[data-iso-square]').forEach((el) => {
       const parent = el.parentNode
@@ -521,6 +557,8 @@ export default function BookReader() {
         button.title = label
         toggle.after(button)
       })
+      // Each game in its own container, from its start marker to its end marker (S6).
+      wrapGameContainers(container)
       const targets = planMoveTargets(prose.text, games)
       const pieces = piecesByTextNode(prose.map, targets)
 
@@ -584,6 +622,24 @@ export default function BookReader() {
     // Heading-like paragraphs of the EPUB (classes, its stylesheet, inline CSS) as headings (S8).
     detectHeadings(container)
   }, [shownHtml, games, plainText, gameSummaries, currentChapter, id, bookConfig.moveLineIndent.zeroIndent])
+
+  // A game just rewritten in place (S6): back where it was on screen, then flashed.
+  // Again after a paint, once the diagrams around it have taken their size.
+  useEffect(() => {
+    const pending = pendingRefresh.current
+    const main = mainRef.current
+    const find = () => contentRef.current?.querySelector(`[data-game-container="${pending?.gameIndex}"]`) ?? null
+    const box = pending ? find() : null
+    if (!pending || !box) return
+    pendingRefresh.current = null
+    const keep = () => {
+      const el = find()
+      if (main && el && pending.offset !== null) restoreOffset(main, el, pending.offset)
+    }
+    keep()
+    flashElement(box)
+    void nextPaint().then(keep)
+  }, [shownHtml, games])
 
   // Wrap each book diagram <img> with an interactive DiagramImage overlay
   // (original ↔ autogenerated board toggle + eval footer + config menu). The
@@ -657,7 +713,7 @@ export default function BookReader() {
       span.classList.toggle('bg-yellow-300', active)
       // Keep the link colour only while inactive (active is yellow + bold).
       span.classList.toggle('text-blue-700', !active)
-      if (active) followActiveMove(span, autoscroll)
+      if (active && Date.now() > followPausedUntil.current) followActiveMove(span, autoscroll)
     })
   }, [activeSpanKey, shownHtml, games, autoscroll])
 
@@ -683,6 +739,19 @@ export default function BookReader() {
       }
     }
   }, [isLoading, shownHtml, games, scrollKey, id, currentChapter])
+  // Changing the column width keeps the first visible line where it was (S10).
+  const widthAnchor = useRef<ScrollAnchor | null>(null)
+  const captureWidthAnchor = useCallback(() => {
+    const main = mainRef.current
+    const content = contentRef.current
+    widthAnchor.current = main && content ? captureTopAnchor(main, content.querySelectorAll(ANCHOR_BLOCKS)) : null
+  }, [])
+  useLayoutEffect(() => {
+    const anchor = widthAnchor.current
+    const main = mainRef.current
+    widthAnchor.current = null
+    if (anchor && main) restoreTopAnchor(main, anchor)
+  }, [textWidth])
   const onMainScroll = () => {
     const main = mainRef.current
     // Only once this chapter's position was restored: a scroll caused by the
@@ -910,6 +979,9 @@ export default function BookReader() {
     .epub-content .game-recomment-toggle:hover { background-color: #f1f5f9; }
     .epub-content .game-recomment-toggle[aria-pressed="true"] { border-color: #f59e0b; background-color: #fffbeb; }
     .hide-book-comments .epub-content blockquote.human-comment { display: none; }
+    @keyframes flash-update-fade { from { background-color: rgba(251, 191, 36, 0.45); } to { background-color: transparent; } }
+    .epub-content .flash-update { animation: flash-update-fade 2s ease-out; border-radius: 0.25rem; }
+    @media (prefers-reduced-motion: reduce) { .epub-content .flash-update { animation: none; outline: 2px solid #f59e0b; outline-offset: 2px; } }
     .epub-content .game-heading-line { text-indent: 0; margin-bottom: 0.1rem; padding: 0 0.75rem; background: #f8fafc; border-left: 3px solid #2563eb; color: #1e293b; }
     .epub-content .game-heading-first { padding-top: 0.4rem; font-weight: 700; font-size: 1.05em; }
     .epub-content .game-heading-last { padding-bottom: 0.4rem; margin-bottom: ${epub.paragraphSpacing}rem; font-style: italic; }
@@ -940,11 +1012,12 @@ export default function BookReader() {
   )
 
   return (
-    <div className="flex flex-col overflow-hidden bg-slate-50" style={{ height: statusFooter ? `calc(100vh - ${FOOTER_HEIGHT}px)` : '100vh' }}>
+    // Fills the height the app layout gives it (the window minus the banner and the status footer, S4).
+    <div data-testid="book-reader" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50">
       <style dangerouslySetInnerHTML={{ __html: epubCss }} />
 
       {/* ── Sticky nav bar ── */}
-      <nav className="sticky top-0 z-30 flex items-center gap-2 border-b border-slate-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur">
+      <nav className="sticky top-0 z-30 flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur">
 
         <button
           onClick={() => goTo(currentChapter - 1)}
@@ -995,7 +1068,7 @@ export default function BookReader() {
         <div className="mx-1 h-5 w-px bg-slate-200" />
 
         {/* Width of the text column (S9). */}
-        <WidthControl />
+        <WidthControl onBeforeChange={captureWidthAnchor} />
 
         {/* Comment layout of the active game: braces ⇄ paragraphs (S7). */}
         {activeSummary && (
@@ -1024,6 +1097,9 @@ export default function BookReader() {
         >
           <ChessboardIcon />
         </button>
+
+        {/* Study tools: save a line to the trainer, guess the move, the trainer (S7). */}
+        <StudyTools onOpen={() => setShowStudy(true)} />
 
         {/* Book config editor — admin / dev-bypass only */}
         {isAdmin && (

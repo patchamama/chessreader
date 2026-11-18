@@ -3,11 +3,12 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 // Mock the chessboard with a tiny stub exposing an onPieceDrop hook.
+const drop = vi.hoisted(() => ({ from: 'e7', to: 'e5' }))
 vi.mock('react-chessboard', () => ({
   Chessboard: ({ options }: { options: { onPieceDrop?: (a: { sourceSquare: string; targetSquare: string }) => boolean } }) => (
     <button
       data-testid="cb-move"
-      onClick={() => options.onPieceDrop?.({ sourceSquare: 'e7', targetSquare: 'e5' })}
+      onClick={() => options.onPieceDrop?.({ sourceSquare: drop.from, targetSquare: drop.to })}
     >
       board
     </button>
@@ -45,6 +46,21 @@ describe('GuessTheMove', () => {
   beforeEach(() => {
     usePracticeStore.getState().stop()
     usePracticeStore.getState().start(tree(), 'n1') // base = after e4, guess e7e5
+    drop.from = 'e7'
+    drop.to = 'e5'
+  })
+
+  it('says whose move it is to find (study-tools-round S7)', () => {
+    render(<GuessTheMove />)
+    expect(screen.getByText(/find the move for black/i)).toBeInTheDocument()
+  })
+
+  it('a wrong guess reveals the book move in notation, not as squares (S7)', async () => {
+    drop.from = 'd7'
+    drop.to = 'd5'
+    render(<GuessTheMove />)
+    await userEvent.click(screen.getByTestId('cb-move'))
+    await waitFor(() => expect(screen.getByTestId('practice-feedback')).toHaveTextContent('The book move was 1... e5.'))
   })
 
   it('shows the running score', () => {

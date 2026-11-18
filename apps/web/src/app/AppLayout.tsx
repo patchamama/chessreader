@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { APP_VERSION } from '../version'
 import { KeepAliveOutlet } from './keepAlive'
 import { useAuthStore } from '../features/auth/store/authStore'
 import { isLocalhostHost } from '../shared/env/devMode'
 import { useSettingsStore, FONT_FAMILIES } from '../shared/settings/settingsStore'
 import SettingsPanel from '../shared/settings/SettingsPanel'
-import { StatusFooter } from '../shared/layout/StatusFooter'
+import { FOOTER_HEIGHT, StatusFooter } from '../shared/layout/StatusFooter'
 import { BusyOverlay } from '../shared/layout/BusyOverlay'
 import { AnalysisBoardsPanel } from '../features/library/analysis/AnalysisBoardsPanel'
 import { pageWidthClass } from '../shared/layout/pageWidth'
@@ -31,6 +31,9 @@ export default function AppLayout() {
   const showNotesButton = isLocalhostHost() || user?.role === 'admin'
 
   const settings = useSettingsStore()
+  // The reader fits the window: its panes scroll inside, the page itself never
+  // grows past the window, so the status footer always stays at the bottom (S4).
+  const fit = useLocation().pathname.startsWith('/read/')
 
   const handleLogout = () => {
     clear()
@@ -39,15 +42,18 @@ export default function AppLayout() {
 
   return (
     <div
-      className="min-h-screen"
+      data-testid="app-root"
+      data-layout={fit ? 'fit' : 'page'}
+      className={fit ? 'flex flex-col overflow-hidden' : 'min-h-screen'}
       style={{
+        ...(fit ? { height: '100dvh', paddingBottom: settings.statusFooter ? FOOTER_HEIGHT : 0 } : {}),
         backgroundColor: settings.bgColor,
         color: settings.textColor,
         fontFamily: FONT_FAMILIES[settings.fontFamily].css,
         fontSize: `${settings.fontSize}px`,
       }}
     >
-      <header data-testid="banner" className="bg-slate-900 text-white shadow-md">
+      <header data-testid="banner" className="shrink-0 bg-slate-900 text-white shadow-md">
         <div
           className={`mx-auto flex ${pageWidthClass(settings.pageWidth)} items-center gap-6 py-3`}
           style={{ paddingLeft: `${settings.marginH}rem`, paddingRight: `${settings.marginH}rem` }}
@@ -136,7 +142,9 @@ export default function AppLayout() {
       </header>
 
       <main
-        className={`mx-auto ${pageWidthClass(settings.pageWidth)} py-8 ${settings.statusFooter ? 'pb-12' : ''}`}
+        className={fit
+          ? `mx-auto flex min-h-0 w-full flex-1 flex-col ${pageWidthClass(settings.pageWidth)}`
+          : `mx-auto ${pageWidthClass(settings.pageWidth)} py-8 ${settings.statusFooter ? 'pb-12' : ''}`}
         style={{ paddingLeft: `${settings.marginH}rem`, paddingRight: `${settings.marginH}rem` }}
       >
         <KeepAliveOutlet />

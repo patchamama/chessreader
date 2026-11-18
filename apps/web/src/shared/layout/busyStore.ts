@@ -19,3 +19,11 @@ export async function withBusy<T>(label: string, task: () => Promise<T>): Promis
     useBusyStore.setState((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }))
   }
 }
+
+/** Resolve after the browser had a chance to paint (so a spinner shows before heavy synchronous work). */
+export function nextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(resolve, 0))
+    else setTimeout(resolve, 16)
+  })
+}

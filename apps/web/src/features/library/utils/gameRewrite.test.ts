@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { recognizeGames } from '@chess-ebook/chess-shared'
-import { applyGameRewrites, gameLineRange, pickBookComments } from './gameRewrite'
+import { applyGameRewrites, gameLineRange, pickBookComments, unwrapGameContainers, wrapGameContainers } from './gameRewrite'
 import { htmlToProseText } from './proseText'
 
 const HTML = [
@@ -77,5 +77,29 @@ describe('pickBookComments (S4)', () => {
     expect(q.querySelector('footer')!.textContent).toContain('— B')
     expect(q.querySelector('a.comment-source')!.getAttribute('data-comment-game')).toBe('g')
     expect(q.getAttribute('data-comment-alternatives')).not.toBeNull()
+  })
+})
+
+describe('game containers (study-tools-round S6)', () => {
+  const marker = (kind: string, index?: number) =>
+    `<div data-game-marker="${kind}">${index === undefined ? '' : `<button data-layout-toggle="${index}"></button>`}</div>`
+
+  it('wraps each game from its start to its end marker, a game running over the next one included, and unwraps them', () => {
+    const root = document.createElement('div')
+    root.innerHTML = [
+      '<p>intro</p>',
+      marker('start', 0), '<p>a</p>', marker('start', 1), '<p>b</p>', marker('end'), '<p>c</p>', marker('end'),
+      marker('start', 2), '<p>d</p>', marker('end'), '<p>outro</p>',
+    ].join('')
+    const before = root.innerHTML
+    wrapGameContainers(root)
+    const box = (i: number) => root.querySelector(`[data-game-container="${i}"]`) as HTMLElement
+    expect(box(0).textContent).toBe('abc')
+    expect(box(0).contains(box(1))).toBe(true)
+    expect(box(1).textContent).toBe('b')
+    expect(box(2).textContent).toBe('d')
+    expect(root.firstElementChild?.textContent).toBe('intro')
+    unwrapGameContainers(root)
+    expect(root.innerHTML).toBe(before)
   })
 })

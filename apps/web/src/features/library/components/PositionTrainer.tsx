@@ -24,6 +24,7 @@ function isDue(line: TrainerLine): boolean {
 export function PositionTrainer() {
   const [lines, setLines] = useState<TrainerLine[]>([])
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
   const [reviewingId, setReviewingId] = useState<number | null>(null)
 
   const practiceActive = usePracticeStore((s) => s.active)
@@ -33,8 +34,11 @@ export function PositionTrainer() {
 
   const refresh = useCallback(async () => {
     setLoading(true)
+    setFailed(false)
     try {
       setLines(await listTrainerLines())
+    } catch {
+      setFailed(true)
     } finally {
       setLoading(false)
     }
@@ -44,6 +48,11 @@ export function PositionTrainer() {
     refresh()
   }, [refresh])
 
+  // The review ends when the practice is left (Exit): back to the list.
+  useEffect(() => {
+    if (!practiceActive) setReviewingId(null)
+  }, [practiceActive])
+
   const startReview = (line: TrainerLine) => {
     const tree = buildTreeFromMoves(line.startFen, line.movesUci)
     setReviewingId(line.id)
@@ -52,7 +61,11 @@ export function PositionTrainer() {
 
   const grade = async (g: ReviewGrade) => {
     if (reviewingId === null) return
-    await reviewTrainerLine(reviewingId, g)
+    try {
+      await reviewTrainerLine(reviewingId, g)
+    } catch {
+      setFailed(true)
+    }
     setReviewingId(null)
     stopPractice()
     refresh()
@@ -102,11 +115,19 @@ export function PositionTrainer() {
         )}
       </div>
 
+      <p className="text-xs text-slate-500">
+        Lines you saved, to replay from memory. Review the due ones and grade how well you recalled them.
+      </p>
       {loading ? (
         <p className="text-xs text-slate-400">Loading…</p>
+      ) : failed ? (
+        <p role="alert" className="text-xs text-red-600">
+          Could not load your trainer lines. Sign in and try again.{' '}
+          <button type="button" onClick={refresh} className="underline">Retry</button>
+        </p>
       ) : lines.length === 0 ? (
         <p className="text-xs text-slate-400">
-          No lines yet. Right-click a move and choose “Add to Position Trainer”.
+          No lines yet. Open a game, go to a move and use “Save the line from this move to the trainer” in the top bar.
         </p>
       ) : (
         <ul className="flex flex-col gap-1">

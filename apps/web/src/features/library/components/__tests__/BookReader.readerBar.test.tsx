@@ -119,7 +119,8 @@ describe('comment one game again in place (S3)', () => {
     await waitFor(() => expect(content(container).textContent).toContain('A wild queen sortie.'))
     expect(content(container).textContent).not.toContain('A new remark.')
     expect(content(container).textContent).toContain('2... g6 3. Qf3')
-    expect(content(container).querySelector('img')).not.toBeNull()
+    // The restore runs under the spinner too (study-tools-round S6): the diagram mounts right after.
+    await waitFor(() => expect(content(container).querySelector('img')).not.toBeNull())
     expect(recommentGame).toHaveBeenCalledTimes(1)
   })
 })

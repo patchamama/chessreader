@@ -15,12 +15,15 @@ const PRESETS: { label: string; short: string; width: number | null }[] = [
 /**
  * The width of the text column (S9), mostly for tablets and desktops: a small
  * popover with a slider and presets, applied live and remembered on this device.
+ * `onBeforeChange` runs just before the width changes, so the reader can note
+ * the first visible line and keep it in place (study-tools-round S10).
  */
-export function WidthControl() {
+export function WidthControl({ onBeforeChange }: { onBeforeChange?: () => void } = {}) {
   const width = useReaderViewStore((s) => s.textWidth)
   const setTextWidth = useReaderViewStore((s) => s.setTextWidth)
   // The page container caps the column: a wide or full column widens the page too.
   const setWidth = (w: number | null) => {
+    onBeforeChange?.()
     setTextWidth(w)
     if (w === null || w > WIDE_FROM) useSettingsStore.getState().set({ pageWidth: 'full' })
   }
@@ -54,7 +57,7 @@ export function WidthControl() {
         </svg>
       </button>
       {open && (
-        <div role="dialog" aria-label="Reading width" className="absolute right-0 top-11 z-30 w-64 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700 shadow-lg">
+        <div role="dialog" aria-label="Reading width" className="absolute left-0 top-11 z-30 w-64 max-w-[calc(100vw-2rem)] sm:left-auto sm:right-0 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700 shadow-lg">
           <label className="flex items-center justify-between font-medium">
             <span>Text column</span>
             <span className="tabular-nums text-slate-500">{width === null ? 'full' : `${width} px`}</span>

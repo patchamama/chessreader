@@ -19,7 +19,8 @@ beforeEach(() => {
 describe('StudyBoard', () => {
   it('renders the study board with navigation and toolbar', () => {
     render(<StudyBoard />)
-    expect(screen.getByText('Study Board')).toBeInTheDocument()
+    // No "Study Board" label any more: the board takes that space (study-tools-round S7).
+    expect(screen.queryByText(/^study board$/i)).toBeNull()
     expect(screen.getByTitle('Next move')).toBeInTheDocument()
     expect(screen.getByTitle('Draw arrows')).toBeInTheDocument()
     expect(screen.getByTitle('Pen — freehand draw')).toBeInTheDocument()

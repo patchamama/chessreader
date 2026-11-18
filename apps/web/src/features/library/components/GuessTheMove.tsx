@@ -18,6 +18,25 @@ function moveToUci(fen: string, from: string, to: string): string | null {
   }
 }
 
+/** The book move in the reader's notation ("1... e5"), from its position and UCI. */
+function bookMoveText(fen: string, uci: string): string {
+  try {
+    const chess = new Chess(fen)
+    const move = chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] ?? 'q' })
+    const [, turn, , , , number] = fen.split(' ')
+    return `${number ?? 1}${turn === 'b' ? '...' : '.'} ${move.san}`
+  } catch {
+    return uci
+  }
+}
+
+/** A book move written without its promotion piece accepts any promotion on that square. */
+function sameMove(userUci: string, bookUci: string): boolean {
+  const user = normalizeUci(userUci)
+  const book = normalizeUci(bookUci)
+  return user === book || (book.length === 4 && user.slice(0, 4) === book)
+}
+
 export function GuessTheMove() {
   const active = usePracticeStore((s) => s.active)
   const baseFen = usePracticeStore((s) => s.baseFen)
@@ -45,9 +64,11 @@ export function GuessTheMove() {
     const engineOk =
       engineBest !== undefined && normalizeUci(userUci) === normalizeUci(engineBest)
 
-    const outcome: GuessOutcome = engineOk
-      ? checkGuess({ userUci, bookUci: targetUci, bestScoreCp: 0, userScoreCp: 0 })
-      : checkGuess({ userUci, bookUci: targetUci })
+    const outcome: GuessOutcome = sameMove(userUci, targetUci)
+      ? 'exact'
+      : engineOk
+        ? checkGuess({ userUci, bookUci: targetUci, bestScoreCp: 0, userScoreCp: 0 })
+        : checkGuess({ userUci, bookUci: targetUci })
 
     setFeedback(outcome)
     submitResult(outcome)
@@ -67,6 +88,7 @@ export function GuessTheMove() {
   )
 
   if (!active) return null
+  const side = baseFen.split(' ')[1] === 'b' ? 'Black' : 'White'
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
@@ -99,6 +121,9 @@ export function GuessTheMove() {
         </div>
       ) : (
         <>
+          {status === 'guessing' && (
+            <p className="text-xs font-medium text-slate-700">Find the move for {side}: drag a piece on the board.</p>
+          )}
           <div className="max-w-[360px]">
             <Chessboard options={boardOptions} />
           </div>
@@ -112,7 +137,7 @@ export function GuessTheMove() {
             >
               {feedback === 'exact' && 'Correct!'}
               {feedback === 'engine-ok' && "Correct — engine approves (not the book move)."}
-              {feedback === 'wrong' && targetUci && `Not quite. The move was ${targetUci}.`}
+              {feedback === 'wrong' && targetUci && `Not quite. The book move was ${bookMoveText(baseFen, targetUci)}.`}
             </div>
           )}
 

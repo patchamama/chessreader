@@ -2,6 +2,11 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.112.0 — 2026-11-18
+
+- feat: the reader fills the window with the status bar always at the bottom; each game sits in its own container that keeps its place on screen and flashes after a layout switch or a new commentary (with a spinner); changing the reading width keeps the first visible line; the study tools (save line to the trainer, guess the moves, position trainer) are icons in the top bar and the "Study board" label is gone
+- fix: the position trainer's review could not be graded; Guess the Move keeps promotions and shows the book move in notation
+
 ## v0.111.1 — 2026-11-18
 
 - fix: list labels such as "a1)", "b2)", "c1)" at the start of a line are not read as moves; a FEN is never renumbered backwards

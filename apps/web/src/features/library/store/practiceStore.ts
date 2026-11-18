@@ -49,7 +49,8 @@ function baseFenFor(game: GameTree, nodeId: string | null): string {
 
 /** UCI string for a node's move (from+to, plus promotion suffix if present in SAN). */
 function uciOf(node: GameNode): string {
-  return `${node.from}${node.to}`
+  const promotion = /=([QRBN])/i.exec(node.san)?.[1]?.toLowerCase() ?? ''
+  return `${node.from}${node.to}${promotion}`
 }
 
 const INITIAL = {

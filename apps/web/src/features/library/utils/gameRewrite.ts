@@ -148,3 +148,40 @@ export function pickBookComments(html: string, pick: number, random: () => numbe
   })
   return changed ? serialise(doc) : html
 }
+
+/**
+ * Put each framed game (see decorateGames), from its start marker to its end
+ * marker, in its own container `[data-game-container="<index>"]` (study-tools-round
+ * S6): the element the reader keeps in place and flashes when the game is
+ * rewritten (layout switch, comment again, restore). Later games are wrapped
+ * first, so a game whose text runs over the next ones holds their containers.
+ * A game whose markers do not share a parent is left unwrapped.
+ */
+export function wrapGameContainers(root: Element): void {
+  const starts = [...root.querySelectorAll('[data-game-marker="start"]')].reverse()
+  starts.forEach((start) => {
+    const index = start.querySelector('[data-layout-toggle]')?.getAttribute('data-layout-toggle')
+    if (index == null) return
+    let end: Element | null = null
+    for (let el = start.nextElementSibling; el; el = el.nextElementSibling) {
+      const kind = el.getAttribute('data-game-marker')
+      if (kind === 'start') break
+      if (kind === 'end') { end = el; break }
+    }
+    if (!end) return
+    const box = root.ownerDocument.createElement('div')
+    box.setAttribute('data-game-container', index)
+    start.before(box)
+    const nodes: Node[] = []
+    for (let n: Node | null = start; n; n = n.nextSibling) {
+      nodes.push(n)
+      if (n === end) break
+    }
+    box.append(...nodes)
+  })
+}
+
+/** Remove the containers left by wrapGameContainers (idempotent re-decoration). */
+export function unwrapGameContainers(root: Element): void {
+  root.querySelectorAll('[data-game-container]').forEach((box) => box.replaceWith(...box.childNodes))
+}
