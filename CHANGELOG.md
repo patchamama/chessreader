@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.99.0 — 2026-11-18
+
+- feat: database — sortable players ranking, statistics items link to their games, optional bar or pie chart per table, game lists show moves, result and how it ended, Elo, place and event; covers from the EPUB metadata shown whole; the game database reads the book headings (place, event, date, termination)
+
 ## v0.98.0 — 2026-11-18
 
 - feat: the Errors page is filled from the start — precomputed errors of the resources books (books/errors.json, built by apps/web/scripts/build-errors.ts), remembered analyses of library books and background analysis of the missing ones

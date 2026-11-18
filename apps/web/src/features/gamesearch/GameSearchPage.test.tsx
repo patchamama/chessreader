@@ -212,3 +212,25 @@ describe('my games by year and month (S12)', () => {
     expect(screen.getByText(/Set your Lichess token in Settings/)).toBeTruthy()
   })
 })
+
+describe('game lists show moves and how the game ended (S3)', () => {
+  it('a chess.com game: moves, result, termination, Elo and event', async () => {
+    s.chessComArchives.mockResolvedValue([{ url: 'u/2024/02', label: '2024/02' }])
+    s.chessComGames.mockResolvedValue([{ url: 'g', white: 'x', black: 'y', pgn: '[Event "Live Chess"]\n[Result "0-1"]\n[WhiteElo "1510"]\n[BlackElo "1602"]\n[Termination "y won on time"]\n\n1. d4 d5 2. c4 e6 0-1' }])
+    renderPage()
+    fireEvent.click(screen.getByRole('tab', { name: 'Chess.com player' }))
+    fireEvent.change(screen.getByLabelText('Chess.com username'), { target: { value: 'x' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Find games' }))
+    const row = (await screen.findByText('x — y')).closest('li')!
+    expect(row).toHaveTextContent('2 moves')
+    expect(row).toHaveTextContent('0-1 (time)')
+    expect(row).toHaveTextContent('Elo 1510–1602')
+    expect(row).toHaveTextContent('Live Chess')
+  })
+  it('a recommended mate says it ends in checkmate', () => {
+    renderPage()
+    const row = screen.getByText("Fool's Mate").closest('li')!
+    expect(row).toHaveTextContent('2 moves')
+    expect(row).toHaveTextContent('0-1 (checkmate)')
+  })
+})

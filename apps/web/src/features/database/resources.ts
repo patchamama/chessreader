@@ -8,8 +8,15 @@ export interface DbBook {
   id: string; title: string; author: string | null; lang: string; cover: string | null; thumb: string | null
   games: number; topPlayers: { name: string; games: number }[]; period: [number, number] | null
 }
-export interface DbGame { id: string; book: string; white: string | null; black: string | null; year: number | null; opening: string; result: string; moves: number; first: string }
-export interface DbGameFull extends Omit<DbGame, 'book' | 'first'> { event: string | null; first: string; pgn: string }
+/** Read from the heading and the end of each game in the book; absent in databases built before them. */
+export interface DbGameDetails {
+  place?: string | null; event?: string | null; date?: string | null
+  whiteElo?: number | null; blackElo?: number | null
+  /** How it ended: resignation, checkmate, draw, perpetual check, time… */
+  termination?: string | null
+}
+export interface DbGame extends DbGameDetails { id: string; book: string; white: string | null; black: string | null; year: number | null; opening: string; result: string; moves: number; first: string }
+export interface DbGameFull extends Omit<DbGame, 'book' | 'first'> { first: string; pgn: string }
 export interface PlayerRating {
   player: string; names: string[]; games: number; accuracy: number; engineAgreement: number; maiaAgreement: number | null
   nearPerfect: { game: string; accuracy: number; color: string; white: string; black: string; year: number | null; book: string }[]
@@ -31,7 +38,7 @@ export async function resource<T>(name: string): Promise<T> {
 export const loadBooks = () => resource<DbBook[]>('books.json')
 export async function loadGames(): Promise<DbGame[]> {
   const data = await resource<{ fields: string[]; games: unknown[][] }>('games.json')
-  return data.games.map((g) => Object.fromEntries(data.fields.map((f, i) => [f === 'book' ? 'book' : f, g[i]])) as unknown as DbGame)
+  return data.games.map((g) => Object.fromEntries(data.fields.map((f, i) => [f, g[i]])) as unknown as DbGame)
 }
 export const loadBookGames = (bookId: string) => resource<DbGameFull[]>(`games/${bookId}.json`)
 export const loadRatings = () => resource<{ engine: string; maia: string | null; players: PlayerRating[] }>('ratings.json')
@@ -40,6 +47,19 @@ export const loadRatings = () => resource<{ engine: string; maia: string | null;
 export const surname = (name: string) => name.trim().split(/\s+/).pop() ?? name
 
 // ── statistics ──────────────────────────────────────────────────────────────
+
+/** An item of the statistics, as a filter of the games it counts. */
+export type StatFilter = { kind: 'player' | 'decade' | 'first' | 'opening'; value: string; label: string }
+
+/** The games a statistics item counts (the same rules as the statistics below). */
+export function matchesStat(g: DbGame, f: StatFilter): boolean {
+  switch (f.kind) {
+    case 'player': return [g.white, g.black].some((p) => p && surname(p) === f.value)
+    case 'decade': return !!g.year && `${Math.floor(g.year / 10) * 10}s` === f.value
+    case 'first': return g.first === f.value
+    case 'opening': return (g.opening || 'Unknown') === f.value
+  }
+}
 
 /** Games per decade, oldest first. */
 export function gamesPerDecade(games: DbGame[]): { label: string; value: number }[] {

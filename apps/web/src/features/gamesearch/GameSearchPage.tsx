@@ -29,6 +29,7 @@ import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { PuzzlePanel } from './PuzzlePanel'
 import { MyGamesBrowser } from './MyGamesBrowser'
 import { usePageWidth } from '../../shared/layout/pageWidth'
+import { gameFacts, pgnFacts } from '../database/gameFacts'
 
 type Tab = 'recommended' | 'studies' | 'masters' | 'broadcasts' | 'chesscom' | 'mine' | 'puzzles'
 
@@ -214,7 +215,7 @@ export default function GameSearchPage() {
                     <span>
                       <span className="font-medium text-slate-800">{g.title}</span>{' '}
                       <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-600">{g.level}</span>{' '}
-                      <span className="text-xs text-slate-500">{Math.ceil(g.plies / 2)} moves</span>
+                      <span className="text-xs text-slate-500">{gameFacts({ ...pgnFacts(g.pgn), moves: Math.ceil(g.plies / 2), place: null, event: null }).join(' · ')}</span>
                       <span className="block text-xs text-slate-500">{g.lesson}</span>
                     </span>
                     <button className={openBtn} aria-label={`Open ${g.title}`} onClick={() => read(g.title, g.pgn)}>Open</button>
@@ -476,7 +477,10 @@ export default function GameSearchPage() {
                     const title = `${g.white} — ${g.black}`
                     return (
                       <li key={g.url || i} className={row}>
-                        <span>{title}</span>
+                        <span>
+                          <span>{title}</span>{' '}
+                          <span className="text-xs text-slate-500">{gameFacts(pgnFacts(g.pgn)).join(' · ')}</span>
+                        </span>
                         <button className={openBtn} aria-label={`Open ${title}`} onClick={() => read(title, g.pgn)}>Open</button>
                       </li>
                     )

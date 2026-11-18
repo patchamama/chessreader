@@ -6,9 +6,10 @@ import { saveProgress } from '../library/store/readingStore'
 import { pgnToChapters } from '../gamesearch/pgnChapters'
 import { usePageWidth } from '../../shared/layout/pageWidth'
 import {
-  firstMoves, gamesPerDecade, hasResources, loadBookGames, loadBooks, loadGames, loadRatings, openings, surname, topPlayers, wikipediaSummary,
-  type DbBook, type DbGame, type DbGameFull, type PlayerRating,
+  firstMoves, gamesPerDecade, hasResources, loadBookGames, loadBooks, loadGames, loadRatings, matchesStat, openings, surname, topPlayers, wikipediaSummary,
+  type DbBook, type DbGame, type DbGameFull, type PlayerRating, type StatFilter,
 } from './resources'
+import { gameFacts } from './gameFacts'
 
 type Tab = 'books' | 'search' | 'openings' | 'players' | 'stats'
 
@@ -31,11 +32,103 @@ export function BarChart({ data, label }: { data: { label: string; value: number
   )
 }
 
+const PIE_COLORS = ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#65a30d', '#ea580c', '#475569']
+
+/** A pie ("slices") chart, drawn by hand like BarChart; past nine slices the rest are one "Other" slice. */
+export function PieChart({ data, label }: { data: { label: string; value: number }[]; label: string }) {
+  const shown = data.length > 10 ? [...data.slice(0, 9), { label: 'Other', value: data.slice(9).reduce((n, d) => n + d.value, 0) }] : data
+  const total = shown.reduce((n, d) => n + d.value, 0) || 1
+  const point = (a: number) => `${(60 + 55 * Math.sin(a)).toFixed(2)} ${(60 - 55 * Math.cos(a)).toFixed(2)}`
+  let angle = 0
+  return (
+    <figure className="text-xs">
+      <figcaption className="mb-1 font-semibold text-slate-700">{label}</figcaption>
+      <svg role="img" aria-label={`${label} (pie chart)`} width="100%" height={Math.max(130, shown.length * 16 + 10)} viewBox={`0 0 400 ${Math.max(130, shown.length * 16 + 10)}`}>
+        {shown.map((d, i) => {
+          const from = angle
+          angle += (2 * Math.PI * d.value) / total
+          const fill = PIE_COLORS[i % PIE_COLORS.length]
+          return d.value >= total
+            ? <circle key={d.label} cx="60" cy="60" r="55" fill={fill} />
+            : <path key={d.label} d={`M60 60 L${point(from)} A55 55 0 ${angle - from > Math.PI ? 1 : 0} 1 ${point(angle)} Z`} fill={fill} stroke="#fff" strokeWidth="1" />
+        })}
+        {shown.map((d, i) => (
+          <g key={`l-${d.label}`} transform={`translate(135 ${i * 16 + 4})`}>
+            <rect width="10" height="10" fill={PIE_COLORS[i % PIE_COLORS.length]} />
+            <text x="15" y="9" fontSize="11" fill="#334155">{d.label} · {d.value} ({Math.round((100 * d.value) / total)}%)</text>
+          </g>
+        ))}
+      </svg>
+    </figure>
+  )
+}
+
+type ChartKind = 'none' | 'bar' | 'pie'
+const chartKey = (id: string) => `chessreader.database.chart.${id}`
+function readChart(id: string): ChartKind {
+  try {
+    const v = localStorage.getItem(chartKey(id))
+    return v === 'bar' || v === 'pie' ? v : 'none'
+  } catch { return 'none' }
+}
+
+interface StatRow { key: string; label: string; filter: StatFilter | null; value: number; cells: (string | number)[]; note?: string }
+
+/**
+ * A statistics table whose items link to their games, with an optional bar or
+ * pie chart of the same rows above it (off by default, remembered per table).
+ */
+function StatTable({ id, title, head, rows, onPick }: { id: string; title: string; head: string[]; rows: StatRow[]; onPick: (f: StatFilter) => void }) {
+  const [chart, setChart] = useState<ChartKind>(() => readChart(id))
+  const pick = (v: ChartKind) => {
+    setChart(v)
+    try { localStorage.setItem(chartKey(id), v) } catch { /* not remembered */ }
+  }
+  const data = rows.map((r) => ({ label: r.label.slice(0, 18), value: r.value, ...(r.note ? { note: r.note } : {}) }))
+  return (
+    <section className="min-w-0">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
+        <select aria-label={`Chart for ${title}`} className="rounded border border-slate-300 px-1 text-xs" value={chart} onChange={(e) => pick(e.target.value as ChartKind)}>
+          <option value="none">No chart</option>
+          <option value="bar">Bar chart</option>
+          <option value="pie">Pie chart</option>
+        </select>
+      </div>
+      {chart === 'bar' && <BarChart label={title} data={data} />}
+      {chart === 'pie' && <PieChart label={title} data={data} />}
+      <table aria-label={title} className="mt-1 w-full text-xs">
+        <thead><tr className="text-left text-slate-500">{head.map((h) => <th key={h}>{h}</th>)}</tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.key} className="border-t border-slate-100">
+              <td>{r.filter
+                ? <button className="text-left text-blue-700 underline" aria-label={statLinkName(r.filter)} onClick={() => onPick(r.filter!)}>{r.label}</button>
+                : r.label}</td>
+              {r.cells.map((c, i) => <td key={i}>{c}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  )
+}
+
+const statLinkName = (f: StatFilter) =>
+  f.kind === 'player' ? `Games of ${f.value}` : f.kind === 'decade' ? `Games of the ${f.value}` : f.kind === 'first' ? `Games of the first move ${f.value}` : `Games of the opening ${f.value}`
+const STAT_KIND: Record<StatFilter['kind'], string> = { player: 'Player', decade: 'Decade', first: 'First move', opening: 'Opening' }
+
+type SortKey = 'rank' | 'player' | 'games' | 'accuracy' | 'engineAgreement' | 'maiaAgreement' | 'nearPerfect'
+const SORT_COLUMNS: [SortKey, string][] = [['rank', '#'], ['player', 'Player'], ['games', 'Games'], ['accuracy', 'Accuracy'], ['engineAgreement', '= Stockfish'], ['maiaAgreement', '= Maia'], ['nearPerfect', 'Near-perfect']]
+const sortValue = (r: PlayerRating & { rank: number }, k: SortKey): string | number | null =>
+  k === 'nearPerfect' ? r.nearPerfect.length : k === 'player' ? r.player.toLowerCase() : r[k]
+
 /**
  * The game database of the books (private resources): books as cards with
  * cover, games, most frequent players and period; search by player, opening
  * and year; openings; players ranked by the engines with their near-perfect
- * games and a Wikipedia summary; statistics with charts and tables.
+ * games and a Wikipedia summary; statistics as tables whose items link to
+ * their games, each with an optional bar or pie chart.
  */
 export default function DatabasePage() {
   const lang = useSettingsStore((s) => s.language)
@@ -52,6 +145,8 @@ export default function DatabasePage() {
   const [player, setPlayer] = useState<PlayerRating | null>(null)
   const [wiki, setWiki] = useState<{ extract: string; url: string; thumbnail?: string } | null>(null)
   const [top, setTop] = useState(5)
+  const [statFilter, setStatFilter] = useState<StatFilter | null>(null)
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'rank', dir: 'asc' })
   const available = hasResources()
 
   useEffect(() => {
@@ -66,7 +161,9 @@ export default function DatabasePage() {
     const full = list.find((x) => x.id === g.id)
     if (!full) return
     const title = `${full.white ?? '?'} – ${full.black ?? '?'}${full.year ? ` (${full.year})` : ''}`
-    const pgn = `[White "${full.white ?? '?'}"]\n[Black "${full.black ?? '?'}"]\n[Result "${full.result}"]\n\n${full.pgn}`
+    const tags: [string, string | number | null | undefined][] = [['Event', full.event], ['Site', full.place], ['Date', full.date?.replace(/-/g, '.')], ['White', full.white ?? '?'], ['Black', full.black ?? '?'],
+      ['Result', full.result], ['WhiteElo', full.whiteElo], ['BlackElo', full.blackElo], ['Termination', full.termination]]
+    const pgn = `${tags.filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => `[${k} "${String(v).replace(/"/g, "'")}"]`).join('\n')}\n\n${full.pgn}`
     const { chapters } = pgnToChapters(pgn)
     if (!chapters.length) return
     saveProgress(EXTERNAL_BOOK_ID, 1)
@@ -75,9 +172,32 @@ export default function DatabasePage() {
   }
 
   const found = useMemo(() => games.filter((g) =>
-    (!q.player || [g.white, g.black].some((p) => p?.toLowerCase().includes(q.player.toLowerCase())))
+    (!statFilter || matchesStat(g, statFilter))
+    && (!q.player || [g.white, g.black].some((p) => p?.toLowerCase().includes(q.player.toLowerCase())))
     && (!q.opening || g.opening.toLowerCase().includes(q.opening.toLowerCase()))
-    && (!q.from || (g.year ?? 0) >= Number(q.from)) && (!q.to || (g.year ?? 9999) <= Number(q.to))), [games, q])
+    && (!q.from || (g.year ?? 0) >= Number(q.from)) && (!q.to || (g.year ?? 9999) <= Number(q.to))), [games, q, statFilter])
+
+  const ranked = useMemo(() => {
+    const list = (ratings ?? []).filter((r) => r.games >= 5).map((r, i) => ({ ...r, rank: i + 1 }))
+    const sign = sort.dir === 'asc' ? 1 : -1
+    // Unknown values (no Maia agreement) always go last.
+    return list.sort((a, b) => {
+      const x = sortValue(a, sort.key), y = sortValue(b, sort.key)
+      if (x === null || y === null) return x === y ? a.rank - b.rank : x === null ? 1 : -1
+      return (x < y ? -1 : x > y ? 1 : a.rank - b.rank) * sign
+    })
+  }, [ratings, sort])
+  const sortBy = (key: SortKey) => setSort((s) => (s.key === key
+    ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' }
+    : { key, dir: key === 'rank' || key === 'player' ? 'asc' : 'desc' }))
+
+  /** A statistics item: its games, in the search results. */
+  const showStat = (f: StatFilter) => {
+    setStatFilter(f)
+    setQ({ player: '', opening: '', from: '', to: '' })
+    setTab('search')
+  }
+  const byId = useMemo(() => new Map(games.map((g) => [g.id, g])), [games])
 
   useEffect(() => {
     setWiki(null)
@@ -87,7 +207,7 @@ export default function DatabasePage() {
   const row = 'flex items-center justify-between gap-2 rounded border border-slate-100 bg-white px-2 py-1 text-xs'
   const gameRow = (g: DbGame | DbGameFull, bookId?: string) => (
     <li key={g.id} className={row}>
-      <span><strong>{g.white ?? '?'} – {g.black ?? '?'}</strong> · {g.year ?? '—'} · {g.opening || '—'} · {g.result} · {g.moves} moves</span>
+      <span><strong>{g.white ?? '?'} – {g.black ?? '?'}</strong> · {g.year ?? '—'} · {g.opening || '—'}{gameFacts(g).map((f) => ` · ${f}`).join('')}</span>
       <button className="rounded border border-slate-300 px-2 py-0.5" aria-label={`Open ${g.white} – ${g.black}`} onClick={() => void open(g, bookId)}>Open</button>
     </li>
   )
@@ -117,7 +237,7 @@ export default function DatabasePage() {
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Books">
             {(books ?? []).map((b) => (
               <li key={b.id} className="flex gap-3 rounded-lg border border-slate-200 bg-white p-3">
-                {b.thumb ? <img src={b.thumb} alt="" className="h-32 w-24 shrink-0 rounded object-cover shadow" /> : <div className="h-32 w-24 shrink-0 rounded bg-slate-200" />}
+                {b.thumb ? <img src={b.thumb} alt="" className="h-32 w-24 shrink-0 rounded bg-slate-100 object-contain shadow" /> : <div className="h-32 w-24 shrink-0 rounded bg-slate-200" />}
                 <div className="min-w-0 text-sm">
                   <p className="font-semibold leading-tight">{b.title}</p>
                   <p className="text-xs text-slate-600">{b.author}</p>
@@ -146,6 +266,12 @@ export default function DatabasePage() {
               <input aria-label="To year" placeholder="To" className="w-20 rounded border border-slate-300 px-2 py-1" value={q.to} onChange={(e) => setQ({ ...q, to: e.target.value })} />
               <span className="self-center text-xs text-slate-500">{found.length} games</span>
             </div>
+            {statFilter && (
+              <p className="mt-2 flex items-center gap-2 text-xs">
+                <span className="rounded bg-blue-50 px-2 py-0.5 text-blue-800">{STAT_KIND[statFilter.kind]}: {statFilter.label}</span>
+                <button className="text-blue-700 underline" onClick={() => setStatFilter(null)}>Clear filter</button>
+              </p>
+            )}
             <ul className="mt-2 flex flex-col gap-1">{found.slice(0, 200).map((g) => gameRow(g))}</ul>
           </div>
         )}
@@ -166,11 +292,21 @@ export default function DatabasePage() {
         {tab === 'players' && (
           <div className="flex flex-col gap-3 md:flex-row">
             <table className="w-full max-w-xl text-xs">
-              <thead><tr className="text-left text-slate-500"><th>#</th><th>Player</th><th>Games</th><th>Accuracy</th><th>= Stockfish</th><th>= Maia</th><th>Near-perfect</th></tr></thead>
+              <thead>
+                <tr className="text-left text-slate-500">
+                  {SORT_COLUMNS.map(([key, label]) => (
+                    <th key={key} aria-sort={sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                      <button className="hover:text-slate-800" onClick={() => sortBy(key)}>
+                        {label}<span aria-hidden="true" className="ml-0.5">{sort.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : ''}</span>
+                      </button>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
               <tbody>
-                {(ratings ?? []).filter((r) => r.games >= 5).map((r, i) => (
+                {ranked.map((r) => (
                   <tr key={r.player} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50" onClick={() => setPlayer(r)}>
-                    <td>{i + 1}</td><td className="font-semibold">{r.player}</td><td>{r.games}</td><td>{r.accuracy}%</td><td>{r.engineAgreement}%</td><td>{r.maiaAgreement ?? '—'}{r.maiaAgreement !== null ? '%' : ''}</td><td>{r.nearPerfect.length}</td>
+                    <td>{r.rank}</td><td className="font-semibold">{r.player}</td><td>{r.games}</td><td>{r.accuracy}%</td><td>{r.engineAgreement}%</td><td>{r.maiaAgreement ?? '—'}{r.maiaAgreement !== null ? '%' : ''}</td><td>{r.nearPerfect.length}</td>
                   </tr>
                 ))}
               </tbody>
@@ -184,7 +320,7 @@ export default function DatabasePage() {
                 <h3 className="mt-2 text-xs font-semibold">Near-perfect games (accuracy ≥ 95)</h3>
                 <ul className="mt-1 flex flex-col gap-1">
                   {player.nearPerfect.slice(0, 20).map((g) => (
-                    <li key={g.game + g.color} className={row}><span>{g.white} – {g.black} · {g.year ?? '—'} · {g.accuracy}%</span>
+                    <li key={g.game + g.color} className={row}><span>{`${g.white} – ${g.black} · ${g.year ?? '—'} · ${g.accuracy}%`}{(byId.has(g.game) ? gameFacts(byId.get(g.game)!) : []).map((f) => ` · ${f}`).join('')}</span>
                       <button className="rounded border border-slate-300 px-2 py-0.5" onClick={() => void open({ id: g.game, book: g.book })}>Open</button></li>
                   ))}
                 </ul>
@@ -202,11 +338,15 @@ export default function DatabasePage() {
                   {[5, 10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
               </label>
-              <BarChart label="Players with most games" data={topPlayers(games, top).map((p) => ({ label: p.name, value: p.games, note: `${p.white}W/${p.black}B${p.score >= 0 ? ` · ${p.score}%` : ''}` }))} />
+              <StatTable id="players" title="Players with most games" head={['Player', 'Games', 'White / Black', 'Score']} onPick={showStat}
+                rows={topPlayers(games, top).map((p) => ({ key: p.name, label: p.name, filter: { kind: 'player', value: p.name, label: p.name }, value: p.games, cells: [p.games, `${p.white} / ${p.black}`, p.score >= 0 ? `${p.score}%` : '—'], note: `${p.white}W/${p.black}B${p.score >= 0 ? ` · ${p.score}%` : ''}` }))} />
             </div>
-            <BarChart label="Games per decade" data={gamesPerDecade(games)} />
-            <BarChart label="First moves (White's score)" data={firstMoves(games).slice(0, 8).map((m) => ({ label: m.move, value: m.games, note: m.whiteScore >= 0 ? `${m.whiteScore}%` : '' }))} />
-            <BarChart label="Openings" data={openings(games).slice(0, 10).map((o) => ({ label: o.name.slice(0, 18), value: o.games }))} />
+            <StatTable id="decades" title="Games per decade" head={['Decade', 'Games']} onPick={showStat}
+              rows={gamesPerDecade(games).map((d) => ({ key: d.label, label: d.label, filter: { kind: 'decade', value: d.label, label: d.label }, value: d.value, cells: [d.value] }))} />
+            <StatTable id="first-moves" title="First moves (White's score)" head={['Move', 'Games', "White's score"]} onPick={showStat}
+              rows={firstMoves(games).slice(0, 8).map((m) => ({ key: m.move, label: m.move, filter: { kind: 'first', value: m.move, label: m.move }, value: m.games, cells: [m.games, m.whiteScore >= 0 ? `${m.whiteScore}%` : '—'], note: m.whiteScore >= 0 ? `${m.whiteScore}%` : '' }))} />
+            <StatTable id="openings" title="Openings" head={['Opening', 'Games']} onPick={showStat}
+              rows={openings(games).slice(0, 10).map((o) => ({ key: o.name, label: o.name, filter: { kind: 'opening', value: o.name, label: o.name }, value: o.games, cells: [o.games] }))} />
           </div>
         )}
       </div>
