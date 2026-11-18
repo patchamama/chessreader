@@ -180,16 +180,20 @@ describe('Database: where each game comes from, the commented game and the book 
     expect(row).toHaveTextContent('Mis geniales predecesores III')
     const lichess = screen.getByText(/M\. Carlsen – H\. Nakamura/).closest('li')!
     expect(lichess).toHaveTextContent('Lichess')
-    fireEvent.click(screen.getByRole('button', { name: 'Book: Mis geniales predecesores III' }))
-    expect(screen.getByRole('tab', { name: 'Books' })).toHaveAttribute('aria-selected', 'true')
-    const bookRow = (await screen.findByText(/T\. Petrosian – B\. Spassky/)).closest('li')!
-    expect(screen.getByText(/Mis geniales predecesores III — 1 games/)).toBeTruthy()
-    expect(bookRow).toHaveTextContent('Mis geniales predecesores III')
-    fireEvent.click(screen.getByRole('button', { name: '← Books' }))
     fireEvent.click(screen.getByRole('tab', { name: 'Players' }))
     fireEvent.click(await screen.findByText('Petrosian', { selector: 'td' }))
     const near = (await screen.findByText(/Petrosian – Spassky · 1966 · 97.4%/)).closest('li')!
     expect(near).toHaveTextContent('Mis geniales predecesores III')
+  })
+
+  it('the book link of a game opens the book at that game', async () => {
+    const spy = vi.spyOn(inBook, 'openGameInBook').mockResolvedValue('/read/-1')
+    page()
+    await screen.findByText('Mis geniales predecesores III')
+    await searchRow(/T\. Petrosian – B\. Spassky/)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Book: Mis geniales predecesores III' })[0])
+    await screen.findByText('Reader open')
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ id: 'k3' }), { chapter: 4, gameIndex: 2 })
   })
 
   it('S2 S3: Open shows the game with the book\'s remarks, with a spinner while it opens', async () => {

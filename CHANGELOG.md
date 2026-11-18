@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.106.6 — 2026-11-18
+
+- fix: in the database, a game's book link opens the book at that game
+
 ## v0.106.5 — 2026-11-18
 
 - fix: Stockfish no longer crashes ("RuntimeError: unreachable") when the position changes while it is thinking — the engine is stopped and its bestmove awaited before the next position; impossible positions are never sent

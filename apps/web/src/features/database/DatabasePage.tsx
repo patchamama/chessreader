@@ -225,12 +225,12 @@ export default function DatabasePage() {
   }, [player, lang])
 
   const row = 'flex items-center justify-between gap-2 rounded border border-slate-100 bg-white px-2 py-1 text-xs'
-  /** Where a game comes from: its book (linking to the book's games) or Lichess. */
-  const sourceOf = (from: string | undefined, lichess: boolean) => {
+  /** Where a game comes from: its book (opening the book at that game, or the book's games) or Lichess. */
+  const sourceOf = (from: string | undefined, lichess: boolean, at?: { chapter?: number | null; gameIndex?: number | null }) => {
     if (lichess) return <span className="text-slate-500">Lichess</span>
     const source = from ? booksById.get(from) : undefined
     return source
-      ? <button className="text-blue-700 underline" aria-label={`Book: ${source.title}`} onClick={() => showBook(source)}>{source.title}</button>
+      ? <button className="text-blue-700 underline" aria-label={`Book: ${source.title}`} onClick={() => (at?.chapter ? void openInBook(source, at.chapter, at.gameIndex ?? null) : showBook(source))}>{source.title}</button>
       : <span className="text-slate-500">{from ?? '—'}</span>
   }
   const gameRow = (g: DbGame | DbGameFull, bookId?: string) => {
@@ -242,7 +242,7 @@ export default function DatabasePage() {
       <li key={g.id} className={row}>
         <span>
           <strong>{g.white ?? '?'} – {g.black ?? '?'}</strong> · {g.year ?? '—'} · {g.opening || '—'}{gameFacts(g).map((f) => ` · ${f}`).join('')}
-          {' · '}{sourceOf(from, lichess)}
+          {' · '}{sourceOf(from, lichess, g)}
         </span>
         <span className="flex shrink-0 gap-1">
           <button className="rounded border border-slate-300 px-2 py-0.5" aria-label={`Open ${players}`} onClick={() => void open(g, bookId)}>Open</button>
@@ -362,7 +362,7 @@ export default function DatabasePage() {
                 <h3 className="mt-2 text-xs font-semibold">Near-perfect games (accuracy ≥ 95)</h3>
                 <ul className="mt-1 flex flex-col gap-1">
                   {player.nearPerfect.slice(0, 20).map((g) => (
-                    <li key={g.game + g.color} className={row}><span>{`${g.white} – ${g.black} · ${g.year ?? '—'} · ${g.accuracy}%`}{(byId.has(g.game) ? gameFacts(byId.get(g.game)!) : []).map((f) => ` · ${f}`).join('')}{' · '}{sourceOf(g.book, byId.get(g.game)?.source === 'lichess' || g.book === 'lichess')}</span>
+                    <li key={g.game + g.color} className={row}><span>{`${g.white} – ${g.black} · ${g.year ?? '—'} · ${g.accuracy}%`}{(byId.has(g.game) ? gameFacts(byId.get(g.game)!) : []).map((f) => ` · ${f}`).join('')}{' · '}{sourceOf(g.book, byId.get(g.game)?.source === 'lichess' || g.book === 'lichess', byId.get(g.game))}</span>
                       <button className="rounded border border-slate-300 px-2 py-0.5" onClick={() => void open({ id: g.game, book: g.book })}>Open</button></li>
                   ))}
                 </ul>
