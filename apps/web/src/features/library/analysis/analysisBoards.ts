@@ -20,11 +20,35 @@ export interface AnalysisBoardInput {
   source?: string
 }
 
-export interface AnalysisBoard extends AnalysisBoardInput { id: number }
+/**
+ * What the user did on a board of the analysis tab, kept while the app is open
+ * (switching tabs or pages does not lose it): the game played or typed, the move
+ * shown and the view.
+ */
+export interface AnalysisWork {
+  /** The game: a position and the moves (UCI) played from it. */
+  startFen: string
+  moves: string[]
+  /** Moves shown on the board (0 = the start position). */
+  ply: number
+  /** The game's text as typed, pasted or commented (empty for free play). */
+  text: string
+  flipped: boolean
+  boardHidden: boolean
+  /** How the text's comments are written: paragraphs (as books) or braces. */
+  layout: 'paragraphs' | 'braces'
+}
 
-interface State { boards: AnalysisBoard[]; active: number | null }
+export interface AnalysisBoard extends AnalysisBoardInput { id: number; work?: AnalysisWork }
 
-export const useAnalysisBoards = create<State>(() => ({ boards: [], active: null }))
+interface State {
+  boards: AnalysisBoard[]
+  active: number | null
+  /** The free board of the "Current board" tab while no game of a book is open. */
+  scratch: AnalysisWork | null
+}
+
+export const useAnalysisBoards = create<State>(() => ({ boards: [], active: null, scratch: null }))
 
 let next = 1
 
@@ -39,6 +63,21 @@ export function closeAnalysisBoard(id: number): void {
     const boards = s.boards.filter((b) => b.id !== id)
     return { boards, active: s.active === id ? boards[boards.length - 1]?.id ?? null : s.active }
   })
+}
+
+/** A new, empty analysis board (the "+" tab): the start position, to play or type a game. */
+export function newAnalysisBoard(title: string): number {
+  return openAnalysisBoard({ title })
+}
+
+/** Keep what the user did on a board (its game, the move shown, the view). */
+export function updateAnalysisWork(id: number, work: AnalysisWork): void {
+  useAnalysisBoards.setState((s) => ({ boards: s.boards.map((b) => (b.id === id ? { ...b, work } : b)) }))
+}
+
+/** Keep what the user did on the free board of the "Current board" tab. */
+export function updateScratchWork(work: AnalysisWork | null): void {
+  useAnalysisBoards.setState({ scratch: work })
 }
 
 /** Bring an open board to the front (its tab). */

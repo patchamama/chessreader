@@ -1,16 +1,26 @@
 import { useState } from 'react'
 import type { GameTree } from '@chess-ebook/chess-shared'
 import { useSettingsStore, type AppLanguage } from '../../../shared/settings/settingsStore'
-import { useNotation } from '../../../shared/chess/notation'
 import { StudyBoard } from '../components/StudyBoard'
 import { useStudyBoardStore } from '../store/studyBoardStore'
-import { activateAnalysisBoard, closeAnalysisBoard, useAnalysisBoards, type AnalysisBoard } from './analysisBoards'
-import { AnalysisBoardView } from './AnalysisBoardView'
+import {
+  activateAnalysisBoard, closeAnalysisBoard, newAnalysisBoard, updateAnalysisWork, updateScratchWork, useAnalysisBoards,
+  type AnalysisBoard, type AnalysisWork,
+} from './analysisBoards'
+import { lineOfBoard } from './analysisGame'
+import { AnalysisMoveList } from './AnalysisMoveList'
+import { AnalysisWorkspace, EMPTY_WORK } from './AnalysisWorkspace'
 
-const T: Record<AppLanguage, { title: string; current: string; close: string; moves: string; empty: string }> = {
-  en: { title: 'Analysis boards', current: 'Current board', close: 'Close', moves: 'Moves', empty: 'Open a game in a book: the board follows it here, move by move.' },
-  es: { title: 'Tableros de análisis', current: 'Tablero actual', close: 'Cerrar', moves: 'Jugadas', empty: 'Abre una partida de un libro: el tablero la sigue aquí, jugada a jugada.' },
-  de: { title: 'Analysebretter', current: 'Aktuelles Brett', close: 'Schließen', moves: 'Züge', empty: 'Öffne eine Partie aus einem Buch: das Brett folgt ihr hier, Zug für Zug.' },
+const T: Record<AppLanguage, { title: string; current: string; close: string; moves: string; add: string; analysis: string }> = {
+  en: { title: 'Analysis boards', current: 'Current board', close: 'Close', moves: 'Moves', add: 'New analysis board', analysis: 'Analysis' },
+  es: { title: 'Tableros de análisis', current: 'Tablero actual', close: 'Cerrar', moves: 'Jugadas', add: 'Nuevo tablero de análisis', analysis: 'Análisis' },
+  de: { title: 'Analysebretter', current: 'Aktuelles Brett', close: 'Schließen', moves: 'Züge', add: 'Neues Analysebrett', analysis: 'Analyse' },
+}
+
+/** What a board opened from a book starts with: its line, at the move it was opened on. */
+function initialWork(board: AnalysisBoard): AnalysisWork {
+  const line = lineOfBoard(board)
+  return { ...EMPTY_WORK, ...line, ply: Math.max(0, Math.min(board.ply ?? line.moves.length, line.moves.length)) }
 }
 
 /** What a tab is called: the book (or source) the board comes from, else its own title. */
@@ -29,45 +39,27 @@ function shownLine(tree: GameTree, currentId: string | null): string[] {
 }
 
 /** The study board's game, as a clickable list of moves; a click moves the (same, live) board there. */
-function CurrentGameMoves({ label, empty }: { label: string; empty: string }) {
-  const tree = useStudyBoardStore((s) => s.activeGame)
+function CurrentGameMoves({ label, tree }: { label: string; tree: GameTree }) {
   const currentId = useStudyBoardStore((s) => s.currentNodeId)
   const setCurrentNode = useStudyBoardStore((s) => s.setCurrentNode)
-  const notation = useNotation()
-  if (!tree) return <p className="text-sm italic text-slate-500">{empty}</p>
-  const ids = shownLine(tree, currentId)
   return (
-    <ol aria-label={label} className="flex flex-wrap gap-x-1 gap-y-0.5 font-mono text-sm text-slate-700">
-      {ids.map((id, i) => {
-        const node = tree.nodes.get(id)
-        if (!node) return null
-        const prefix = node.color === 'white' ? `${node.moveNumber}.` : i === 0 ? `${node.moveNumber}...` : ''
-        const current = id === currentId
-        return (
-          <li key={id} className="inline-flex items-center gap-0.5">
-            {prefix && <span className="text-slate-400">{prefix}</span>}
-            <button
-              type="button"
-              aria-current={current ? 'true' : undefined}
-              className={`rounded px-0.5 hover:bg-amber-100${current ? ' bg-amber-200 font-semibold' : ''}`}
-              onClick={() => setCurrentNode(id, !tree.mainline.includes(id))}
-            >
-              {notation.san(node.san)}
-            </button>
-          </li>
-        )
-      })}
-    </ol>
+    <AnalysisMoveList
+      label={label} tree={tree} ids={shownLine(tree, currentId)} currentId={currentId}
+      onSelect={(id) => setCurrentNode(id, !tree.mainline.includes(id))}
+    />
   )
 }
 
 /**
- * The "Analysis board" tab (S11): the current analysis board first — the study
- * board of the reader, live, with its game's moves and all its controls — and
- * one closable tab per extra analysis board, named after its book.
+ * The "Analysis board" tab (S11, S10): the current analysis board first — the
+ * study board of the reader, live, with its game's moves and all its controls,
+ * or, while no game of a book is open, a free board to play or type a game on —
+ * then one closable tab per extra analysis board (named after its book) and a
+ * "+" that opens a new, empty one. Every board keeps what was done on it.
  */
 export default function AnalysisPage() {
-  const { boards, active } = useAnalysisBoards()
+  const { boards, active, scratch } = useAnalysisBoards()
+  const studyGame = useStudyBoardStore((s) => s.activeGame)
   const lang = useSettingsStore((s) => s.language)
   const t = T[lang] ?? T.en
   const [selected, setSelected] = useState<number | 'current'>('current')
@@ -111,17 +103,38 @@ export default function AnalysisPage() {
             </button>
           </span>
         ))}
+        <button
+          type="button"
+          aria-label={t.add}
+          title={t.add}
+          className="shrink-0 rounded-t px-3 py-1.5 text-base font-semibold text-slate-500 hover:bg-slate-50 hover:text-emerald-700"
+          onClick={() => {
+            const used = new Set(boards.map((b) => b.title))
+            let n = 1
+            while (used.has(`${t.analysis} ${n}`)) n++
+            setSelected(newAnalysisBoard(`${t.analysis} ${n}`))
+          }}
+        >
+          +
+        </button>
       </div>
       <div role="tabpanel">
         {board ? (
-          <div className="mx-auto w-full max-w-[520px]">
-            <AnalysisBoardView key={board.id} board={board} />
+          <AnalysisWorkspace
+            key={board.id}
+            title={tabName(board)}
+            work={board.work ?? initialWork(board)}
+            onChange={(work) => updateAnalysisWork(board.id, work)}
+            comment={board.text}
+            source={board.source}
+          />
+        ) : studyGame ? (
+          <div className="grid items-start gap-4 md:grid-cols-[minmax(0,480px)_1fr]">
+            <StudyBoard />
+            <CurrentGameMoves label={t.moves} tree={studyGame} />
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-[minmax(0,480px)_1fr]">
-            <StudyBoard />
-            <CurrentGameMoves label={t.moves} empty={t.empty} />
-          </div>
+          <AnalysisWorkspace title={t.current} work={scratch ?? EMPTY_WORK} onChange={updateScratchWork} />
         )}
       </div>
     </section>

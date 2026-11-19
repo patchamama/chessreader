@@ -1,15 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import type { Arrow } from 'react-chessboard'
-import { analyseComment, commentToSpeechParts } from '@chess-ebook/chess-shared'
+import { useEffect, useMemo, useState } from 'react'
 import ChessBoardThemed from '../../../shared/chess/ChessBoard'
 import { playLine } from '../../../shared/chess/playLine'
 import { useNotation } from '../../../shared/chess/notation'
 import { NotationToggle } from '../../../shared/chess/NotationToggle'
 import { useSettingsStore, type AppLanguage } from '../../../shared/settings/settingsStore'
-import { analysisVoice as voice } from './analysisSpeaker'
-import { cuesToBoard } from '../narration/cueStyles'
-import { boardLine, quotedMoves } from './analysisLine'
+import { boardLine } from './analysisLine'
 import type { AnalysisBoardInput } from './analysisBoards'
+import { useCommentNarration } from './useCommentNarration'
 
 
 const T: Record<AppLanguage, Record<string, string>> = {
@@ -20,15 +17,6 @@ const T: Record<AppLanguage, Record<string, string>> = {
 
 /** One move a second when the line plays by itself. */
 const STEP_MS = 1000
-
-const bare = (san: string) => san.replace(/[+#!?]+$/g, '')
-
-interface NarrationView {
-  fen: string
-  lastMove: { from: string; to: string } | null
-  squareStyles: Record<string, CSSProperties>
-  arrows: Arrow[]
-}
 
 /**
  * One analysis board: the line or game it was opened with (⏮ ◀ ▶ ⏭ and play),
@@ -45,10 +33,10 @@ export function AnalysisBoardView({ board }: { board: AnalysisBoardInput }) {
   const total = positions.length
   const [ply, setPly] = useState(() => Math.max(0, Math.min(board.ply ?? 0, total)))
   const [playing, setPlaying] = useState(false)
-  const [view, setView] = useState<NarrationView | null>(null)
-  const [narrating, setNarrating] = useState(false)
   const [flipped, setFlipped] = useState(false)
-  const run = useRef(0)
+  const { view, narrating, narrate, stop: stopNarration, clearView } = useCommentNarration({
+    text: board.text ?? '', lang, startFen, positions, ply, setPly, onStart: () => setPlaying(false),
+  })
 
   useEffect(() => {
     if (!playing) return
@@ -57,67 +45,7 @@ export function AnalysisBoardView({ board }: { board: AnalysisBoardInput }) {
     return () => clearTimeout(id)
   }, [playing, ply, total])
 
-  // Leaving the board (closing it, another tab) silences it — only its own voice:
-  // cancelling when it is not speaking would cut the study's narration.
-  const speaking = useRef(false)
-  useEffect(() => () => { run.current++; if (speaking.current) voice().cancel() }, [])
-
-  const stopNarration = () => {
-    run.current++
-    speaking.current = false
-    voice().cancel()
-    setNarrating(false)
-    setView(null)
-  }
-
-  const go = (n: number) => { setPlaying(false); setView(null); setPly(Math.max(0, Math.min(total, n))) }
-
-  const narrate = async () => {
-    const text = board.text ?? ''
-    if (!text.trim()) return
-    const token = ++run.current
-    setPlaying(false)
-    setNarrating(true)
-    speaking.current = true
-    const parts = commentToSpeechParts(text, lang)
-    const quoted = quotedMoves(text)
-    let fen = ply > 0 ? positions[ply - 1].fen : startFen
-    let lastMove: NarrationView['lastMove'] = ply > 0 ? { from: positions[ply - 1].from, to: positions[ply - 1].to } : null
-    let segStart = 0
-    for (let k = 0; k < parts.length; k++) {
-      if (run.current !== token) return
-      const part = parts[k]
-      if (part.at !== null) {
-        segStart = part.at
-        const san = quoted.get(part.at)
-        if (san) {
-          // The move from where the board is; else a move of the board's own line.
-          const r = playLine(fen, [san])
-          if (r.ok) {
-            fen = r.positions[0].fen
-            lastMove = { from: r.positions[0].from, to: r.positions[0].to }
-          } else {
-            const i = positions.findIndex((p) => bare(p.san) === bare(san))
-            if (i >= 0) {
-              fen = positions[i].fen
-              lastMove = { from: positions[i].from, to: positions[i].to }
-              setPly(i + 1)
-            }
-          }
-        }
-      }
-      const next = parts.slice(k + 1).find((p) => p.at !== null)?.at ?? text.length
-      const cues = analyseComment(text.slice(segStart, next), fen, { lastMove })
-      const { squareStyles, arrows } = cuesToBoard(cues)
-      setView({ fen, lastMove, squareStyles, arrows })
-      await voice().speak(part.speech, lang, 1)
-      segStart = next
-    }
-    if (run.current !== token) return
-    speaking.current = false
-    setNarrating(false)
-    setView(null)
-  }
+  const go = (n: number) => { setPlaying(false); clearView(); setPly(Math.max(0, Math.min(total, n))) }
 
   const shown = ply > 0 ? positions[ply - 1] : null
   const fen = view?.fen ?? shown?.fen ?? startFen
@@ -141,7 +69,7 @@ export function AnalysisBoardView({ board }: { board: AnalysisBoardInput }) {
         <button type="button" className={button} aria-label={t.last} disabled={ply >= total} onClick={() => go(total)}>⏭</button>
         {playing
           ? <button type="button" className={button} aria-label={t.pause} onClick={() => setPlaying(false)}>⏸</button>
-          : <button type="button" className={button} aria-label={t.play} disabled={total === 0} onClick={() => { setView(null); if (ply >= total) setPly(0); setPlaying(true) }}>▶ {t.play}</button>}
+          : <button type="button" className={button} aria-label={t.play} disabled={total === 0} onClick={() => { clearView(); if (ply >= total) setPly(0); setPlaying(true) }}>▶ {t.play}</button>}
         <button type="button" className={button} aria-label={t.flip} title={t.flip} onClick={() => setFlipped((f) => !f)}>⇅</button>
         <NotationToggle className={button} />
       </div>
