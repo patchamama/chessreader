@@ -80,8 +80,26 @@ final class EpubPackageTest extends TestCase
             'Capítulo I — CELADAS CON CEBO',
             'Nested only',
             'Apéndice — Tablas',
-            'Chapter 5',
+            // Not in the TOC and no heading: a continuation of the chapter before it.
+            'Apéndice — Tablas (2)',
         ], $titles);
+    }
+
+    public function test_untitled_parts_are_numbered_continuations_and_front_matter_keeps_its_number(): void
+    {
+        $files = $this->epub2Book();
+        // An untitled part before any titled one (a cover) and two untitled parts after a chapter.
+        $files['OEBPS/Text/c6.xhtml'] = B::xhtml('<p>Más texto.</p>');
+        $opf = $files['OEBPS/content.opf'];
+        $files['OEBPS/content.opf'] = str_replace(
+            ['<item id="c5"', '<itemref idref="c1"/>', '<itemref idref="c5"/>'],
+            ['<item id="c6" href="Text/c6.xhtml" media-type="application/xhtml+xml"/><item id="c0" href="Text/c0.xhtml" media-type="application/xhtml+xml"/><item id="c5"', '<itemref idref="c0"/><itemref idref="c1"/>', '<itemref idref="c5"/><itemref idref="c6"/>'],
+            $opf,
+        );
+        $files['OEBPS/Text/c0.xhtml'] = B::xhtml('<p>Portada</p>');
+        $titles = array_column($this->zipPackage($files)->chapters(), 'title');
+        self::assertSame('Chapter 1', $titles[0]);
+        self::assertSame(['Apéndice — Tablas (2)', 'Apéndice — Tablas (3)'], array_slice($titles, -2));
     }
 
     public function test_directory_and_zip_give_the_same_chapters(): void

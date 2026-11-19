@@ -89,6 +89,9 @@ final class EpubPackage
         $toc = $this->tocTitles($opf);
 
         $chapters = [];
+        // A part with no TOC entry and no heading continues the chapter before it: "Capítulo I (2)".
+        $parent = null;
+        $part = 1;
         foreach ($opf['spine'] as $idref) {
             $href = $opf['manifest'][$idref] ?? null;
             if ($href === null) {
@@ -107,8 +110,15 @@ final class EpubPackage
                     : $label;
             } elseif ($lines !== []) {
                 $title = TocLabel::fromLines($lines);
+            } elseif ($parent !== null) {
+                $title = $parent . ' (' . (++$part) . ')';
             } else {
+                // Front matter before any named chapter (cover, title page).
                 $title = 'Chapter ' . (count($chapters) + 1);
+            }
+            if (($label !== null && $label !== '') || $lines !== []) {
+                $parent = $title;
+                $part = 1;
             }
 
             $chapters[] = ['path' => $path, 'title' => $title, 'html' => $html];

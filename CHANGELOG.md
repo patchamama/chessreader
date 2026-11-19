@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.116.2 — 2026-11-19
+
+- feat: book parts with no title of their own are named after the chapter they continue ("Capítulo I - CELADAS CON CEBO (2)") instead of "Chapter N"
+
 ## v0.116.1 — 2026-11-19
 
 - feat: Play's ideas list the moves that lead into a position of one of your traps, whatever the move order
