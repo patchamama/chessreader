@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
+import { EXTERNAL_BOOK_ID, ensureExternalChapters, useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
+// Registers how a resources book kept by its id is read again after a refresh.
+import '../../errors/repoBooks'
 import { httpClient } from '../../../shared/api/httpClient'
 import { withChapterErrata, type ChapterErrata } from '../errata/chapterErrata'
 import { useErrataContext } from '../errata/errataContext'
@@ -55,7 +57,8 @@ export function useChapter(bookId: number, chapterOrder: number) {
     queryKey: ['library', 'chapter', bookId, chapterOrder, external?.version ?? 0],
     queryFn: async () => {
       if (external) {
-        const chapter = external.chapters[chapterOrder - 1]
+        const chapters = external.chapters.length > 0 ? external.chapters : await ensureExternalChapters()
+        const chapter = chapters[chapterOrder - 1]
         return chapter ? chapter : Promise.reject(new Error('Chapter not found'))
       }
       const chapter = await httpClient<Chapter>(`/api/library/books/${bookId}/chapters/${chapterOrder}`)
