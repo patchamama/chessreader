@@ -10,7 +10,11 @@ const env = vi.hoisted(() => ({
 }))
 vi.mock('../../shared/env/devMode', () => ({ isDemoHost: () => env.demo, isDevMode: () => false, isLocalhostHost: () => true }))
 vi.mock('../../shared/api/httpClient', () => ({ httpClient: env.httpClient }))
-vi.mock('../errors/repoBooks', () => ({ loadRepoBookChapters: env.loadRepoBookChapters, openRepoGame: env.openRepoGame }))
+vi.mock('../errors/repoBooks', async (importOriginal) => ({
+  chapterHasText: (await importOriginal<typeof import('../errors/repoBooks')>()).chapterHasText,
+  loadRepoBookChapters: env.loadRepoBookChapters,
+  openRepoGame: env.openRepoGame,
+}))
 vi.mock('../library/store/readingStore', () => ({ saveProgress: env.saveProgress }))
 vi.mock('../library/store/boardMemory', () => ({ saveBoardMemory: env.saveBoardMemory }))
 
@@ -30,7 +34,8 @@ describe('openGameInBook (S2: open the book at the chapter and game of a databas
 
   it('server: a library book with the same title opens at that chapter and game', async () => {
     useAuthStore.setState({ token: 't' })
-    env.httpClient.mockResolvedValue([{ id: 3, title: 'Otro libro' }, { id: 7, title: '  mis geniales predecesores iii ' }])
+    env.httpClient.mockImplementation(async (url: string) =>
+      url === '/api/library/books' ? [{ id: 3, title: 'Otro libro' }, { id: 7, title: '  mis geniales predecesores iii ' }] : { title: 'c', html: '<p>text</p>', toc: [] })
     expect(await openGameInBook(book, { chapter: 4, gameIndex: 2 })).toBe('/read/7')
     expect(env.httpClient).toHaveBeenCalledWith('/api/library/books')
     expect(env.saveProgress).toHaveBeenCalledWith(7, 4)
@@ -52,6 +57,18 @@ describe('openGameInBook (S2: open the book at the chapter and game of a databas
     env.httpClient.mockResolvedValue([{ id: 3, title: 'Otro libro' }])
     expect(await openGameInBook(book, { chapter: 5, gameIndex: null })).toBe(`/read/${EXTERNAL_BOOK_ID}`)
     expect(env.openRepoGame).toHaveBeenLastCalledWith(book, chapters, { chapter: 5, gameIndex: 0 })
+  })
+
+  it('server: the database counts only chapters with text, so an empty cover chapter shifts the library chapter (reader-analysis-round S8)', async () => {
+    useAuthStore.setState({ token: 't' })
+    env.httpClient.mockImplementation(async (url: string) => {
+      if (url === '/api/library/books') return [{ id: 7, title: 'Mis geniales predecesores III' }]
+      const n = Number(url.split('/').pop())
+      return { title: `c${n}`, html: n === 1 ? '<?xml version="1.0"?><html><head><title>Cover</title></head><body><style>p{}</style><svg><image xlink:href="cover.jpg" /></svg></body></html>' : `<p>Chapter ${n}</p>`, toc: [] }
+    })
+    expect(await openGameInBook(book, { chapter: 4, gameIndex: 2 })).toBe('/read/7')
+    expect(env.saveProgress).toHaveBeenCalledWith(7, 5)
+    expect(env.saveBoardMemory).toHaveBeenCalledWith(7, { chapter: 5, gameIndex: 2, nodeId: null, annotations: {} })
   })
 
   it('S9: the library book opened at the game is marked as opened', async () => {

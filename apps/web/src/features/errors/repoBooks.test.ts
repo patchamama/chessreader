@@ -76,3 +76,28 @@ describe('book errors from the private resources repository (deployed app with a
     expect(chapters.map((c) => c.title)).toEqual(['Intro', 'Game 1'])
   })
 })
+
+describe('chapter numbers of the resources data against the book (reader-analysis-round S8)', () => {
+  const cover = { title: 'Chapter 1', html: '<style>p{}</style><img src="blob:cover">', toc: [] }
+  const text = (n: number) => ({ title: `Chapter ${n}`, html: `<p>1. e4 e5 2. Nf3 Nc6 (chapter ${n})</p>`, toc: [] })
+
+  it('a game numbered by the text chapters (empty ones not counted) opens at that chapter of an EPUB with an empty cover', () => {
+    const chapters = [cover, text(2), text(3)]
+    openRepoGame({ id: 'b', title: 'B', author: null, lang: 'es' }, chapters, { chapter: 2, gameIndex: 0 })
+    expect(loadBoardMemory(EXTERNAL_BOOK_ID)?.chapter).toBe(3)
+    expect(useExternalBookStore.getState().source).toEqual({ kind: 'repo', id: 'b' })
+  })
+
+  it('errors found by reading an EPUB are numbered like the precomputed ones (text chapters)', async () => {
+    clearRepoBookCache()
+    useSettingsStore.setState({ commentDbUrl: 'https://example.test/res', commentDbToken: '' })
+    const epub = tinyEpub()
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url.endsWith('.epub')
+      ? new Response(epub as unknown as BodyInit, { status: 200 })
+      : new Response('', { status: 404 }))))
+    const { chapters, games } = await repoBookErrors({ id: 'tiny', title: 'Tiny', author: null, lang: 'en' })
+    const withText = chapters.map((c, i) => [i + 1, c.html.replace(/<style[\s\S]*?<\/style>|<[^>]+>/g, '').trim().length > 0] as const).filter(([, t]) => t).map(([i]) => i)
+    for (const g of games) expect(withText[g.chapter - 1]).toBeDefined()
+    vi.unstubAllGlobals()
+  })
+})

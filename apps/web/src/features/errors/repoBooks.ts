@@ -73,13 +73,33 @@ export function loadRepoBookChapters(book: Pick<RepoBook, 'id' | 'title'>): Prom
   return loading
 }
 
+/** Whether a chapter has any text (a cover holds only an image). */
+export const chapterHasText = (html: string): boolean =>
+  html.replace(/<(style|head|title|script)\b[\s\S]*?<\/\1>/gi, '').replace(/<[^>]+>/g, '').replace(/&nbsp;|\s/g, '').length > 0
+
+/**
+ * The resources data (game database, precomputed errors, traps) numbers a
+ * book's chapters by the text's form-feed parts that have text; the book (its
+ * EPUB, as the server shows it too) also counts an empty cover. The book's
+ * chapter of text chapter `n`; `n` itself when the book has fewer.
+ */
+export function bookChapterOf(chapters: Pick<ExternalChapter, 'html'>[], n: number): number {
+  let seen = 0
+  for (let i = 0; i < chapters.length; i++) {
+    if (chapterHasText(chapters[i].html) && ++seen === n) return i + 1
+  }
+  return n
+}
+
 /** Read a repository book and recognise every chapter: its games with their errors. */
 export async function repoBookErrors(book: RepoBook, onProgress?: (done: number, total: number) => void, signal?: AbortSignal): Promise<{ games: GameErrors[]; chapters: ExternalChapter[] }> {
   const chapters = await loadRepoBookChapters(book)
   const games: GameErrors[] = []
+  // Numbered like the precomputed errors: only chapters with text count.
+  let textChapter = 0
   for (let i = 0; i < chapters.length; i++) {
     if (signal?.aborted) break
-    games.push(...chapterErrors(book.id, i + 1, chapters[i].html))
+    if (chapterHasText(chapters[i].html)) games.push(...chapterErrors(book.id, ++textChapter, chapters[i].html))
     onProgress?.(i + 1, chapters.length)
     // Let the page breathe between chapters.
     if (i % 5 === 4) await new Promise((r) => setTimeout(r, 0))
@@ -89,9 +109,10 @@ export async function repoBookErrors(book: RepoBook, onProgress?: (done: number,
 
 /** Open a game of a repository book in the reader (as the browser's own book), at that game. */
 export function openRepoGame(book: RepoBook, chapters: ExternalChapter[], game: Pick<GameErrors, 'chapter' | 'gameIndex'>): void {
-  useExternalBookStore.getState().open(book.title, chapters)
-  saveProgress(EXTERNAL_BOOK_ID, game.chapter)
-  saveBoardMemory(EXTERNAL_BOOK_ID, { chapter: game.chapter, gameIndex: game.gameIndex, nodeId: null, annotations: {} })
+  const chapter = bookChapterOf(chapters, game.chapter)
+  useExternalBookStore.getState().open(book.title, chapters, { kind: 'repo', id: book.id })
+  saveProgress(EXTERNAL_BOOK_ID, chapter)
+  saveBoardMemory(EXTERNAL_BOOK_ID, { chapter, gameIndex: game.gameIndex, nodeId: null, annotations: {} })
 }
 
 /** Open a whole repository book in the reader (as the browser's own book), at its first chapter. */

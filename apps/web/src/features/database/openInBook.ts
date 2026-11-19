@@ -1,7 +1,7 @@
 import { httpClient } from '../../shared/api/httpClient'
 import { hasServerSession } from '../../shared/api/serverSession'
 import { EXTERNAL_BOOK_ID } from '../../shared/externalBook/externalBookStore'
-import { loadRepoBookChapters, openRepoGame, type RepoBook } from '../errors/repoBooks'
+import { chapterHasText, loadRepoBookChapters, openRepoGame, type RepoBook } from '../errors/repoBooks'
 import { saveBoardMemory } from '../library/store/boardMemory'
 import { saveProgress } from '../library/store/readingStore'
 import { markVisited } from '../../shared/visited/visitedStore'
@@ -17,6 +17,22 @@ const withSubtitle = (library: string, title: string) => {
 }
 
 /**
+ * The library chapter of a database chapter: the database counts only the
+ * chapters with text, the library also an empty cover. Reads the chapters up to
+ * the one asked for (a few more when some are empty); the database number when
+ * they cannot be read.
+ */
+async function libraryChapterOf(bookId: number, n: number): Promise<number> {
+  let seen = 0
+  for (let i = 1; i <= n + 5; i++) {
+    const chapter = await httpClient<{ html: string }>(`/api/library/books/${bookId}/chapters/${i}`).catch(() => null)
+    if (typeof chapter?.html !== 'string') return n
+    if (chapterHasText(chapter.html) && ++seen === n) return i
+  }
+  return n
+}
+
+/**
  * Open the book of a database game at that game, and return the reader's
  * route. With the server, a library book of the same title opens at that
  * chapter and game; otherwise (the deployed app, or no such library book) the
@@ -29,9 +45,10 @@ export async function openGameInBook(book: RepoBook, place: BookPlace): Promise<
     const library = await httpClient<{ id: number; title: string }[]>('/api/library/books').catch(() => [])
     const match = library.find((b) => sameTitle(b.title, book.title)) ?? library.find((b) => withSubtitle(b.title, book.title))
     if (match) {
-      saveProgress(match.id, place.chapter)
+      const chapter = await libraryChapterOf(match.id, place.chapter)
+      saveProgress(match.id, chapter)
       markVisited('serverBook', match.id)
-      saveBoardMemory(match.id, { chapter: place.chapter, gameIndex, nodeId: null, annotations: {} })
+      saveBoardMemory(match.id, { chapter, gameIndex, nodeId: null, annotations: {} })
       return `/read/${match.id}`
     }
   }
