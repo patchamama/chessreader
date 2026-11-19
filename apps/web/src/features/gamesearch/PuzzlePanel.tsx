@@ -115,11 +115,14 @@ export function PuzzlePanel({ initialTheme }: { initialTheme?: string } = {}) {
       )}
       {error && <p role="alert" className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-800">{error}</p>}
       {puzzle && position && (
-        <div className="flex flex-col gap-3 md:flex-row">
-          <div className="w-full max-w-[400px]">
-            <ChessBoard fen={position.fen()} orientation={solver} lastMove={lastMove} allowDragging={status !== 'solved'} onPieceDrop={drop} />
+        <div className="flex flex-col items-start gap-3 md:flex-row">
+          {/* A square, top-aligned box: a taller column beside it never stretches the board. */}
+          <div data-testid="puzzle-board-box" className="w-full max-w-[400px] shrink-0 self-start">
+            <div className="aspect-square w-full">
+              <ChessBoard fen={position.fen()} orientation={solver} lastMove={lastMove} allowDragging={status !== 'solved'} onPieceDrop={drop} />
+            </div>
           </div>
-          <div className="flex flex-1 flex-col gap-2 text-sm">
+          <div className="flex min-w-0 flex-1 flex-col gap-2 text-sm">
             <p className="font-semibold">{solver === 'white' ? 'White to play' : 'Black to play'}</p>
             <p role="status" className={status === 'solved' ? 'font-semibold text-emerald-700' : status === 'wrong' ? 'text-red-700' : 'text-slate-600'}>
               {status === 'solved' ? 'Solved!' : status === 'wrong' ? 'Not the move. Try again.' : ply > 0 ? 'Right! Keep going.' : 'Your move.'}

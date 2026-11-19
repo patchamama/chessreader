@@ -66,10 +66,10 @@ export function LevelTest() {
   const position = puzzle ? puzzlePosition(puzzle, ply) : null
   const lastMove = puzzle ? (ply === 0 ? puzzle.lastMove : puzzle.solution[ply - 1]) : null
   return (
-    <div className="flex flex-col gap-3 md:flex-row">
+    <div className="flex flex-col items-start gap-3 md:flex-row">
       {position && <TrapBoard testId="level-board-box" fen={position.fen()} orientation={puzzle!.fen.split(' ')[1] === 'b' ? 'black' : 'white'}
         lastMove={lastMove ? { from: lastMove.slice(0, 2), to: lastMove.slice(2, 4) } : null} onMove={drop} />}
-      <div className="text-sm">
+      <div className="min-w-0 flex-1 text-sm">
         <p className="font-semibold">Puzzle {state.answered + 1} / {LEVEL_PUZZLES}</p>
         {error && <p role="alert" className="text-red-700">{error}</p>}
         <p data-testid="level-estimate" className="text-slate-600">Estimate: {state.rating} ± {levelMargin(state)}</p>

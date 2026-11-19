@@ -8,7 +8,7 @@ import { InfoSection } from '../../shared/info/InfoSection'
 import { openAnalysisBoard } from '../library/analysis/analysisBoards'
 import { dueTraps, filterTraps, isBookTrap, loadTraps, recordPractice, trapProgress, type Trap } from './traps'
 import { figurinesOn, localSan, localText, wrongMoveText } from './trapNotation'
-import { ideaSegments } from './trapText'
+import { ideaSegments, trapFens } from './trapText'
 import { firstMoves } from './trapExplorer'
 import { TrapBoard } from './TrapBoard'
 import { TrapIdeaText } from './TrapIdeaText'
@@ -116,6 +116,12 @@ export function TrapPractice({ trap, onDone, initialMode = 'practice' }: { trap:
   const introLang = (lang === 'es' && trap.introEs) || isBookTrap(trap) ? 'es' : 'en'
   const segments = useMemo(() => ideaSegments(intro, trap, introLang), [intro, trap, introLang])
   const showPosition = (p: LinePosition) => { setPlaying(false); setMarked([]); setPreview(p) }
+  const fens = useMemo(() => trapFens(trap), [trap])
+  // A move clicked in the notes (the opening, its summary) shows its position on this board.
+  const showLine = (startFen: string, sans: string[], n: number) => {
+    const p = playLine(startFen, sans, n).positions[n - 1]
+    if (p) showPosition(p)
+  }
   const idea = <TrapIdeaText segments={segments} lang={lang} figurines={figurines} onPosition={showPosition} onSquares={setMarked} />
   const lineText = localText(trap.sans.slice(0, ply).map((m, i) => `${i % 2 === 0 ? `${i / 2 + 1}. ` : ''}${m}`).join(' '), lang, figurines)
   const fullLine = localText(trap.sans.map((m, i) => `${i % 2 === 0 ? `${i / 2 + 1}. ` : ''}${m}`).join(' '), lang, figurines)
@@ -159,7 +165,7 @@ export function TrapPractice({ trap, onDone, initialMode = 'practice' }: { trap:
           </div>
         )}
         <div className="mt-2">
-          <InfoSection topic="trap" opening={trap.opening} themes={trap.themes} testId="trap-info">
+          <InfoSection topic="trap" opening={trap.opening} themes={trap.themes} lineFens={fens} onShowLine={showLine} testId="trap-info">
             {intro && <p><strong>{t.idea}:</strong> <span>{idea}</span></p>}
           </InfoSection>
         </div>

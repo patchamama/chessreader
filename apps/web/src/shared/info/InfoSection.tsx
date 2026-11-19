@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useSettingsStore, type AppLanguage } from '../settings/settingsStore'
 import { wikipediaSummary } from '../../features/database/resources'
 import { themeInfo } from './themeInfo'
+import { NotationText, type ShowLine } from './NotationText'
 
 export type InfoTopic = 'puzzle' | 'pattern' | 'trap' | 'traps' | 'ideas'
 
@@ -51,10 +52,14 @@ const wikiSearch = (lang: AppLanguage, term: string) => `https://${lang}.wikiped
  * part of the app, in the language chosen in Settings: what each tactical
  * theme means, the idea of a trap, the opening (with its Wikipedia summary,
  * asked for only when the section is opened and never stored), and links to
- * learn more on Wikipedia and Lichess.
+ * learn more on Wikipedia and Lichess. The chess moves its texts write (the
+ * idea, the opening, the summary) are read in any notation and, when legal
+ * from one of `lineFens` (by default the start position), shown with
+ * thumbnails and, with `onShowLine`, put on the caller's board when clicked.
  */
-export function InfoSection({ topic, themes = [], opening, idea, children, testId = 'info-section' }: {
-  topic: InfoTopic; themes?: string[]; opening?: string | null; idea?: string; children?: ReactNode; testId?: string
+export function InfoSection({ topic, themes = [], opening, idea, children, lineFens, onShowLine, testId = 'info-section' }: {
+  topic: InfoTopic; themes?: string[]; opening?: string | null; idea?: string; children?: ReactNode
+  lineFens?: string[]; onShowLine?: ShowLine; testId?: string
 }) {
   const lang = useSettingsStore((s) => s.language)
   const t = T[lang] ?? T.en
@@ -75,6 +80,7 @@ export function InfoSection({ topic, themes = [], opening, idea, children, testI
   const known = themes.map((x) => ({ raw: x, info: themeInfo(x, lang) }))
   const summary = wiki?.key === wikiKey ? wiki : null
   const link = 'text-blue-700 underline'
+  const moves = (text: string) => <NotationText text={text} lang={lang} fens={lineFens} onShowLine={onShowLine} />
 
   return (
     <details data-testid={testId} open={open} className="rounded border border-sky-200 bg-sky-50/60 px-2 py-1 text-xs text-slate-700">
@@ -84,7 +90,7 @@ export function InfoSection({ topic, themes = [], opening, idea, children, testI
       {open && (
         <div className="mt-1 flex flex-col gap-1.5">
           {t.intro[topic] && <p>{t.intro[topic]}</p>}
-          {idea && <p><strong>{t.idea}:</strong> <span>{idea}</span></p>}
+          {idea && <p><strong>{t.idea}:</strong> <span>{moves(idea)}</span></p>}
           {children}
           {known.length > 0 && (
             <div>
@@ -101,8 +107,8 @@ export function InfoSection({ topic, themes = [], opening, idea, children, testI
           )}
           {opening && (
             <div>
-              <p className="font-semibold">{t.opening}: <span className="font-normal">{opening}</span></p>
-              {summary && <p className="text-slate-600">{summary.extract}</p>}
+              <p className="font-semibold">{t.opening}: <span className="font-normal">{moves(opening)}</span></p>
+              {summary && <p className="text-slate-600">{moves(summary.extract)}</p>}
             </div>
           )}
           <div>

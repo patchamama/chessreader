@@ -2,6 +2,11 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.116.3 — 2026-11-19
+
+- fix: training and pattern boards keep their square shape whatever the height of the side column
+- feat: the evaluation bar stands beside the training board; moves written in the trap notes and opening summaries (e.g. "1. e4 e5 2. Nf3 Nc6 3. Bc4") are clickable with thumbnails and show the position on the board
+
 ## v0.116.2 — 2026-11-19
 
 - feat: book parts with no title of their own are named after the chapter they continue ("Capítulo I - CELADAS CON CEBO (2)") instead of "Chapter N"

@@ -77,4 +77,14 @@ describe('PuzzlePanel', () => {
     fireEvent.click(screen.getByText(/About this pattern/))
     expect(screen.getByText(/attacks two or more enemy pieces/)).toBeInTheDocument()
   })
+
+  it('the puzzle board sits in a square, top-aligned box a taller column cannot stretch (S18)', async () => {
+    render(<PuzzlePanel />)
+    fireEvent.click(screen.getByRole('button', { name: 'Puzzle of the day' }))
+    await waitFor(() => screen.getByText(/Rating 1500/))
+    const box = screen.getByTestId('puzzle-board-box')
+    expect(box).toHaveClass('self-start', 'shrink-0')
+    expect(box.parentElement).toHaveClass('items-start')
+    expect(screen.getByTestId('board').parentElement).toHaveClass('aspect-square')
+  })
 })

@@ -2,7 +2,8 @@ import { useMemo, useState, type CSSProperties } from 'react'
 import ChessBoard from '../../shared/chess/ChessBoard'
 import { capturedPieces, legalTargets, pieceGlyph } from './captured'
 import { useTrainingPrefs } from './trainingPrefs'
-import { TrainingEval } from './TrainingEval'
+import { TrainingEvalBar, TrainingEvalLine } from './TrainingEval'
+import { useTrainingEngine } from './trainingEngine'
 
 export interface BoardArrow { startSquare: string; endSquare: string; color: string }
 
@@ -18,13 +19,15 @@ function Captured({ pieces, testId }: { pieces: string[]; testId: string }) {
 }
 
 /**
- * The training board in its own top-aligned box (a tall column beside it never
- * stretches it), with the pieces each side has taken shown small above and
- * below, click-to-move with the legal squares of the selected piece, marked
- * squares (named in a text) and the expected move of a mistake. Every
- * training board can be flipped and can show the engine's evaluation (an
- * option shared by all of them and remembered). `onSelect` hears the piece
- * the user picks (or null), so the caller can show that piece's moves.
+ * The training board in its own square, top-aligned box (a tall column or more
+ * columns beside it never stretch, squash or space it), with the pieces each
+ * side has taken shown small above and below, click-to-move with the legal
+ * squares of the selected piece, marked squares (named in a text) and the
+ * expected move of a mistake. Every training board can be flipped and can
+ * show the engine's evaluation (an option shared by all of them and
+ * remembered): a vertical bar at the right of the board, as tall as it, and
+ * the engine's line below. `onSelect` hears the piece the user picks (or
+ * null), so the caller can show that piece's moves.
  */
 export function TrapBoard({ fen, orientation: side, lastMove, arrows = [], marked = [], expected = [], onMove, onSelect, testId = 'trap-board-box' }: {
   fen: string; orientation: 'white' | 'black'; lastMove?: { from: string; to: string } | null
@@ -35,6 +38,7 @@ export function TrapBoard({ fen, orientation: side, lastMove, arrows = [], marke
   const [flipped, setFlipped] = useState(false)
   const showEval = useTrainingPrefs((s) => s.showEval)
   const setShowEval = useTrainingPrefs((s) => s.setShowEval)
+  const evaluation = useTrainingEngine(fen, showEval)
   const orientation = flipped ? (side === 'white' ? 'black' : 'white') : side
   const sel = selected?.fen === fen ? selected.square : null
   const targets = useMemo(() => (sel && onMove ? legalTargets(fen, sel) : []), [fen, sel, onMove])
@@ -58,12 +62,18 @@ export function TrapBoard({ fen, orientation: side, lastMove, arrows = [], marke
   }
   const tool = 'rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs text-slate-700 hover:bg-slate-50'
   return (
-    <div data-testid={testId} className="w-full max-w-[420px] shrink-0 self-start">
+    // The box keeps the board at up to 420px (plus the bar when shown), whatever the column beside it holds.
+    <div data-testid={testId} className={`w-full shrink-0 self-start ${showEval ? 'max-w-[438px]' : 'max-w-[420px]'}`}>
       <Captured pieces={taken[top]} testId={`captured-${top}`} />
-      <ChessBoard fen={fen} orientation={orientation} lastMove={lastMove ?? null} arrows={arrows}
-        customSquareStyles={styles} allowDragging={!!onMove}
-        onPieceDrop={(from, to) => { setSelected(null); onSelect?.(null); return onMove ? onMove(from, to) : false }}
-        onSquareClick={click} selectedSquare={sel} legalTargets={targets} />
+      <div data-testid={`${testId}-row`} className="flex items-start gap-1.5">
+        <div data-testid={`${testId}-square`} className="aspect-square min-w-0 flex-1">
+          <ChessBoard fen={fen} orientation={orientation} lastMove={lastMove ?? null} arrows={arrows}
+            customSquareStyles={styles} allowDragging={!!onMove}
+            onPieceDrop={(from, to) => { setSelected(null); onSelect?.(null); return onMove ? onMove(from, to) : false }}
+            onSquareClick={click} selectedSquare={sel} legalTargets={targets} />
+        </div>
+        {showEval && <TrainingEvalBar fen={fen} result={evaluation} />}
+      </div>
       <Captured pieces={taken[bottom]} testId={`captured-${bottom}`} />
       <div className="mt-1 flex flex-wrap items-center gap-2">
         <button type="button" className={tool} aria-label="Flip board" title="Flip board" onClick={() => setFlipped((f) => !f)}>⇅ Flip</button>
@@ -71,7 +81,7 @@ export function TrapBoard({ fen, orientation: side, lastMove, arrows = [], marke
           <input type="checkbox" aria-label="Show evaluation" checked={showEval} onChange={(e) => setShowEval(e.target.checked)} />Evaluation
         </label>
       </div>
-      {showEval && <TrainingEval fen={fen} />}
+      {showEval && <TrainingEvalLine fen={fen} result={evaluation} />}
     </div>
   )
 }
