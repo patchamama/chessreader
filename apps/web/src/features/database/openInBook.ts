@@ -4,11 +4,17 @@ import { EXTERNAL_BOOK_ID } from '../../shared/externalBook/externalBookStore'
 import { loadRepoBookChapters, openRepoGame, type RepoBook } from '../errors/repoBooks'
 import { saveBoardMemory } from '../library/store/boardMemory'
 import { saveProgress } from '../library/store/readingStore'
+import { markVisited } from '../../shared/visited/visitedStore'
 
 /** Where a database game is in its book: chapter (1-based, one per form feed of the text) and index among the chapter's recognised games. */
 export interface BookPlace { chapter: number; gameIndex: number | null }
 
 const sameTitle = (a: string, b: string) => a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase()
+/** The library title adds a subtitle to the resources title ("Mis geniales predecesores I. De Steinitz a Alekhine"). */
+const withSubtitle = (library: string, title: string) => {
+  const l = library.trim().toLocaleLowerCase(), t = title.trim().toLocaleLowerCase()
+  return l.startsWith(t) && /^\s*[.:,–—-]/.test(l.slice(t.length))
+}
 
 /**
  * Open the book of a database game at that game, and return the reader's
@@ -21,9 +27,10 @@ export async function openGameInBook(book: RepoBook, place: BookPlace): Promise<
   const gameIndex = place.gameIndex ?? 0
   if (hasServerSession()) {
     const library = await httpClient<{ id: number; title: string }[]>('/api/library/books').catch(() => [])
-    const match = library.find((b) => sameTitle(b.title, book.title))
+    const match = library.find((b) => sameTitle(b.title, book.title)) ?? library.find((b) => withSubtitle(b.title, book.title))
     if (match) {
       saveProgress(match.id, place.chapter)
+      markVisited('serverBook', match.id)
       saveBoardMemory(match.id, { chapter: place.chapter, gameIndex, nodeId: null, annotations: {} })
       return `/read/${match.id}`
     }

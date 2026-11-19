@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useBooks } from '../api/libraryApi'
@@ -11,6 +11,10 @@ import { resourcesConfigured } from '../commentdb/commentLookup'
 import { loadBooks, type DbBook } from '../../database/resources'
 import { openRepoBook } from '../../errors/repoBooks'
 import { withBusy } from '../../../shared/layout/busyStore'
+import { markVisited, useVisitedCheck } from '../../../shared/visited/visitedStore'
+import { VisitedMark } from '../../../shared/visited/VisitedMark'
+
+const visitedCard = 'rounded-lg ring-2 ring-violet-300'
 
 export default function LibraryGrid() {
   const demo = isDemoHost()
@@ -19,6 +23,7 @@ export default function LibraryGrid() {
   const set = useSettingsStore((s) => s.set)
   // In the demo every book is an example: shown unless the reader closed it.
   const shown = demo ? books?.filter((b) => !hidden.includes(b.id)) : books
+  const visited = useVisitedCheck()
 
   return (
     <div>
@@ -36,9 +41,19 @@ export default function LibraryGrid() {
       )}
       {!isLoading && shown && shown.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 p-4">
-          {shown.map((book) => (
-            <BookCard key={book.id} book={book} onHide={demo ? () => set({ hiddenExamples: [...hidden, book.id] }) : undefined} />
-          ))}
+          {shown.map((book) => {
+            const seen = visited('serverBook', book.id)
+            // A click on a link to the reader inside the card records the book as opened (S9).
+            const record = (e: MouseEvent) => {
+              if ((e.target as HTMLElement).closest?.(`a[href$="/read/${book.id}"]`)) markVisited('serverBook', book.id)
+            }
+            return (
+              <div key={book.id} data-book-card="" {...(seen ? { 'data-visited': '' } : {})} className={`relative ${seen ? visitedCard : ''}`} onClickCapture={record}>
+                {seen && <span className="pointer-events-none absolute left-2 top-2 z-10"><VisitedMark /></span>}
+                <BookCard book={book} onHide={demo ? () => set({ hiddenExamples: [...hidden, book.id] }) : undefined} />
+              </div>
+            )
+          })}
         </div>
       )}
       {demo && resourcesConfigured() && <RepoBooks />}
@@ -52,7 +67,9 @@ function RepoBooks() {
   const { data, error } = useQuery<DbBook[]>({ queryKey: ['resources', 'books'], queryFn: loadBooks })
   const [opening, setOpening] = useState<string | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
+  const visited = useVisitedCheck()
   const read = (b: DbBook) => {
+    markVisited('repoBook', b.id)
     setOpening(b.id)
     setFailed(null)
     withBusy(`Opening ${b.title}…`, () => openRepoBook(b)).then(() => navigate(`/read/${EXTERNAL_BOOK_ID}`), (e: Error) => setFailed(`${b.title}: ${e.message}`)).finally(() => setOpening(null))
@@ -64,7 +81,8 @@ function RepoBooks() {
       {failed && <p role="alert" className="text-sm text-red-600">{failed}</p>}
       <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {(data ?? []).map((b) => (
-          <div key={b.id} className="border rounded-lg p-4 flex flex-col gap-2 bg-white shadow-sm">
+          <div key={b.id} data-book-card="" {...(visited('repoBook', b.id) ? { 'data-visited': '' } : {})} className={`relative border rounded-lg p-4 flex flex-col gap-2 shadow-sm ${visited('repoBook', b.id) ? 'border-violet-300 bg-violet-50' : 'bg-white'}`}>
+            {visited('repoBook', b.id) && <span className="absolute right-2 top-2"><VisitedMark /></span>}
             {b.thumb && <img src={b.thumb} alt={`Cover of ${b.title}`} className="mb-1 h-44 w-full rounded-md object-contain bg-slate-100" />}
             <h3 className="font-semibold leading-snug">{b.title}</h3>
             {b.author && <p className="text-sm text-gray-600">{b.author}</p>}

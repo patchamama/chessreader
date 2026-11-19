@@ -7,6 +7,7 @@ import * as inBook from './openInBook'
 import * as busy from '../../shared/layout/busyStore'
 import { useExternalBookStore } from '../../shared/externalBook/externalBookStore'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
+import { isVisited, resetVisited } from '../../shared/visited/visitedStore'
 
 beforeEach(() => {
   useSettingsStore.setState({ language: 'en', commentDbUrl: 'https://api.github.com/repos/me/chessreader-resources/contents', commentDbToken: 'ghp_test' })
@@ -229,5 +230,114 @@ describe('Database: where each game comes from, the commented game and the book 
     await screen.findByText('Reader open')
     expect(spy).toHaveBeenCalledWith('Opening the book', expect.any(Function))
     expect(open).toHaveBeenCalledWith(expect.objectContaining({ id: 'k3', title: 'Mis geniales predecesores III' }), { chapter: 4, gameIndex: 2 })
+  })
+})
+
+describe('Database: reference, source and opened marks of the games (reader-analysis S6, S8, S9)', () => {
+  const tal = { id: 'k3-7', white: 'M. Tal', black: 'M. Botvinnik', year: 1960, opening: 'French Defence', result: '½-½', moves: 31, first: 'e4', chapter: 2, gameIndex: 1 }
+  beforeEach(() => {
+    try { localStorage.clear() } catch { /* no storage */ }
+    resetVisited()
+    vi.spyOn(res, 'loadGames').mockResolvedValue([
+      { ...tal, book: 'k3' },
+      { id: 'lichess-AbCd1234', book: 'lichess', source: 'lichess', white: 'M. Carlsen', black: 'H. Nakamura', year: 2020, opening: 'Sicilian Defence', result: '½-½', moves: 30, first: 'e4' },
+    ])
+    vi.spyOn(res, 'loadBookGames').mockImplementation(async (id) => (id === 'lichess'
+      ? [{ id: 'lichess-AbCd1234', white: 'M. Carlsen', black: 'H. Nakamura', year: 2020, opening: 'Sicilian Defence', result: '½-½', moves: 30, first: 'e4', pgn: '1. e4 c5 ½-½' }]
+      : [{ ...tal, pgn: '1. e4 e6 ½-½', commented: '1. e4 {Tal.} 1... e6 ½-½' }]))
+  })
+  const page = (path = '/') => render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/" element={<DatabasePage />} />
+        <Route path="/database" element={<DatabasePage />} />
+        <Route path="/read/:id" element={<p>Reader open</p>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const openRow = async (players: RegExp, name: string) => {
+    fireEvent.click(screen.getByRole('tab', { name: 'Search' }))
+    await screen.findByText(players)
+    fireEvent.click(screen.getByRole('button', { name }))
+    await screen.findByText('Reader open')
+  }
+
+  it('S6: an opened book game is headed by the game, its book and its database id', async () => {
+    page()
+    await screen.findByText('Mis geniales predecesores III')
+    await openRow(/M\. Tal – M\. Botvinnik/, 'Open M. Tal – M. Botvinnik')
+    const { title, chapters } = useExternalBookStore.getState()
+    // The reader's top bar shows "<book title> · <chapter title>".
+    expect(`${title} · ${chapters[0].title}`).toBe('M. Tal – M. Botvinnik (1960) · Mis geniales predecesores III · #k3-7')
+    expect(chapters[0].html).toContain('M. Tal – M. Botvinnik (1960) · Mis geniales predecesores III</h2>')
+    expect(chapters[0].html).toMatch(/Database id: <code[^>]*>k3-7<\/code>/)
+    // Still the book's remarks.
+    expect(chapters[0].html).toContain('{Tal.}')
+  })
+
+  it('S8: at the end, the author and book with a link that opens the game in the book', async () => {
+    const spy = vi.spyOn(inBook, 'openGameInBook').mockResolvedValue('/read/-1')
+    page()
+    await screen.findByText('Mis geniales predecesores III')
+    await openRow(/M\. Tal – M\. Botvinnik/, 'Open M. Tal – M. Botvinnik')
+    const html = useExternalBookStore.getState().chapters[0].html
+    expect(html).toContain('Source: Garry Kasparov, <cite>Mis geniales predecesores III</cite>')
+    expect(html.indexOf('{Tal.}')).toBeLessThan(html.indexOf('class="game-source"'))
+    cleanup()
+    // The reader shows that html; the database (kept mounted) opens the book on a click of its link.
+    page()
+    await screen.findByText('Mis geniales predecesores III')
+    const host = document.createElement('div')
+    host.innerHTML = html
+    document.body.appendChild(host)
+    fireEvent.click(host.querySelector('a.open-game-in-book')!)
+    await screen.findByText('Reader open')
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ id: 'k3' }), { chapter: 2, gameIndex: 1 })
+    host.remove()
+  })
+
+  it('S8: the link also works after a refresh (the database route opens the book)', async () => {
+    const spy = vi.spyOn(inBook, 'openGameInBook').mockResolvedValue('/read/-1')
+    page('/database?openBook=k3&chapter=2&game=1')
+    await screen.findByText('Reader open')
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ id: 'k3' }), { chapter: 2, gameIndex: 1 })
+  })
+
+  it('S8: a Lichess game ends with Lichess and a link to the game there', async () => {
+    page()
+    await screen.findByText('Mis geniales predecesores III')
+    await openRow(/M\. Carlsen – H\. Nakamura/, 'Open M. Carlsen – H. Nakamura')
+    const { chapters } = useExternalBookStore.getState()
+    expect(chapters[0].title).toBe('Lichess · #lichess-AbCd1234')
+    expect(chapters[0].html).toContain('Source: Lichess')
+    expect(chapters[0].html).toContain('href="https://lichess.org/AbCd1234"')
+  })
+
+  it('S9: a game already opened is marked in the lists, and so is a book opened at a game', async () => {
+    vi.spyOn(inBook, 'openGameInBook').mockResolvedValue('/read/-1')
+    page()
+    await screen.findByText('Mis geniales predecesores III')
+    fireEvent.click(screen.getByRole('tab', { name: 'Search' }))
+    const row = (await screen.findByText(/M\. Tal – M\. Botvinnik/)).closest('li')!
+    expect(row).not.toHaveAttribute('data-visited')
+    expect(screen.queryByLabelText('Already opened')).toBeNull()
+    await openRow(/M\. Tal – M\. Botvinnik/, 'Open M. Tal – M. Botvinnik')
+    expect(isVisited('game', 'k3-7')).toBe(true)
+    cleanup()
+    page()
+    await screen.findByText('Mis geniales predecesores III')
+    fireEvent.click(screen.getByRole('tab', { name: 'Search' }))
+    const opened = (await screen.findByText(/M\. Tal – M\. Botvinnik/)).closest('li')!
+    expect(opened).toHaveAttribute('data-visited')
+    expect(opened.querySelector('[aria-label="Already opened"]')).not.toBeNull()
+    const other = screen.getByText(/M\. Carlsen – H\. Nakamura/).closest('li')!
+    expect(other).not.toHaveAttribute('data-visited')
+    // Open in the book marks the book: its card shows it.
+    fireEvent.click(screen.getByRole('button', { name: 'Open M. Tal – M. Botvinnik in the book' }))
+    await screen.findByText('Reader open')
+    cleanup()
+    page()
+    const card = (await screen.findByText('Mis geniales predecesores III')).closest('li')!
+    expect(card).toHaveAttribute('data-visited')
   })
 })

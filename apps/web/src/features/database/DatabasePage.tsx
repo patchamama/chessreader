@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../shared/externalBook/externalBookStore'
 import { saveProgress } from '../library/store/readingStore'
@@ -12,6 +12,9 @@ import {
 } from './resources'
 import { gameFacts } from './gameFacts'
 import { openGameInBook } from './openInBook'
+import { gameName, withGameReference } from './gameReference'
+import { markVisited, useVisitedCheck } from '../../shared/visited/visitedStore'
+import { VisitedMark } from '../../shared/visited/VisitedMark'
 
 type Tab = 'books' | 'search' | 'openings' | 'players' | 'stats'
 
@@ -150,6 +153,8 @@ export default function DatabasePage() {
   const [statFilter, setStatFilter] = useState<StatFilter | null>(null)
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'rank', dir: 'asc' })
   const available = hasResources()
+  const visited = useVisitedCheck()
+  const [params, setParams] = useSearchParams()
 
   useEffect(() => {
     if (!available) return
@@ -163,7 +168,9 @@ export default function DatabasePage() {
     const list = book && book.book.id === (bookId ?? g.book) ? book.games : await loadBookGames(bookId ?? g.book!)
     const full = list.find((x) => x.id === g.id)
     if (!full) return
-    const title = `${full.white ?? '?'} – ${full.black ?? '?'}${full.year ? ` (${full.year})` : ''}`
+    const from = bookId ?? g.book
+    const lichess = full.source === 'lichess' || from === 'lichess'
+    const source = lichess || !from ? null : (booksById.get(from) ?? (await loadBooks().catch(() => [] as DbBook[])).find((b) => b.id === from) ?? null)
     const tags: [string, string | number | null | undefined][] = [['Event', full.event], ['Site', full.place], ['Date', full.date?.replace(/-/g, '.')], ['White', full.white ?? '?'], ['Black', full.black ?? '?'],
       ['Result', full.result], ['WhiteElo', full.whiteElo], ['BlackElo', full.blackElo], ['Termination', full.termination],
       // A fragment of the book starts from a position.
@@ -171,8 +178,11 @@ export default function DatabasePage() {
     const pgn = `${tags.filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => `[${k} "${String(v).replace(/"/g, "'")}"]`).join('\n')}\n\n${full.commented || full.pgn}`
     const { chapters } = pgnToChapters(pgn, { fromPosition: true })
     if (!chapters.length) return
+    // Headed by the game, its book and its database id (S6); its source at the end (S8).
+    chapters[0] = withGameReference(chapters[0], full, { book: source, lichess, ...(from ? { bookId: from } : {}) })
     saveProgress(EXTERNAL_BOOK_ID, 1)
-    useExternalBookStore.getState().open(title, chapters)
+    useExternalBookStore.getState().open(gameName(full), chapters)
+    markVisited('game', g.id)
     navigate(`/read/${EXTERNAL_BOOK_ID}`)
   })
 
@@ -184,12 +194,43 @@ export default function DatabasePage() {
   }
   /** The book of a game, opened at that game (its chapter and its place among the chapter's games). */
   const openInBook = (b: DbBook, chapter: number, gameIndex: number | null) => withBusy('Opening the book', async () => {
+    markVisited('repoBook', b.id)
     try {
       navigate(await openGameInBook(b, { chapter, gameIndex }))
     } catch (e) {
       setError(`${b.title}: ${(e as Error).message}`)
     }
   })
+
+  // "Open this game in the book" at the end of an opened game (S8): the reader's
+  // text links here; while this page is kept mounted the click opens the book at once.
+  const openLinked = useRef(openInBook)
+  openLinked.current = openInBook
+  const linkedBook = async (id: string) => booksById.get(id) ?? (await loadBooks()).find((b) => b.id === id)
+  const linkedRef = useRef(linkedBook)
+  linkedRef.current = linkedBook
+  useEffect(() => {
+    if (!available) return
+    const onClick = (e: MouseEvent) => {
+      const link = (e.target as HTMLElement | null)?.closest?.('a.open-game-in-book') as HTMLElement | null
+      if (!link?.dataset.book || !link.dataset.chapter) return
+      e.preventDefault()
+      const { book: id, chapter, game } = link.dataset
+      void linkedRef.current(id).then((b) => b && openLinked.current(b, Number(chapter), game ? Number(game) : null))
+    }
+    document.addEventListener('click', onClick)
+    return () => document.removeEventListener('click', onClick)
+  }, [available])
+  // The same link after a refresh of the reader: the database route opens the book.
+  const linkedParam = params.get('openBook')
+  useEffect(() => {
+    if (!available || !linkedParam) return
+    const chapter = Number(params.get('chapter'))
+    const game = params.get('game')
+    setParams({}, { replace: true })
+    if (!chapter) return
+    void linkedRef.current(linkedParam).then((b) => b && openLinked.current(b, chapter, game ? Number(game) : null), (e: Error) => setError(e.message))
+  }, [available, linkedParam, params, setParams])
 
   const found = useMemo(() => games.filter((g) =>
     (!statFilter || matchesStat(g, statFilter))
@@ -238,11 +279,15 @@ export default function DatabasePage() {
     const lichess = g.source === 'lichess' || from === 'lichess'
     const source = lichess || !from ? null : booksById.get(from) ?? null
     const players = `${g.white} – ${g.black}`
+    const seen = visited('game', g.id)
     return (
-      <li key={g.id} className={row}>
-        <span>
+      <li key={g.id} className={`${row} ${seen ? 'border-violet-200 bg-violet-50 text-violet-900' : ''}`} {...(seen ? { 'data-visited': '' } : {})}>
+        <span className="flex items-start gap-1">
+          {seen && <VisitedMark />}
+          <span>
           <strong>{g.white ?? '?'} – {g.black ?? '?'}</strong> · {g.year ?? '—'} · {g.opening || '—'}{gameFacts(g).map((f) => ` · ${f}`).join('')}
           {' · '}{sourceOf(from, lichess, g)}
+          </span>
         </span>
         <span className="flex shrink-0 gap-1">
           <button className="rounded border border-slate-300 px-2 py-0.5" aria-label={`Open ${players}`} onClick={() => void open(g, bookId)}>Open</button>
@@ -278,7 +323,8 @@ export default function DatabasePage() {
         {tab === 'books' && !book && (
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Books">
             {(books ?? []).map((b) => (
-              <li key={b.id} className="flex gap-3 rounded-lg border border-slate-200 bg-white p-3">
+              <li key={b.id} className={`relative flex gap-3 rounded-lg border p-3 ${visited('repoBook', b.id) ? 'border-violet-300 bg-violet-50' : 'border-slate-200 bg-white'}`} {...(visited('repoBook', b.id) ? { 'data-visited': '' } : {})}>
+                {visited('repoBook', b.id) && <span className="absolute right-2 top-2"><VisitedMark /></span>}
                 {b.thumb ? <img src={b.thumb} alt="" className="h-32 w-24 shrink-0 rounded bg-slate-100 object-contain shadow" /> : <div className="h-32 w-24 shrink-0 rounded bg-slate-200" />}
                 <div className="min-w-0 text-sm">
                   <p className="font-semibold leading-tight">{b.title}</p>

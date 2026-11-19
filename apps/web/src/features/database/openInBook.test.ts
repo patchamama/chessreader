@@ -17,6 +17,7 @@ vi.mock('../library/store/boardMemory', () => ({ saveBoardMemory: env.saveBoardM
 import { openGameInBook } from './openInBook'
 import { useAuthStore } from '../auth/store/authStore'
 import { EXTERNAL_BOOK_ID } from '../../shared/externalBook/externalBookStore'
+import { isVisited, resetVisited } from '../../shared/visited/visitedStore'
 
 const book = { id: 'mis-geniales-predecesores-iii', title: 'Mis geniales predecesores III', author: 'Garry Kasparov', lang: 'es' }
 
@@ -51,5 +52,24 @@ describe('openGameInBook (S2: open the book at the chapter and game of a databas
     env.httpClient.mockResolvedValue([{ id: 3, title: 'Otro libro' }])
     expect(await openGameInBook(book, { chapter: 5, gameIndex: null })).toBe(`/read/${EXTERNAL_BOOK_ID}`)
     expect(env.openRepoGame).toHaveBeenLastCalledWith(book, chapters, { chapter: 5, gameIndex: 0 })
+  })
+
+  it('S9: the library book opened at the game is marked as opened', async () => {
+    resetVisited()
+    useAuthStore.setState({ token: 't' })
+    env.httpClient.mockResolvedValue([{ id: 7, title: 'Mis geniales predecesores III' }])
+    await openGameInBook(book, { chapter: 4, gameIndex: 2 })
+    expect(isVisited('serverBook', 7)).toBe(true)
+  })
+
+  it('S8: a library book whose title adds a subtitle to the resources title is the same book', async () => {
+    useAuthStore.setState({ token: 't' })
+    const first = { ...book, id: 'mgp-i', title: 'Mis geniales predecesores I' }
+    env.httpClient.mockResolvedValue([
+      { id: 7, title: 'Mis geniales predecesores II. De Euwe A Tal' },
+      { id: 6, title: 'Mis geniales predecesores I. De Steinitz a Alekhine' },
+    ])
+    expect(await openGameInBook(first, { chapter: 4, gameIndex: 6 })).toBe('/read/6')
+    expect(env.openRepoGame).not.toHaveBeenCalled()
   })
 })
