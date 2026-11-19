@@ -1,6 +1,6 @@
 import { useBusyStore } from './busyStore'
 
-/** A small spinner in the corner while a long task runs (see withBusy). */
+/** A small spinner in the corner while a long task runs (see withBusy). The app shows the progress in the status footer instead (S5); kept for pages that render it alone. */
 export function BusyOverlay() {
   const task = useBusyStore((s) => s.tasks[s.tasks.length - 1])
   if (!task) return null

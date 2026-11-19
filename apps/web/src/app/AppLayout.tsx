@@ -7,7 +7,6 @@ import { isLocalhostHost } from '../shared/env/devMode'
 import { useSettingsStore, FONT_FAMILIES } from '../shared/settings/settingsStore'
 import SettingsPanel from '../shared/settings/SettingsPanel'
 import { FOOTER_HEIGHT, StatusFooter } from '../shared/layout/StatusFooter'
-import { BusyOverlay } from '../shared/layout/BusyOverlay'
 import { AnalysisBoardsPanel } from '../features/library/analysis/AnalysisBoardsPanel'
 import { pageWidthClass } from '../shared/layout/pageWidth'
 import { NotesPanel } from '../shared/notes/NotesPanel'
@@ -157,7 +156,6 @@ export default function AppLayout() {
       </main>
 
       {!onAnalysis && <AnalysisBoardsPanel />}
-      <BusyOverlay />
       <StatusFooter />
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
       {showNotes && <NotesPanel onClose={() => setShowNotes(false)} />}

@@ -97,6 +97,37 @@ class Book {
 }
 
 /**
+ * The main-line positions the remarks of a quote may speak of ("5…Nc6" → "5b"),
+ * kept on the quote so a remark picked again later reads its moves against the
+ * main line too (S7). Null when none is quoted or known.
+ */
+function mainLineFor(texts: string[], before?: MainLinePositions): Record<string, string> | null {
+  if (!before?.size) return null
+  const out: Record<string, string> = {}
+  for (const text of texts) {
+    for (const [, n] of text.matchAll(/(\d+)\s*(?:\.\.\.|…|\.)/gu)) {
+      for (const key of [`${n}w`, `${n}b`]) {
+        const fen = before.get(key)
+        if (fen) out[key] = fen
+      }
+    }
+  }
+  return Object.keys(out).length ? out : null
+}
+
+/** The main-line positions kept on a quote by the commentary (see mainLineFor). */
+export function readCommentMainLine(json: string | null): MainLinePositions | undefined {
+  if (!json) return undefined
+  try {
+    const parsed = JSON.parse(json) as unknown
+    if (!parsed || typeof parsed !== 'object') return undefined
+    return new Map(Object.entries(parsed as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === 'string'))
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * A diagram mark written by the commentary (`[Diagram fen="…" eval="…" line="…" alt="…"]`)
  * or a plain paragraph. The engine's lines under a diagram are marked so the
  * recogniser does not read them as moves of the game.
@@ -106,8 +137,10 @@ function paragraph(p: string, langs: PieceLang[], before?: MainLinePositions): s
   const quote = parseCommentMark(p)
   if (quote) {
     // Every remark of the position is kept, so the reader can pick another one (S4).
+    const mainLine = quote.alternatives ? mainLineFor(quote.alternatives.map((a) => a.text), before) : null
     const alternatives = quote.alternatives
       ? ` data-comment-alternatives="${attr(JSON.stringify(quote.alternatives))}"${quote.fen ? ` data-comment-fen="${attr(quote.fen)}"` : ''}`
+        + (mainLine ? ` data-comment-mainline="${attr(JSON.stringify(mainLine))}"` : '')
       : ''
     return `<blockquote class="human-comment" data-no-recognition${alternatives}>${humanCommentInner(quote, before)}</blockquote>`
   }

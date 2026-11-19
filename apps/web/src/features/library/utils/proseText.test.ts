@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { recognizeGames } from '@chess-ebook/chess-shared'
+import { recognizeGames, unanchoredMoves } from '@chess-ebook/chess-shared'
 import { extractProseText, htmlToProseText, planMoveTargets, piecesByTextNode } from './proseText'
 
 const BYRNE_HTML = [
@@ -128,5 +128,30 @@ describe('nodeBeforeOffset', () => {
     const node = nodeBeforeOffset(game.tree, at)!
     expect(node.san).toBe('Nc6')
     expect(nodeBeforeOffset(game.tree, 0)).toBeNull()
+  })
+})
+
+describe('moves of a fragment without a position are painted as board marks (reader-analysis-round S3)', () => {
+  const text = 'Las blancas juegan ahora.\n\uFFFC\n21...♖xe3 22.♖xe3 ♔f8 y ganan.'
+
+  it('each unanchored move is an iso target of no game, covering its own token', () => {
+    const games = recognizeGames(text)
+    const targets = planMoveTargets(text, games, unanchoredMoves(text, games))
+    expect(targets.map((t) => [t.kind, t.gameIndex, text.slice(t.start, t.end)])).toEqual([
+      ['iso', -1, '♖xe3'], ['iso', -1, '♖xe3'], ['iso', -1, '♔f8'],
+    ])
+  })
+
+  it('without the unanchored list nothing is painted there (the previous behaviour)', () => {
+    expect(planMoveTargets(text, recognizeGames(text))).toEqual([])
+  })
+
+  it('an unanchored mark never overlaps a game move', () => {
+    const html = '<p>1. e4 e5 2. Nf3 Nc6</p><p>Diagrama</p><p>21...♖xe3 22.♖xe3</p>'
+    const t = htmlToProseText(html)
+    const games = recognizeGames(t)
+    const targets = planMoveTargets(t, games, unanchoredMoves(t, games))
+    expect(targets.filter((x) => x.kind === 'node').map((x) => t.slice(x.start, x.end))).toEqual(['1. e4', 'e5', '2. Nf3', 'Nc6'])
+    for (let i = 1; i < targets.length; i++) expect(targets[i].start).toBeGreaterThanOrEqual(targets[i - 1].end)
   })
 })

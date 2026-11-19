@@ -5,7 +5,7 @@ import { formatChapterTitle, prepareChapterHtml } from '../utils/epubContent'
 import { useParams } from 'react-router-dom'
 import { useBookTitle, useChapter, useTouchBook, type Book } from '../api/libraryApi'
 import { useQueryClient } from '@tanstack/react-query'
-import { numberLine, recognizeGames } from '@chess-ebook/chess-shared'
+import { numberLine, recognizeGames, unanchoredMoves } from '@chess-ebook/chess-shared'
 import type { GameTree, GameNode, IsolatedMove } from '@chess-ebook/chess-shared'
 import { MoveTooltipCard } from './MoveTooltipCard'
 import { loadBoardMemory, saveBoardMemory } from '../store/boardMemory'
@@ -17,7 +17,7 @@ import { rewriteKey, useGameRewriteStore } from '../store/gameRewriteStore'
 import { useReaderViewStore } from '../store/readerViewStore'
 import { applyGameRewrites, pickBookComments, unwrapGameContainers, wrapGameContainers } from '../utils/gameRewrite'
 import { recommentGame } from '../review/recommentGame'
-import { nextPaint, withBusy } from '../../../shared/layout/busyStore'
+import { nextPaint, withBusy, withProgress } from '../../../shared/layout/busyStore'
 import { captureOffset, captureTopAnchor, restoreOffset, restoreTopAnchor, type ScrollAnchor } from '../../../shared/layout/scrollAnchor'
 import { flashElement } from '../../../shared/layout/flash'
 import { BookCommentsToggle, StudyTools } from './ReaderToolbar'
@@ -56,6 +56,10 @@ import { playLine } from '../../../shared/chess/playLine'
 import { formatMoveSpans } from '../../../shared/chess/notation'
 import { openAnalysisBoard } from '../analysis/analysisBoards'
 import { CommentSourceMenu, type CommentSourceTarget } from './CommentSourceMenu'
+import { EvalColoringButtons } from './EvalColoringButtons'
+import { qualitiesOf, useEvalColoringStore } from '../store/evalColoringStore'
+import { paintMoveQualities } from '../utils/moveQualityPaint'
+import { loadChapterGames } from '../review/chapterGames'
 
 // The reading pane's innerHTML is set ONCE per chapter and then mutated
 // imperatively (SAN spans, highlight classes) by effects. If React re-rendered
@@ -113,6 +117,22 @@ interface MoveTooltip {
 }
 
 /** The board marks of a square, line or plan named in the text ("a2-g8", "d4-d5", "e4"). */
+/**
+ * The "game" of a move written in a fragment no game holds (no position to start
+ * from, S3): no moves, so a mark of it only lights its square on the board.
+ */
+const NO_GAME_TREE = { startFen: '', nodes: new Map(), mainline: [], variations: new Map(), isolatedMoves: [], errors: [] } as unknown as GameTree
+const EMPTY_BOARD_FEN = '8/8/8/8/8/8/8/8 w - - 0 1'
+
+/** The position the study board shows now (a fragment without a position is read against it). */
+function shownBoardFen(): string {
+  const s = useStudyBoardStore.getState()
+  if (s.playFen) return s.playFen
+  const tree = s.activeGame
+  if (!tree) return EMPTY_BOARD_FEN
+  return (s.currentNodeId ? tree.nodes.get(s.currentNodeId)?.fen : undefined) ?? tree.startFen ?? EMPTY_BOARD_FEN
+}
+
 function mentionMark(iso: IsolatedMove) {
   const pair = dashedPair(iso.rawSan ?? '')
   const line = pair ? squareLine(pair.from, pair.to) : null
@@ -270,9 +290,11 @@ export default function BookReader() {
   // then lights the square ("a2-g8": the whole diagonal; "d4-d5": an arrow).
   // Hovering only shows it on a thumbnail (S7).
   const showMention = (entry: { iso: IsolatedMove; tree: GameTree }) => {
+    const mark = mentionMark(entry.iso)
+    // A move of a fragment no game holds: its square on the board as it is (S3).
+    if (entry.tree === NO_GAME_TREE) { setIsolatedHighlight(mark); return }
     const at = nodeBeforeOffset(entry.tree, entry.iso.charStart ?? 0)
     const board = useStudyBoardStore.getState()
-    const mark = mentionMark(entry.iso)
     board.commitPreview()
     if (board.activeGame !== entry.tree || board.currentNodeId !== (at?.id ?? null) || board.playFen) {
       loadStudyPosition(entry.tree, at ? at.id : null, !!at && !entry.tree.mainline.includes(at.id))
@@ -355,8 +377,10 @@ export default function BookReader() {
     const chapterGames = games
     const text = plainText
     markGameRefresh(gameIndex)
-    void withBusy('Commenting the game again', async () => {
-      const body = await recommentGame(chapterGames, gameIndex, text)
+    // The footer bar moves with each position the engine analyses (S5); it can be cancelled.
+    void withProgress('Commenting the game again', async (report, signal) => {
+      await nextPaint()
+      const body = await recommentGame(chapterGames, gameIndex, text, undefined, { onProgress: report, signal })
       if (!body.trim()) { pendingRefresh.current = null; return }
       // The layout chosen before is given back on restore; the new text shows as the panel writes it.
       const layoutBefore = loadGameLayouts(book, chapter)[gameIndex]
@@ -365,7 +389,7 @@ export default function BookReader() {
       resetBoard()
       setLayoutVersion((v) => v + 1)
       await nextPaint()
-    }).catch((e: unknown) => {
+    }, { cancellable: true }).catch((e: unknown) => {
       pendingRefresh.current = null
       console.warn('[BookReader] could not comment the game again', e)
     })
@@ -549,10 +573,12 @@ export default function BookReader() {
       })
     }
 
+    // Positional wrapping: each recognised node/isolated move paints exactly
+    // the DOM characters it was parsed from — no SAN/regex re-matching.
+    const prose = extractProseText(container)
+    // Moves of fragments no game holds (no position to start from) are marks of no game (S3).
+    const unanchored = unanchoredMoves(prose.text, games)
     if (games.length > 0) {
-      // Positional wrapping: each recognised node/isolated move paints exactly
-      // the DOM characters it was parsed from — no SAN/regex re-matching.
-      const prose = extractProseText(container)
       if (prose.text !== plainText) {
         console.warn('[BookReader] prose text mismatch; move positions may be off')
       }
@@ -576,7 +602,9 @@ export default function BookReader() {
       })
       // Each game in its own container, from its start marker to its end marker (S6).
       wrapGameContainers(container)
-      const targets = planMoveTargets(prose.text, games)
+    }
+    if (games.length > 0 || unanchored.length > 0) {
+      const targets = planMoveTargets(prose.text, games, unanchored)
       const pieces = piecesByTextNode(prose.map, targets)
 
       let isoSeq = 0
@@ -600,7 +628,7 @@ export default function BookReader() {
             if (!isoKey) {
               isoKey = `iso-${isoSeq++}`
               isoKeys.set(t, isoKey)
-              isoRegistry.current.set(isoKey, { iso: t.iso, tree: games[t.gameIndex].tree })
+              isoRegistry.current.set(isoKey, { iso: t.iso, tree: t.gameIndex >= 0 ? games[t.gameIndex].tree : NO_GAME_TREE })
             }
             span.setAttribute('data-iso-square', t.iso.square)
             span.setAttribute('data-iso-key', isoKey)
@@ -646,6 +674,23 @@ export default function BookReader() {
     const container = contentRef.current
     if (container) formatMoveSpans(container, notationLang, notationStyle)
   }, [shownHtml, games, plainText, gameSummaries, currentChapter, id, bookConfig.moveLineIndent.zeroIndent, notationLang, notationStyle])
+
+  // Every move coloured by its evaluation, when switched on in the top bar (S11).
+  const evalColoring = useEvalColoringStore((s) => s.enabled)
+  const evalEntries = useEvalColoringStore((s) => s.entries)
+  useEffect(() => {
+    const container = contentRef.current
+    if (!container) return
+    paintMoveQualities(container, evalColoring
+      ? (gameIndex) => (games[gameIndex] ? qualitiesOf(evalEntries, id, currentChapter, gameIndex, games[gameIndex].tree) : null)
+      : null)
+  }, [shownHtml, games, plainText, gameSummaries, currentChapter, id, bookConfig.moveLineIndent.zeroIndent, evalColoring, evalEntries])
+  const bookChapters = useMemo(
+    () => (toc.length > 0 ? [...new Set(toc.map((e) => e.order))].sort((a, b) => a - b) : [currentChapter]),
+    [toc, currentChapter],
+  )
+  const loadBookChapterGames = (chapter: number) =>
+    loadChapterGames(id, chapter, { bookTitle, titleSeparator, algorithm: recognitionAlgorithm })
 
   // A game just rewritten in place (S6): back where it was on screen, then flashed.
   // Again after a paint, once the diagrams around it have taken their size.
@@ -844,8 +889,9 @@ export default function BookReader() {
         const at = nodeBeforeOffset(entry.tree, entry.iso.charStart ?? 0)
         const mark = mentionMark(entry.iso)
         const rect = span.getBoundingClientRect()
+        const fen = entry.tree === NO_GAME_TREE ? shownBoardFen() : at ? at.fen : entry.tree.startFen
         setTooltipRef.current({
-          top: rect.bottom + 6, left: rect.left, fen: at ? at.fen : entry.tree.startFen,
+          top: rect.bottom + 6, left: rect.left, fen,
           lastMove: null, highlight: entry.iso.square, kind: 'square',
           ...(mark.line ? { line: mark.line } : {}), ...(mark.arrow ? { arrow: mark.arrow } : {}),
         })
@@ -1130,6 +1176,9 @@ export default function BookReader() {
         >
           <ChessboardIcon />
         </button>
+
+        {/* Moves coloured by their evaluation; every move of the whole book evaluated (S11). */}
+        <EvalColoringButtons book={id} chapter={currentChapter} games={games} chapters={bookChapters} loadChapterGames={loadBookChapterGames} />
 
         {/* Study tools: save a line to the trainer, guess the move, the trainer (S7). */}
         <StudyTools onOpen={() => setShowStudy(true)} />

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Lang } from '@chess-ebook/chess-shared'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
-import { useBusyStore, withBusy } from '../../../shared/layout/busyStore'
+import { relabelTask, withProgress } from '../../../shared/layout/busyStore'
 import { evaluateDiagram } from '../diagramEval/diagramEvalStore'
 import { diagramEvalText } from '../diagramEval/diagramEvalText'
 import {
@@ -52,8 +52,8 @@ const T: Record<Lang, Record<string, string>> = {
 }
 
 /**
- * Run `work` over every diagram with the busy spinner showing its progress
- * ("Regenerating diagrams 3/12"), collecting one file per diagram.
+ * Run `work` over every diagram with the status footer showing its progress
+ * ("Regenerating diagrams 3/12" and the bar), collecting one file per diagram.
  */
 async function eachWithProgress(
   label: string,
@@ -63,15 +63,15 @@ async function eachWithProgress(
   const total = diagrams.length
   let current = `${label} 0/${total}`
   const relabel = (next: string) => {
-    const prev = current
+    relabelTask(current, next)
     current = next
-    useBusyStore.setState((s) => ({ tasks: s.tasks.map((t) => (t.label === prev ? { ...t, label: next } : t)) }))
   }
-  return withBusy(current, async () => {
+  return withProgress(current, async (report) => {
     const files: DownloadFile[] = []
     for (let i = 0; i < total; i++) {
       relabel(`${label} ${i + 1}/${total}`)
       files.push(await work(diagrams[i]))
+      report(i + 1, total)
     }
     return files
   })

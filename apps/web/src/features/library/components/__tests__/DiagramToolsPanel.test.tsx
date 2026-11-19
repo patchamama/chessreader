@@ -83,13 +83,20 @@ describe('DiagramToolsPanel (S3)', () => {
   it('shows the busy spinner with its progress while it works', async () => {
     const host = textHost()
     const labels: string[] = []
-    const unsub = useBusyStore.subscribe((s) => s.tasks.forEach((t) => labels.push(t.label)))
+    const progress: number[] = []
+    const unsub = useBusyStore.subscribe((s) => s.tasks.forEach((t) => {
+      labels.push(t.label)
+      if (t.progress !== undefined) progress.push(t.progress)
+    }))
     render(<DiagramToolsPanel root={host} />)
     await userEvent.click(screen.getByRole('button', { name: 'Regenerate all diagrams and download' }))
     await waitFor(() => expect(mockDownload).toHaveBeenCalled())
     unsub()
     expect(labels).toContain('Regenerating diagrams 1/2')
     expect(labels).toContain('Regenerating diagrams 2/2')
+    // The footer bar moves with every diagram done (S5).
+    expect(progress).toContain(0.5)
+    expect(progress).toContain(1)
     expect(useBusyStore.getState().tasks).toEqual([])
   })
 

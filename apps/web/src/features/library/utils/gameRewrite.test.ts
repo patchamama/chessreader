@@ -1,3 +1,4 @@
+import { Chess } from 'chess.js'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { recognizeGames } from '@chess-ebook/chess-shared'
 import { applyGameRewrites, gameLineRange, pickBookComments, unwrapGameContainers, wrapGameContainers } from './gameRewrite'
@@ -77,6 +78,32 @@ describe('pickBookComments (S4)', () => {
     expect(q.querySelector('footer')!.textContent).toContain('— B')
     expect(q.querySelector('a.comment-source')!.getAttribute('data-comment-game')).toBe('g')
     expect(q.getAttribute('data-comment-alternatives')).not.toBeNull()
+  })
+})
+
+describe('a remark picked again reads its moves against the main line (reader-analysis-round S7)', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('"5…Nc6" of another remark is played from the position before Black\'s 5th move', async () => {
+    const { textToChapters } = await import('./textToChapters')
+    const { commentAlternativesAttr } = await import('./diagramMark')
+    const c = new Chess()
+    for (const m of ['d4', 'd5', 'c4', 'e6', 'Nc3', 'c5', 'Nf3', 'Nf6', 'e3', 'Be7', 'Bd3', 'Nc6', 'O-O']) c.move(m)
+    const alternatives = [
+      { text: 'Una partida clásica.', source: 'A' },
+      { text: 'Staunton elude la Variante Simétrica, con 5…Nc6. 6', source: 'Kasparov, Mis geniales predecesores I', gameId: 'g7', ply: 13 },
+    ]
+    const text = [
+      'T',
+      '1. d4 d5 2. c4 e6 3. Cc3 c5 4. Cf3 Cf6 5. e3 Ae7 6. Ad3 Cc6 7. O-O',
+      `[Comment source="A" text="Una partida clásica." fen="${c.fen()}"${commentAlternativesAttr(alternatives)}]`,
+    ].join('\n')
+    const html = textToChapters(text).chapters[0].html
+    vi.spyOn(Math, 'random').mockReturnValue(0.9)
+    const out = pickBookComments(html, 1)
+    const quote = new DOMParser().parseFromString(out, 'text/html').querySelector('blockquote.human-comment')!
+    expect(quote.querySelector('p')!.textContent).toContain('5…Nc6')
+    expect(quote.querySelector('.chess-line')?.getAttribute('data-line-moves')).toBe('Nc6')
   })
 })
 

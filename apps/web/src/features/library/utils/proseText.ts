@@ -130,9 +130,11 @@ export type MoveTarget =
 /**
  * Every recognised token with a source position, in text order. The move
  * number written right before a move ("9." / "9...") is included in its range
- * so it is painted with the move, as before.
+ * so it is painted with the move, as before. `unanchored` are the moves of
+ * fragments no game holds (no position to start from, chess-shared
+ * `unanchoredMoves`): painted as board-only marks of no game (gameIndex -1).
  */
-export function planMoveTargets(text: string, games: RecognizedGame[]): MoveTarget[] {
+export function planMoveTargets(text: string, games: RecognizedGame[], unanchored: IsolatedMove[] = []): MoveTarget[] {
   const targets: MoveTarget[] = []
   const withNumber = (start: number) => {
     const before = text.slice(Math.max(0, start - 10), start)
@@ -150,6 +152,10 @@ export function planMoveTargets(text: string, games: RecognizedGame[]): MoveTarg
       targets.push({ kind: 'iso', gameIndex, iso, start: iso.charStart, end: iso.charEnd })
     }
   })
+  for (const iso of unanchored) {
+    if (iso.charStart === undefined || iso.charEnd === undefined) continue
+    targets.push({ kind: 'iso', gameIndex: -1, iso, start: iso.charStart, end: iso.charEnd })
+  }
   targets.sort((a, b) => a.start - b.start)
   // Defensive: drop any range overlapping the previous one.
   const result: MoveTarget[] = []

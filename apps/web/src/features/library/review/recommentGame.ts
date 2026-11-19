@@ -78,13 +78,23 @@ export async function commentedGameText(
     .split('\n').filter((l) => l.trim() !== '' && l.trim() !== '￼').join('\n')
 }
 
-/** Analyse a game of the chapter with the engine and write its main line anew with commentary (S3). */
+/** Progress of a long run: positions analysed so far (for the status footer bar), and a way to stop it. */
+export interface RunProgress {
+  onProgress?: (done: number, total: number) => void
+  signal?: AbortSignal
+}
+
+/**
+ * Analyse a game of the chapter with the engine and write its main line anew
+ * with commentary (S3), reporting each position analysed (S5).
+ */
 export async function recommentGame(
   games: RecognizedGame[],
   index: number,
   text: string,
   options: CommentOptions = commentOptionsFromPanel(),
+  progress: RunProgress = {},
 ): Promise<string> {
-  const plies = await analyseGame(games[index].tree, reviewEngine(options.sfUrl), { depth: options.depth })
+  const plies = await analyseGame(games[index].tree, reviewEngine(options.sfUrl), { depth: options.depth, ...progress })
   return commentedGameText({ plies, review: reviewGame(plies) }, games, index, text, options)
 }

@@ -1,6 +1,6 @@
 import type { RecognizedGame } from '@chess-ebook/chess-shared'
 import { extractProseText, type ProseText } from './proseText'
-import { humanCommentInner, textToHtml } from './textToChapters'
+import { humanCommentInner, readCommentMainLine, textToHtml } from './textToChapters'
 import type { CommentAlternative } from './diagramMark'
 
 /**
@@ -143,7 +143,9 @@ export function pickBookComments(html: string, pick: number, random: () => numbe
     const choice = alternatives[Math.min(alternatives.length - 1, Math.floor(random() * alternatives.length))]
     if (!choice || typeof choice.text !== 'string') return
     const fen = quote.getAttribute('data-comment-fen') ?? undefined
-    quote.innerHTML = humanCommentInner({ ...choice, source: choice.source ?? '', ...(fen ? { fen } : {}) })
+    // Numbered moves of the remark ("5…Nc6") are read against the game's main line (S7).
+    const mainLine = readCommentMainLine(quote.getAttribute('data-comment-mainline'))
+    quote.innerHTML = humanCommentInner({ ...choice, source: choice.source ?? '', ...(fen ? { fen } : {}) }, mainLine)
     changed = true
   })
   return changed ? serialise(doc) : html
