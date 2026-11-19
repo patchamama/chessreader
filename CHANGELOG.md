@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.116.1 — 2026-11-19
+
+- feat: Play's ideas list the moves that lead into a position of one of your traps, whatever the move order
+
 ## v0.116.0 — 2026-11-19
 
 - feat: traps are found by position, whatever the move order (transpositions included); Try a trap shows a proposed move on the board on hover, lets you go back or jump to any played move to try another branch, and shows in green the trap moves of a clicked piece; training boards can flip and show the engine evaluation bar with its line; analysis boards can flip

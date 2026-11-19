@@ -181,6 +181,22 @@ describe('PlayPage', () => {
     useSettingsStore.setState({ playIdeas: false })
   })
 
+  it('traps by position: from a position one move away from a trap line, the move that leads into it is offered (S15)', async () => {
+    const c = new Chess(); const keys = [positionHash(c.fen())]
+    const sans = 'e4 e5 Bc4 Nc6 Qh5 Nf6 Qxf7#'.split(' ').map((m) => { const r = c.move(m); keys.push(positionHash(c.fen())); return r.san })
+    const trap = { id: 's', title: "Scholar's mate", category: 'Classic', opening: 'Italian Game', side: 'white', trapMove: 3, setup: 4, fall: 4, tactic: 1, themes: [], intro: 'f7 is weak.', sans, keys, source: { title: 'Classic', author: null } }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([trap]), { status: 200 })))
+    useSettingsStore.setState({ playIdeas: true })
+    render(<PlayPage />)
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+    // 1. e4 e5 2. Qh5 Nc6 — not on the trap's move order, but Bc4 now reaches its position after 3. Bc4 (… Nc6 Qh5 order).
+    act(() => usePlayStore.setState({ status: 'playing', mode: 'engine', color: 'white', sans: ['e4', 'e5', 'Qh5', 'Nc6'],
+      fen: 'r1bqkbnr/pppp1ppp/2n5/4p2Q/4P3/8/PPPP1PPP/RNB1KBNR w KQkq - 2 3' }))
+    expect(await screen.findByTestId('play-trap-moves')).toHaveTextContent('Bc4')
+    vi.unstubAllGlobals()
+    useSettingsStore.setState({ playIdeas: false })
+  })
+
   describe('study tools (S14)', () => {
     const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0)) })
     it('a repeated consecutive tutor comment shows its count on the same line (S14.5)', () => {

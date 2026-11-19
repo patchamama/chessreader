@@ -14,7 +14,8 @@ import { useAuthStore } from '../auth/store/authStore'
 import { useStatusStore } from '../../shared/layout/statusStore'
 import { humanMoves, type HumanMoves } from './humanMoves'
 import { lichessThemes, playIdeas } from './playIdeas'
-import { loadTraps, trapsAt, type Trap } from '../training/traps'
+import { loadTraps, trapContinuations, trapsAt, type Trap } from '../training/traps'
+import { formatSan } from '../../shared/chess/notation'
 import { LinePlayer } from '../../shared/chess/LinePlayer'
 import { InfoSection } from '../../shared/info/InfoSection'
 import { OpenInStudy } from '../gamesearch/OpenInStudy'
@@ -40,7 +41,7 @@ const TEXT = {
   en: {
     title: 'Play with a tutor', mode: 'Opponent', engine: 'The engine', human: 'A person at this board', lichess: 'Someone on Lichess (casual)', lichessAi: 'The Lichess AI (Stockfish)', lichessBot: 'A Maia bot on Lichess (plays like a person)', serverEngine: 'An engine on the server (Stockfish, Maia, GNU Chess…)', engineName: 'Engine', bot: 'Bot', clock: 'Clock', level: 'Lichess AI level', color: 'I play', white: 'White', black: 'Black', random: 'Random', strength: 'Engine strength', start: 'New game', tutor: 'Tutor', token: 'Set your Lichess token in Settings → Accounts', create: 'Create a token for playing ↗', thinking: 'The engine is thinking…', you: 'You', opp: 'Opponent',
     humanHint: 'What a player of my rating would play (Maia, server)', humanSays: (r: number) => `A ${r} player would play:`,
-    ideas: 'Ideas: opening, targets, chances, traps', targets: 'Targets', chances: 'Chances', themes: 'Pattern', trap: 'Trap you can set', falls: 'they fall',
+    ideas: 'Ideas: opening, targets, chances, traps', targets: 'Targets', chances: 'Chances', themes: 'Pattern', trap: 'Trap you can set', trapMoves: 'Moves toward a trap', falls: 'they fall',
     options: 'Options', hints: 'Colour the moves of the selected piece', status: 'Say how good each move is', bar: 'Evaluation bar', legend: 'Legend of the colours', voice: 'Say the moves aloud', voiceNone: 'No', voiceOpp: "Only the opponent's", voiceBoth: 'Both sides', resign: 'Resign', colours: 'Colours', rated: 'rated', casual: 'casual',
     kinds: { book: 'book move', best: 'best move', good: 'good move', inaccuracy: 'inaccuracy', mistake: 'mistake', blunder: 'blunder' },
     legendKinds: { book: 'Book', best: 'Best', good: 'Good', inaccuracy: 'Inaccuracy', mistake: 'Mistake', blunder: 'Blunder' },
@@ -52,7 +53,7 @@ const TEXT = {
   es: {
     title: 'Jugar con un tutor', mode: 'Rival', engine: 'El motor', human: 'Una persona en este tablero', lichess: 'Alguien en Lichess (amistosa)', lichessAi: 'La IA de Lichess (Stockfish)', lichessBot: 'Un bot Maia en Lichess (juega como una persona)', serverEngine: 'Un motor del servidor (Stockfish, Maia, GNU Chess…)', engineName: 'Motor', bot: 'Bot', clock: 'Ritmo', level: 'Nivel de la IA de Lichess', color: 'Juego con', white: 'Blancas', black: 'Negras', random: 'Al azar', strength: 'Fuerza del motor', start: 'Nueva partida', tutor: 'Tutor', token: 'Pon tu token de Lichess en Ajustes → Cuentas', create: 'Crear un token para jugar ↗', thinking: 'El motor está pensando…', you: 'Tú', opp: 'Rival',
     humanHint: 'Qué jugaría alguien de mi nivel (Maia, servidor)', humanSays: (r: number) => `Un jugador de ${r} jugaría:`,
-    ideas: 'Ideas: apertura, objetivos, oportunidades, celadas', targets: 'Objetivos', chances: 'Oportunidades', themes: 'Patrón', trap: 'Celada posible', falls: 'caen',
+    ideas: 'Ideas: apertura, objetivos, oportunidades, celadas', targets: 'Objetivos', chances: 'Oportunidades', themes: 'Patrón', trap: 'Celada posible', trapMoves: 'Jugadas hacia una celada', falls: 'caen',
     options: 'Opciones', hints: 'Colorear las jugadas de la pieza elegida', status: 'Decir qué tan buena es cada jugada', bar: 'Barra de evaluación', legend: 'Leyenda de los colores', voice: 'Decir las jugadas en voz alta', voiceNone: 'No', voiceOpp: 'Solo las del rival', voiceBoth: 'Las de ambos', resign: 'Abandonar', colours: 'Colores', rated: 'con rating', casual: 'amistosa',
     kinds: { book: 'jugada de libro', best: 'la mejor jugada', good: 'buena jugada', inaccuracy: 'imprecisión', mistake: 'error', blunder: 'error grave' },
     legendKinds: { book: 'Libro', best: 'Mejor', good: 'Buena', inaccuracy: 'Imprecisión', mistake: 'Error', blunder: 'Error grave' },
@@ -64,7 +65,7 @@ const TEXT = {
   de: {
     title: 'Spielen mit Trainer', mode: 'Gegner', engine: 'Die Engine', human: 'Eine Person an diesem Brett', lichess: 'Jemand auf Lichess (ungewertet)', lichessAi: 'Die Lichess-KI (Stockfish)', lichessBot: 'Ein Maia-Bot auf Lichess (spielt wie ein Mensch)', serverEngine: 'Eine Engine auf dem Server (Stockfish, Maia, GNU Chess…)', engineName: 'Engine', bot: 'Bot', clock: 'Bedenkzeit', level: 'Stufe der Lichess-KI', color: 'Ich spiele', white: 'Weiß', black: 'Schwarz', random: 'Zufällig', strength: 'Engine-Stärke', start: 'Neue Partie', tutor: 'Trainer', token: 'Lichess-Token in Einstellungen → Konten eintragen', create: 'Token zum Spielen erstellen ↗', thinking: 'Die Engine denkt…', you: 'Du', opp: 'Gegner',
     humanHint: 'Was ein Spieler meiner Stärke spielen würde (Maia, Server)', humanSays: (r: number) => `Ein Spieler mit ${r} würde spielen:`,
-    ideas: 'Ideen: Eröffnung, Ziele, Chancen, Fallen', targets: 'Ziele', chances: 'Chancen', themes: 'Muster', trap: 'Mögliche Falle', falls: 'Fall-Chance',
+    ideas: 'Ideen: Eröffnung, Ziele, Chancen, Fallen', targets: 'Ziele', chances: 'Chancen', themes: 'Muster', trap: 'Mögliche Falle', trapMoves: 'Züge zu einer Falle', falls: 'Fall-Chance',
     options: 'Optionen', hints: 'Züge der gewählten Figur einfärben', status: 'Sagen, wie gut jeder Zug ist', bar: 'Bewertungsbalken', legend: 'Legende der Farben', voice: 'Züge vorlesen', voiceNone: 'Nein', voiceOpp: 'Nur die des Gegners', voiceBoth: 'Beide Seiten', resign: 'Aufgeben', colours: 'Farben', rated: 'gewertet', casual: 'ungewertet',
     kinds: { book: 'Buchzug', best: 'bester Zug', good: 'guter Zug', inaccuracy: 'Ungenauigkeit', mistake: 'Fehler', blunder: 'grober Fehler' },
     legendKinds: { book: 'Buch', best: 'Bester', good: 'Gut', inaccuracy: 'Ungenau', mistake: 'Fehler', blunder: 'Grober Fehler' },
@@ -258,6 +259,10 @@ export default function PlayPage() {
   const [traps, setTraps] = useState<Trap[]>([])
   useEffect(() => { if (settings.playIdeas) void loadTraps().then(setTraps) }, [settings.playIdeas])
   const trapHere = ideas ? trapsAt(p.fen, traps).filter((x) => x.trap.side === p.color).slice(0, 2) : []
+  const notationStyle = useSettingsStore((s) => s.notationStyle)
+  // Traps by position (S15): on my turn, the moves that lead into a position of one of my traps, whatever the move order.
+  const toMoveIsMe = p.fen.split(' ')[1] === (p.color === 'white' ? 'w' : 'b')
+  const trapMoves = ideas && toMoveIsMe ? trapContinuations(p.fen, traps.filter((x) => x.side === p.color)).slice(0, 4) : []
   const lastThemes = (() => {
     if (!p.sans.length) return []
     try {
@@ -354,7 +359,7 @@ export default function PlayPage() {
           </p>
         )}
         {lastThemes.length > 0 && <p data-testid="move-themes" className="mt-1 text-xs text-slate-600">🧩 {t.themes}: {lastThemes.join(', ')}</p>}
-        {ideas && (ideas.opening || ideas.targets.length > 0 || ideas.chances.length > 0 || trapHere.length > 0) && (
+        {ideas && (ideas.opening || ideas.targets.length > 0 || ideas.chances.length > 0 || trapHere.length > 0 || trapMoves.length > 0) && (
           <div data-testid="play-ideas" className="mt-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-950">
             {ideas.opening && <p>📖 {ideas.opening}</p>}
             {ideas.targets.length > 0 && <p>🎯 {t.targets}: {ideas.targets.map((x) => `${x.square} (${x.why})`).join(', ')}</p>}
@@ -365,6 +370,9 @@ export default function PlayPage() {
                 <LinePlayer key={p.fen} fen={p.fen} moves={trap.sans.slice(ply)} orientation={p.color} initiallyOpen={false} testId="play-trap-line" className="ml-4" />
               </div>
             ))}
+            {trapMoves.length > 0 && (
+              <p data-testid="play-trap-moves">🪤 {t.trapMoves}: {trapMoves.map((m) => `${formatSan(m.san, lang, notationStyle)} (${m.traps.slice(0, 2).map((x) => (lang === 'es' && x.titleEs ? x.titleEs : x.title)).join(', ')})`).join(' · ')}</p>
+            )}
             <InfoSection topic="ideas" opening={ideas.opening} themes={lastThemes}
               idea={trapHere.map(({ trap }) => (lang === 'es' && trap.introEs ? trap.introEs : trap.intro)).join(' ') || undefined} testId="play-info" />
           </div>
