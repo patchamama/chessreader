@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.115.0 — 2026-11-19
+
+- feat: Play — moves the book games played from the position (with players, results and engine score), live book comments for both or one side, tutor ideas shown on the board (arrows, squares, hover, voice), the chosen piece's move colours precomputed in the background, repeated tutor notes counted (2x) and blinking, thinking time for both players in every game, a scrolling tutor panel, and the engine's view of moving a touched piece
+
 ## v0.114.0 — 2026-11-19
 
 - feat: "Analysis board" tab after Library — the current study board, live, and one closable tab per extra board named after its book

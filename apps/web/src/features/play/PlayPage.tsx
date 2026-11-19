@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Chess, type Square } from 'chess.js'
 import ChessBoard from '../../shared/chess/ChessBoard'
 import EvalBar from '../viewer/components/EvalBar'
@@ -18,6 +18,15 @@ import { loadTraps, trapsAt, type Trap } from '../training/traps'
 import { LinePlayer } from '../../shared/chess/LinePlayer'
 import { InfoSection } from '../../shared/info/InfoSection'
 import { OpenInStudy } from '../gamesearch/OpenInStudy'
+import { commentSource, lookupPositionComments, type HumanComment } from '../library/commentdb/commentLookup'
+import type { CueBoard } from '../library/narration/cueStyles'
+import type { MoveHint } from '../library/review/reviewEngine'
+import { playAnalyse } from './playStore'
+import { usePlayPrefs, type LiveCommentSide } from './playPrefs'
+import { thinkingNow } from './thinkTime'
+import { ideaCues, ideaSegments } from './ideaCues'
+import { analyseMoves, analyseSans, describePiece, formatScore, localSan, precomputeHints, type PieceMove } from './pieceAnalysis'
+import { bookCandidates, loadPositionIndex, type BookGame, type PositionIndex } from './bookPositions'
 
 /** The game played so far as PGN, with the players' names. */
 function gamePgn(sans: string[], players: { white: { name: string }; black: { name: string } } | null): string {
@@ -36,6 +45,9 @@ const TEXT = {
     kinds: { book: 'book move', best: 'best move', good: 'good move', inaccuracy: 'inaccuracy', mistake: 'mistake', blunder: 'blunder' },
     legendKinds: { book: 'Book', best: 'Best', good: 'Good', inaccuracy: 'Inaccuracy', mistake: 'Mistake', blunder: 'Blunder' },
     tb: { win: 'winning (tablebase)', draw: 'drawn (tablebase)', loss: 'losing (tablebase)' },
+    thinkTime: 'Thinking time', liveComments: 'Book comments', lcOff: 'Off', lcBoth: 'Both sides', lcMine: 'After my moves', lcOpp: "After the opponent's moves",
+    gm: 'Play like a human grandmaster', gmTitle: 'What the grandmasters of the books played here', games: (n: number) => `${n} ${n === 1 ? 'game' : 'games'}`,
+    explainTouch: 'Explain the piece I touch', commentsTitle: 'What the books say about this position',
   },
   es: {
     title: 'Jugar con un tutor', mode: 'Rival', engine: 'El motor', human: 'Una persona en este tablero', lichess: 'Alguien en Lichess (amistosa)', lichessAi: 'La IA de Lichess (Stockfish)', lichessBot: 'Un bot Maia en Lichess (juega como una persona)', serverEngine: 'Un motor del servidor (Stockfish, Maia, GNU Chess…)', engineName: 'Motor', bot: 'Bot', clock: 'Ritmo', level: 'Nivel de la IA de Lichess', color: 'Juego con', white: 'Blancas', black: 'Negras', random: 'Al azar', strength: 'Fuerza del motor', start: 'Nueva partida', tutor: 'Tutor', token: 'Pon tu token de Lichess en Ajustes → Cuentas', create: 'Crear un token para jugar ↗', thinking: 'El motor está pensando…', you: 'Tú', opp: 'Rival',
@@ -45,6 +57,9 @@ const TEXT = {
     kinds: { book: 'jugada de libro', best: 'la mejor jugada', good: 'buena jugada', inaccuracy: 'imprecisión', mistake: 'error', blunder: 'error grave' },
     legendKinds: { book: 'Libro', best: 'Mejor', good: 'Buena', inaccuracy: 'Imprecisión', mistake: 'Error', blunder: 'Error grave' },
     tb: { win: 'ganada (tablas de finales)', draw: 'tablas (tablas de finales)', loss: 'perdida (tablas de finales)' },
+    thinkTime: 'Tiempo de reflexión', liveComments: 'Comentarios de los libros', lcOff: 'No', lcBoth: 'Ambos bandos', lcMine: 'Tras mis jugadas', lcOpp: 'Tras las del rival',
+    gm: 'Jugar como un gran maestro humano', gmTitle: 'Lo que jugaron aquí los grandes maestros de los libros', games: (n: number) => `${n} ${n === 1 ? 'partida' : 'partidas'}`,
+    explainTouch: 'Explicar la pieza que toco', commentsTitle: 'Lo que dicen los libros de esta posición',
   },
   de: {
     title: 'Spielen mit Trainer', mode: 'Gegner', engine: 'Die Engine', human: 'Eine Person an diesem Brett', lichess: 'Jemand auf Lichess (ungewertet)', lichessAi: 'Die Lichess-KI (Stockfish)', lichessBot: 'Ein Maia-Bot auf Lichess (spielt wie ein Mensch)', serverEngine: 'Eine Engine auf dem Server (Stockfish, Maia, GNU Chess…)', engineName: 'Engine', bot: 'Bot', clock: 'Bedenkzeit', level: 'Stufe der Lichess-KI', color: 'Ich spiele', white: 'Weiß', black: 'Schwarz', random: 'Zufällig', strength: 'Engine-Stärke', start: 'Neue Partie', tutor: 'Trainer', token: 'Lichess-Token in Einstellungen → Konten eintragen', create: 'Token zum Spielen erstellen ↗', thinking: 'Die Engine denkt…', you: 'Du', opp: 'Gegner',
@@ -54,6 +69,9 @@ const TEXT = {
     kinds: { book: 'Buchzug', best: 'bester Zug', good: 'guter Zug', inaccuracy: 'Ungenauigkeit', mistake: 'Fehler', blunder: 'grober Fehler' },
     legendKinds: { book: 'Buch', best: 'Bester', good: 'Gut', inaccuracy: 'Ungenau', mistake: 'Fehler', blunder: 'Grober Fehler' },
     tb: { win: 'gewonnen (Tablebase)', draw: 'remis (Tablebase)', loss: 'verloren (Tablebase)' },
+    thinkTime: 'Bedenkzeit', liveComments: 'Kommentare der Bücher', lcOff: 'Aus', lcBoth: 'Beide Seiten', lcMine: 'Nach meinen Zügen', lcOpp: 'Nach den Zügen des Gegners',
+    gm: 'Spielen wie ein menschlicher Großmeister', gmTitle: 'Was die Großmeister der Bücher hier spielten', games: (n: number) => `${n} ${n === 1 ? 'Partie' : 'Partien'}`,
+    explainTouch: 'Die berührte Figur erklären', commentsTitle: 'Was die Bücher zu dieser Stellung sagen',
   },
 }
 
@@ -81,7 +99,7 @@ function useTicking(clocks: Clocks | null): { white: number; black: number } | n
   }
 }
 
-function PlayerRow(p: { side: 'white' | 'black'; player: PlayerInfo; time?: number; running: boolean; label: string }) {
+function PlayerRow(p: { side: 'white' | 'black'; player: PlayerInfo; time?: number; running: boolean; label: string; think?: number; thinkLabel: string }) {
   return (
     <div data-testid={`player-${p.side}`} className="flex items-center justify-between rounded border border-slate-200 bg-white px-2 py-1 text-sm">
       <span>
@@ -90,11 +108,29 @@ function PlayerRow(p: { side: 'white' | 'black'; player: PlayerInfo; time?: numb
         {p.player.title && <strong className="mr-1 text-amber-700">{p.player.title}</strong>}
         {p.player.name}{p.player.rating ? ` (${p.player.rating})` : ''}
       </span>
-      {p.time !== undefined && (
-        <span className={`font-mono tabular-nums ${p.running ? 'rounded bg-slate-800 px-1.5 text-white' : 'text-slate-700'} ${p.time < 20000 ? 'text-red-600' : ''}`}>{mmss(p.time)}</span>
-      )}
+      <span className="flex items-center gap-2">
+        {p.think !== undefined && (
+          <span data-testid={`think-${p.side}`} title={p.thinkLabel} className="font-mono text-xs tabular-nums text-slate-500">
+            <span aria-hidden="true">⏱ </span><span className="sr-only">{p.thinkLabel}: </span>{mmss(p.think)}
+          </span>
+        )}
+        {p.time !== undefined && (
+          <span className={`font-mono tabular-nums ${p.running ? 'rounded bg-slate-800 px-1.5 text-white' : 'text-slate-700'} ${p.time < 20000 ? 'text-red-600' : ''}`}>{mmss(p.time)}</span>
+        )}
+      </span>
     </div>
   )
+}
+
+/** Whether the book comments of a position are wanted: `mine` when the last move was mine. */
+function commentsFor(side: LiveCommentSide, mine: boolean): boolean {
+  return side === 'both' || (side === 'mine' && mine) || (side === 'opponent' && !mine)
+}
+
+/** A game of the books as PGN with its players, to open it in the study. */
+function bookGamePgn(g: BookGame): string {
+  const tags = [['White', g.white ?? '?'], ['Black', g.black ?? '?'], ['Result', g.result || '*'], ...(g.event ? [['Event', g.event]] : []), ...(g.full.fen ? [['SetUp', '1'], ['FEN', g.full.fen]] : [])]
+  return `${tags.map(([k, v]) => `[${k} "${v.replace(/"/g, "'")}"]`).join('\n')}\n\n${g.full.commented ?? g.full.pgn}`
 }
 
 /** Play against the engine, a person or a Lichess opponent while a tutor comments every move (S27). */
@@ -143,7 +179,71 @@ export default function PlayPage() {
   const [selected, setSelected] = useState<string | null>(null)
   const targets = selected ? new Chess(p.fen).moves({ square: selected as Square, verbose: true }).map((m) => m.to) : []
   const myTurn = p.status === 'playing' && (p.mode === 'human' || (p.fen.split(' ')[1] === 'w') === (p.color === 'white'))
-  const hints = useMoveHints(p.fen, selected, settings.playMoveHints && myTurn)
+  const prefs = usePlayPrefs()
+  // The colours of each piece's moves, computed piece by piece while I think (S14.4).
+  const [pre, setPre] = useState<{ fen: string; hints: Record<string, Record<string, MoveHint>> }>({ fen: '', hints: {} })
+  useEffect(() => {
+    if (!settings.playMoveHints || !myTurn) return
+    let live = true
+    const fen = p.fen
+    setPre({ fen, hints: {} })
+    void precomputeHints(playAnalyse, fen, (square, h) => {
+      if (live) setPre((prev) => (prev.fen === fen ? { fen, hints: { ...prev.hints, [square]: h } } : prev))
+    }, () => live).catch(() => undefined)
+    return () => { live = false }
+  }, [p.fen, myTurn, settings.playMoveHints])
+  const preHints = selected && pre.fen === p.fen ? pre.hints[selected] : undefined
+  const lateHints = useMoveHints(p.fen, selected, settings.playMoveHints && myTurn && !preHints)
+  const hints = preHints ?? lateHints
+  // Book comments for the position, after both sides' moves or one side's (S14.2).
+  const [comments, setComments] = useState<{ fen: string; list: HumanComment[] }>({ fen: '', list: [] })
+  const lastMover: 'white' | 'black' = p.fen.split(' ')[1] === 'w' ? 'black' : 'white'
+  const commentsWanted = commentsFor(prefs.liveComments, p.mode === 'human' || lastMover === p.color)
+  useEffect(() => {
+    if (p.status === 'idle' || !p.sans.length || !commentsWanted) return
+    let live = true
+    const fen = p.fen
+    void lookupPositionComments(fen).then((list) => { if (live) setComments({ fen, list }) }, () => undefined)
+    return () => { live = false }
+  }, [p.fen, p.status, p.sans.length, commentsWanted])
+  const liveComments = commentsWanted && comments.fen === p.fen
+    ? [...comments.list].sort((a, b) => Number(b.lang === lang) - Number(a.lang === lang)).slice(0, 3) : []
+  // What the grandmasters of the books played from here (S14.1).
+  const [index, setIndex] = useState<PositionIndex | null>(null)
+  useEffect(() => {
+    if (!prefs.gmMoves || p.status === 'idle' || index) return
+    let live = true
+    void loadPositionIndex().then((i) => { if (live) setIndex(i) }, () => undefined)
+    return () => { live = false }
+  }, [prefs.gmMoves, p.status, index])
+  const candidates = prefs.gmMoves && index && p.status !== 'idle' ? bookCandidates(index, p.fen).slice(0, 5) : []
+  const [gmEval, setGmEval] = useState<{ fen: string; scores: Record<string, PieceMove> }>({ fen: '', scores: {} })
+  const candidateKey = candidates.map((c) => c.san).join(' ')
+  useEffect(() => {
+    if (!candidateKey || !myTurn) return
+    let live = true
+    const fen = p.fen
+    void analyseSans(playAnalyse, fen, candidateKey.split(' ')).then((scores) => { if (live) setGmEval({ fen, scores }) }, () => undefined)
+    return () => { live = false }
+  }, [candidateKey, p.fen, myTurn])
+  // A tutor idea is shown on the board for a moment; hovering its moves or squares shows them (S14.3).
+  const [flash, setFlash] = useState<CueBoard | null>(null)
+  const [hover, setHover] = useState<CueBoard | null>(null)
+  const lastNote = p.log[p.log.length - 1]
+  useEffect(() => {
+    if (!lastNote?.fen || lastNote.fen !== usePlayStore.getState().fen) return
+    const board = ideaCues(lastNote.text, lastNote.fen, lang)
+    if (!board.arrows.length && !Object.keys(board.squareStyles).length) return
+    setFlash(board)
+    const id = setTimeout(() => setFlash(null), 3500)
+    return () => clearTimeout(id)
+  }, [lastNote, lang])
+  // The tutor panel follows the latest entry (S14.7).
+  const tutorRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const el = tutorRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [p.log])
   const ticking = useTicking(p.clocks)
   const [human, setHuman] = useState<{ fen: string; value: HumanMoves | null } | null>(null)
   useEffect(() => {
@@ -176,7 +276,15 @@ export default function PlayPage() {
       return
     }
     const piece = new Chess(p.fen).get(square as Square)
-    setSelected(piece && piece.color === p.fen.split(' ')[1] ? square : null)
+    const mine = !!piece && piece.color === p.fen.split(' ')[1]
+    setSelected(mine ? square : null)
+    // Touching a piece: the tutor writes what moving it implies (S14.8).
+    if (mine && square !== selected && myTurn && prefs.explainTouch) {
+      const fen = p.fen
+      void analyseMoves(playAnalyse, fen, square).then((moves) => {
+        if (usePlayStore.getState().fen === fen) usePlayStore.getState().addNote('tutor', describePiece(moves, fen, square, lang), fen, false)
+      }, () => undefined)
+    }
   }
   const field = 'rounded border border-slate-300 bg-white px-2 py-1 text-sm'
   const check = 'flex items-center gap-1.5 text-xs text-slate-700'
@@ -185,10 +293,14 @@ export default function PlayPage() {
   for (const target of ideas?.targets ?? []) {
     squareStyles[target.square] = { boxShadow: 'inset 0 0 0 3px rgba(234, 88, 12, 0.8)' }
   }
+  // The squares of a tutor idea, under the colours of the chosen piece's moves.
+  const cue = hover ?? flash
+  if (cue) Object.assign(squareStyles, cue.squareStyles)
   for (const [square, hint] of Object.entries(hints)) {
     const c = HINT_COLOR[hint]
     squareStyles[square] = { background: `radial-gradient(circle, ${c} 0 30%, transparent 32%)`, boxShadow: `inset 0 0 0 3px ${c}` }
   }
+  const think = p.think ? thinkingNow(p.think, nowTick) : null
   const orientation = p.mode === 'human' ? 'white' : p.color
   const showLegend = settings.playMoveHints && settings.playLegend && p.status !== 'idle' && p.sans.length < 10
   const j = p.judgement
@@ -197,7 +309,7 @@ export default function PlayPage() {
   const row = (side: 'white' | 'black') =>
     p.players && (
       <PlayerRow side={side} player={p.players[side]} label={side === 'white' ? t.white : t.black}
-        time={ticking?.[side]} running={p.clocks?.running === side} />
+        time={ticking?.[side]} running={p.clocks?.running === side} think={think?.[side]} thinkLabel={t.thinkTime} />
     )
 
   return (
@@ -217,6 +329,7 @@ export default function PlayPage() {
               selectedSquare={selected}
               legalTargets={Object.keys(hints).length ? [] : targets}
               customSquareStyles={squareStyles}
+              arrows={cue?.arrows ?? []}
             />
           </div>
         </div>
@@ -260,6 +373,31 @@ export default function PlayPage() {
           <p data-testid="human-moves" className="mt-1 text-sm text-slate-700">
             🧑 {t.humanSays(humanHere.rating)} {humanHere.moves.map((m) => `${m.san} (${Math.round(m.probability * 100)}%)`).join(', ')}
           </p>
+        )}
+        {candidates.length > 0 && (
+          <section data-testid="gm-moves" aria-label={t.gmTitle} className="mt-2 rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-950">
+            <h3 className="font-semibold">♟ {t.gmTitle}</h3>
+            <ul className="mt-1 flex flex-col gap-1">
+              {candidates.map((c) => {
+                const ev = gmEval.fen === p.fen ? gmEval.scores[c.san] : undefined
+                const total = candidates.reduce((n, x) => n + x.count, 0)
+                return (
+                  <li key={c.san}>
+                    <strong>{localSan(c.san, lang)}</strong> · {t.games(c.count)} ({Math.round((c.count / total) * 100)}%)
+                    {ev ? ` · ${formatScore(ev, lang)}` : ''}
+                    <ul className="ml-4">
+                      {c.games.slice(0, 3).map((g) => (
+                        <li key={g.gameId} className="flex flex-wrap items-center gap-x-2">
+                          <span>{g.white ?? '?'} – {g.black ?? '?'} {g.result}{g.termination ? ` (${g.termination})` : ''}{g.year ? `, ${g.year}` : ''}</span>
+                          <OpenInStudy title={`${g.white ?? '?'} – ${g.black ?? '?'}`} load={() => Promise.resolve(bookGamePgn(g))} />
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
         )}
         {showLegend && (
           <ul aria-label={t.colours} className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
@@ -368,6 +506,16 @@ export default function PlayPage() {
               {[1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900].map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </label>
+          <label className={check}><input type="checkbox" checked={prefs.explainTouch} onChange={(e) => prefs.set({ explainTouch: e.target.checked })} />{t.explainTouch}</label>
+          <label className={check}><input type="checkbox" checked={prefs.gmMoves} onChange={(e) => prefs.set({ gmMoves: e.target.checked })} />{t.gm}</label>
+          <label className={check}>{t.liveComments}
+            <select aria-label={t.liveComments} className="rounded border border-slate-300 bg-white px-1 py-0.5" value={prefs.liveComments} onChange={(e) => prefs.set({ liveComments: e.target.value as LiveCommentSide })}>
+              <option value="off">{t.lcOff}</option>
+              <option value="both">{t.lcBoth}</option>
+              <option value="mine">{t.lcMine}</option>
+              <option value="opponent">{t.lcOpp}</option>
+            </select>
+          </label>
           <label className={check}>{t.voice}
             <select aria-label={t.voice} className="rounded border border-slate-300 bg-white px-1 py-0.5" value={settings.playVoice} onChange={(e) => settings.set({ playVoice: e.target.value as 'none' | 'opponent' | 'both' })}>
               <option value="none">{t.voiceNone}</option>
@@ -377,12 +525,27 @@ export default function PlayPage() {
           </label>
         </fieldset>
         {p.error && <p role="alert" className="rounded border border-red-300 bg-red-50 px-2 py-1 text-sm text-red-800">{p.error}</p>}
-        <section aria-label={t.tutor} className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto rounded border border-slate-200 bg-white p-2">
-          <h2 className="text-sm font-semibold text-slate-700">🎓 {t.tutor}</h2>
+        {liveComments.length > 0 && (
+          <section data-testid="live-comments" aria-label={t.commentsTitle} className="flex flex-col gap-1 rounded border border-sky-200 bg-sky-50 p-2 text-sm text-sky-950">
+            <h2 className="text-sm font-semibold">📚 {t.commentsTitle}</h2>
+            {liveComments.map((c, i) => (
+              <p key={i}>{c.text} <span className="text-xs text-sky-700">— {commentSource(c)}</span></p>
+            ))}
+          </section>
+        )}
+        <section ref={tutorRef} aria-label={t.tutor} className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto scroll-smooth rounded border border-slate-200 bg-white p-2">
+          <h2 className="sticky top-0 bg-white text-sm font-semibold text-slate-700">🎓 {t.tutor}</h2>
           {p.log.map((n, i) => (
-            <p key={i} className={`text-sm ${n.who === 'tutor' ? 'text-indigo-800' : n.who === 'opponent' ? 'text-rose-800' : 'text-slate-800'}`}>
+            <p key={`${i}-${n.count ?? 1}`} style={n.count ? { animation: 'cue-blink 0.6s ease-in-out 3' } : undefined}
+              className={`text-sm ${n.who === 'tutor' ? 'text-indigo-800' : n.who === 'opponent' ? 'text-rose-800' : 'text-slate-800'}`}>
               <span className="mr-1 text-xs text-slate-400">{Math.ceil(n.ply / 2)}.</span>
-              {n.who === 'opponent' ? `${t.opp}: ` : ''}{n.text}
+              {n.who === 'opponent' ? `${t.opp}: ` : ''}
+              {n.fen ? ideaSegments(n.text, n.fen, lang).map((seg, k) => seg.board ? (
+                <span key={k} tabIndex={0} className="cursor-help underline decoration-dotted underline-offset-2"
+                  onMouseEnter={() => setHover(seg.board!)} onMouseLeave={() => setHover(null)}
+                  onFocus={() => setHover(seg.board!)} onBlur={() => setHover(null)}>{seg.text}</span>
+              ) : <span key={k}>{seg.text}</span>) : n.text}
+              {n.count ? <> <strong className="text-xs">({n.count}x)</strong></> : null}
             </p>
           ))}
         </section>

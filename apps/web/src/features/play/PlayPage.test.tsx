@@ -5,6 +5,9 @@ import { usePlayStore, setPlayRuntime } from './playStore'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { Chess } from 'chess.js'
 import { positionHash } from '@chess-ebook/chess-shared'
+import { lookupPositionComments } from '../library/commentdb/commentLookup'
+import { usePlayPrefs } from './playPrefs'
+import { clearPieceAnalysis } from './pieceAnalysis'
 
 // These tests run without a server (jsdom's host is localhost, where the app would ask it).
 vi.mock('../../shared/api/serverSession', () => ({ hasServerSession: () => false }))
@@ -15,15 +18,30 @@ vi.mock('../viewer/components/EvalBar', () => ({ default: () => <div data-testid
 vi.mock('../library/review/useMoveHints', () => ({ useMoveHints: () => ({}) }))
 
 vi.mock('../../shared/chess/ChessBoard', () => ({
-  default: ({ fen, onSquareClick }: { fen: string; onSquareClick?: (s: string) => void }) => (
-    <div data-testid="board">{fen}{['e2', 'e4'].map((s) => <button key={s} onClick={() => onSquareClick?.(s)}>sq-{s}</button>)}</div>
+  default: ({ fen, onSquareClick, arrows, customSquareStyles }: { fen: string; onSquareClick?: (s: string) => void; arrows?: { startSquare: string; endSquare: string }[]; customSquareStyles?: Record<string, unknown> }) => (
+    <div data-testid="board">{fen}{['e2', 'e4'].map((s) => <button key={s} onClick={() => onSquareClick?.(s)}>sq-{s}</button>)}
+      <span data-testid="board-arrows">{(arrows ?? []).map((a) => `${a.startSquare}${a.endSquare}`).join(',')}</span>
+      <span data-testid="board-squares">{Object.keys(customSquareStyles ?? {}).sort().join(',')}</span>
+    </div>
   ),
 }))
+vi.mock('../library/commentdb/commentLookup', async (orig) => ({
+  ...(await orig<typeof import('../library/commentdb/commentLookup')>()),
+  lookupPositionComments: vi.fn(async () => []),
+}))
+vi.mock('./bookPositions', async (orig) => {
+  const real = await orig<typeof import('./bookPositions')>()
+  const g = (id: string, pgn: string, result: string, white: string, black: string) => ({ id, white, black, year: 1960, opening: '', result, moves: 30, first: 'e4', pgn, termination: 'resignation' })
+  const index = real.buildPositionIndex([{ book: 'b1', games: [g('g1', '1. e4 c5', '1-0', 'Fischer', 'Tal'), g('g2', '1. e4 e5', '0-1', 'Spassky', 'Petrosian')] }])
+  return { ...real, loadPositionIndex: vi.fn(async () => index) }
+})
 
 beforeEach(() => {
   useSettingsStore.setState({ language: 'en' })
   setPlayRuntime({ analyse: vi.fn(async () => [{ idx: 1, pv: ['e7e5'], scoreCp: 0, depth: 1 }]) as never })
   usePlayStore.getState().reset()
+  usePlayPrefs.getState().reset()
+  clearPieceAnalysis()
 })
 
 describe('PlayPage', () => {
@@ -161,5 +179,87 @@ describe('PlayPage', () => {
     expect(screen.getByTestId('play-info')).toHaveTextContent('The idea: f7 is weak.')
     vi.unstubAllGlobals()
     useSettingsStore.setState({ playIdeas: false })
+  })
+
+  describe('study tools (S14)', () => {
+    const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+    it('a repeated consecutive tutor comment shows its count on the same line (S14.5)', () => {
+      render(<PlayPage />)
+      act(() => usePlayStore.setState({ status: 'playing', log: [{ ply: 3, who: 'tutor', text: 'Possible: Nd5.', count: 3 }] }))
+      expect(screen.getByRole('region', { name: 'Tutor' })).toHaveTextContent('Possible: Nd5. (3x)')
+    })
+    it('always shows the thinking time of both players, also without clocks (S14.6)', () => {
+      const now = vi.spyOn(Date, 'now').mockReturnValue(20000)
+      render(<PlayPage />)
+      act(() => usePlayStore.setState({ status: 'playing', mode: 'engine', color: 'white', players: { white: { name: 'You' }, black: { name: 'Stockfish (3/8)' } },
+        clocks: null, think: { white: 65000, black: 4000, turn: 'white', since: 15000 } }))
+      expect(screen.getByTestId('think-white')).toHaveTextContent('1:10')
+      expect(screen.getByTestId('think-black')).toHaveTextContent('0:04')
+      now.mockRestore()
+    })
+    it('the tutor panel scrolls to the latest entry (S14.7)', () => {
+      const h = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight')
+      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => 900 })
+      render(<PlayPage />)
+      act(() => usePlayStore.setState({ status: 'playing', log: [{ ply: 1, who: 'tutor', text: 'One' }, { ply: 2, who: 'tutor', text: 'Two' }] }))
+      expect(screen.getByRole('region', { name: 'Tutor' }).scrollTop).toBe(900)
+      if (h) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', h)
+    })
+    it('a tutor idea is shown briefly on the board, and hovering its move or squares shows them (S14.3)', () => {
+      vi.useFakeTimers()
+      const fen = 'rnb1kbnr/ppppqppp/8/8/8/2N5/PPPPPPPP/R1BQKBNR w KQkq - 0 1'
+      render(<PlayPage />)
+      act(() => usePlayStore.setState({ status: 'playing', mode: 'human', fen, log: [{ ply: 4, who: 'tutor', fen, text: 'Possible: Nd5. Double attack: the knight attacks the pawn on c7 and the queen on e7.' }] }))
+      expect(screen.getByTestId('board-arrows')).toHaveTextContent('c3d5')
+      expect(screen.getByTestId('board-squares').textContent).toMatch(/c7.*e7/)
+      act(() => { vi.advanceTimersByTime(5000) })
+      expect(screen.getByTestId('board-arrows')).toHaveTextContent('')
+      fireEvent.mouseEnter(screen.getByText('queen on e7'))
+      expect(screen.getByTestId('board-squares').textContent).toContain('e7')
+      fireEvent.mouseLeave(screen.getByText('queen on e7'))
+      fireEvent.mouseEnter(screen.getByText('Nd5'))
+      expect(screen.getByTestId('board-arrows')).toHaveTextContent('c3d5')
+      vi.useRealTimers()
+    })
+    it('shows the book comments of the current position with their source, for both sides or one (S14.2)', async () => {
+      vi.mocked(lookupPositionComments).mockResolvedValue([{ text: 'The main line.', lang: 'en', ply: 1, san: 'e4', gameId: 'x', label: 'Game 3', source: { kind: 'book', title: 'My Predecessors', author: 'Garry Kasparov' } }])
+      render(<PlayPage />)
+      act(() => usePlayStore.setState({ status: 'playing', mode: 'engine', color: 'white', sans: ['e4'], fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1' }))
+      await flush()
+      expect(screen.getByTestId('live-comments')).toHaveTextContent('The main line.')
+      expect(screen.getByTestId('live-comments')).toHaveTextContent('Kasparov, My Predecessors, Game 3')
+      // Only the opponent's moves: my e4 is not commented.
+      fireEvent.change(screen.getByLabelText('Book comments'), { target: { value: 'opponent' } })
+      await flush()
+      expect(screen.queryByTestId('live-comments')).toBeNull()
+      vi.mocked(lookupPositionComments).mockResolvedValue([])
+    })
+    it('suggests the moves the grandmasters of the books played here, with results and players (S14.1)', async () => {
+      render(<PlayPage />)
+      fireEvent.click(screen.getByLabelText('Play like a human grandmaster'))
+      act(() => usePlayStore.setState({ status: 'playing', mode: 'engine', color: 'white' }))
+      await flush(); await flush()
+      const panel = await screen.findByTestId('gm-moves')
+      expect(panel).toHaveTextContent('e4')
+      expect(panel).toHaveTextContent('2 games')
+      expect(panel).toHaveTextContent('Fischer – Tal 1-0')
+      expect(panel).toHaveTextContent('Spassky – Petrosian 0-1')
+    })
+    it('touching a piece makes the tutor write what moving it implies (S14.8)', async () => {
+      render(<PlayPage />)
+      fireEvent.click(screen.getByRole('button', { name: 'New game' }))
+      fireEvent.click(screen.getByRole('button', { name: 'sq-e2' }))
+      await flush(); await flush()
+      expect(screen.getByRole('region', { name: 'Tutor' })).toHaveTextContent(/Pawn on e2: e[34] \(.*reply e5\)/)
+    })
+    it('the colours of the chosen piece are computed while I think, before I pick it (S14.4)', async () => {
+      useSettingsStore.setState({ playMoveHints: true })
+      usePlayPrefs.setState({ explainTouch: false })
+      render(<PlayPage />)
+      fireEvent.click(screen.getByRole('button', { name: 'New game' }))
+      for (let i = 0; i < 10; i++) await flush()
+      fireEvent.click(screen.getByRole('button', { name: 'sq-e2' }))
+      expect(screen.getByTestId('board-squares').textContent).toMatch(/e3.*e4/)
+    })
   })
 })

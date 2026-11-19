@@ -153,3 +153,40 @@ describe('voice (S13)', () => {
     vi.unstubAllGlobals()
   })
 })
+
+describe('study tools while playing (S14)', () => {
+  it('a repeated consecutive tutor comment is counted on the same line (S14.5)', () => {
+    usePlayStore.getState().start({ mode: 'human', color: 'white', strength: 3, lang: 'en' })
+    usePlayStore.getState().addNote('tutor', 'Chance: Nd5.')
+    usePlayStore.getState().addNote('tutor', 'Chance: Nd5.')
+    expect(usePlayStore.getState().log).toEqual([expect.objectContaining({ text: 'Chance: Nd5.', count: 2 })])
+  })
+  it('counts the thinking time of both players in an untimed game (S14.6)', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1000)
+    usePlayStore.getState().start({ mode: 'human', color: 'white', strength: 3, lang: 'en' })
+    now.mockReturnValue(6000)
+    usePlayStore.getState().move('e2', 'e4')
+    now.mockReturnValue(9000)
+    usePlayStore.getState().move('e7', 'e5')
+    expect(usePlayStore.getState().think).toMatchObject({ white: 5000, black: 3000, turn: 'white', since: 9000 })
+    now.mockRestore()
+  })
+  it('each note keeps its position, so its moves and squares can be shown on the board (S14.3)', () => {
+    usePlayStore.getState().start({ mode: 'human', color: 'white', strength: 3, lang: 'en' })
+    const s = usePlayStore.getState()
+    s.move('e2', 'e4'); s.move('e7', 'e5'); s.move('g1', 'f3'); s.move('b8', 'c6'); s.move('f1', 'c4')
+    const note = usePlayStore.getState().log.filter((n) => n.who === 'you').pop()!
+    // The idea of a move is about the position before it.
+    expect(note.fen).toBe('r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3')
+  })
+  it('says the tutor ideas aloud when the voice is on (S14.3)', () => {
+    const said: string[] = []
+    setPlaySpeaker((text) => { said.push(text) })
+    useSettingsStore.setState({ playVoice: 'both' })
+    const s = usePlayStore.getState()
+    s.start({ mode: 'human', color: 'white', strength: 3, lang: 'en' })
+    s.move('e2', 'e4'); s.move('e7', 'e5'); s.move('g1', 'f3'); s.move('b8', 'c6'); s.move('f3', 'g5')
+    expect(said.some((t) => /A free piece: Qxg5 wins the knight on g5/.test(t))).toBe(true)
+    useSettingsStore.setState({ playVoice: 'none' })
+  })
+})

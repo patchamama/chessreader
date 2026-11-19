@@ -12,6 +12,8 @@ import { httpClient } from '../../shared/api/httpClient'
 import { browserSpeaker } from '../library/narration/speaker'
 import { judgeByEngine, judgeByTablebase, lichessTablebase, type MoveJudgement } from './moveJudge'
 import { bookMove } from './openingBook'
+import { appendNote } from './tutorLog'
+import { startThinking, switchThinking, type ThinkTimes } from './thinkTime'
 
 /**
  * A game played on this board — against the engine (chosen strength), against
@@ -22,7 +24,15 @@ import { bookMove } from './openingBook'
  */
 export type PlayMode = 'engine' | 'human' | 'lichess' | 'lichess-ai' | 'lichess-bot' | 'server'
 export type Clock = { minutes: number; increment: number }
-export interface TutorNote { ply: number; who: 'you' | 'opponent' | 'tutor'; text: string }
+export interface TutorNote {
+  ply: number
+  who: 'you' | 'opponent' | 'tutor'
+  text: string
+  /** The position the note talks about (its moves and squares can be shown there). */
+  fen?: string
+  /** How many times in a row the same note was written (S14.5). */
+  count?: number
+}
 
 interface Runtime { analyse: AnalysePosition }
 let runtime: Runtime | null = null
@@ -35,6 +45,8 @@ const engine = () => {
   return runtime!
 }
 export function setPlayRuntime(next: Runtime) { runtime = next; injected = true }
+/** The game's engine, for the study tools of the page (hints, touched piece, book moves). */
+export const playAnalyse: AnalysePosition = (fen, depth, count) => engine().analyse(fen, depth, count)
 
 type Say = (text: string, lang: Lang) => void
 let speaker: { speak: (t: string, l: Lang, r: number) => Promise<void> } | null = null
@@ -82,6 +94,10 @@ interface PlayState {
   gameId: number
   /** 'server' mode: the engine on the server that plays (stockfish, maia-1500, gnuchess…). */
   serverEngine: string | null
+  /** Thinking time of both players, in every game (S14.6). */
+  think: ThinkTimes | null
+  /** Write a note in the tutor panel (a repeated one is counted, not repeated). */
+  addNote: (who: TutorNote['who'], text: string, fen?: string, speak?: boolean) => void
   start: (o: { mode: PlayMode; color: 'white' | 'black'; strength: number; lang: Lang; token?: string; clock?: Clock; bot?: string; serverEngine?: string }) => void
   resign: () => void
   /** The user's move on the board; false when it is not theirs or not legal. */
@@ -99,7 +115,11 @@ const T = {
 }
 
 export const usePlayStore = create<PlayState>((set, get) => {
-  const note = (who: TutorNote['who'], text: string) => set({ log: [...get().log, { ply: chess.history().length, who, text }] })
+  const note = (who: TutorNote['who'], text: string, fen = chess.fen(), speak = true) => {
+    set({ log: appendNote(get().log, { ply: chess.history().length, who, text, fen }) })
+    // The tutor's ideas are said aloud when the voice is on (S14.3).
+    if (speak && who === 'tutor' && useSettingsStore.getState().playVoice !== 'none') say(text, get().lang)
+  }
 
   /** Apply a move (UCI or from/to) and let the tutor speak about it. */
   function apply(from: string, to: string, promotion: string | undefined, byUser: boolean): boolean {
@@ -109,13 +129,15 @@ export const usePlayStore = create<PlayState>((set, get) => {
     const { lang, mode } = get()
     const t = T[lang]
     set({ fen: chess.fen(), sans: chess.history(), lastMove: { from, to } })
+    const think = get().think
+    if (think) set({ think: switchThinking(think, Date.now(), chess.isGameOver()) })
     const settings = useSettingsStore.getState()
     const opponents = !byUser && mode !== 'human'
     if (settings.playVoice === 'both' || (settings.playVoice === 'opponent' && opponents)) say(sanToSpeech(mv.san, lang), lang)
     if (settings.playMoveStatus && (byUser || mode === 'human')) void judge(before, `${mv.from}${mv.to}${mv.promotion ?? ''}`, chess.fen(), mv.san, chess.history().length)
     const two = mode === 'human'
     const ideas = byUser || two ? explainMove(before, mv.san, lang) : opponentIntent(before, mv.san, lang)
-    if (ideas.length) note(byUser || two ? 'you' : 'opponent', (byUser ? `${t.your} ` : '') + ideas.join(' '))
+    if (ideas.length) note(byUser || two ? 'you' : 'opponent', (byUser ? `${t.your} ` : '') + ideas.join(' '), before)
     if (chess.isGameOver()) {
       set({ status: 'over', result: chess.isCheckmate() ? t.mated : t.draw })
       note('tutor', chess.isCheckmate() ? t.mated : t.draw)
@@ -173,7 +195,7 @@ export const usePlayStore = create<PlayState>((set, get) => {
   /** Follow a started Lichess game: its moves come by the stream, the result ends it. */
   function followLichess(token: string, gameId: string, color: 'white' | 'black', signal: AbortSignal) {
     chess = new Chess()
-    set({ lichess: { token, gameId }, color, status: 'playing', fen: START, sans: [] })
+    set({ lichess: { token, gameId }, color, status: 'playing', fen: START, sans: [], think: startThinking('white', Date.now()) })
     const onState = (s: LichessGameState) => {
       const uci = s.moves ? s.moves.split(' ') : []
       // Moves arrive as the whole list: play the ones not on the board yet.
@@ -182,7 +204,10 @@ export const usePlayStore = create<PlayState>((set, get) => {
         const over = s.status !== 'started' && s.status !== 'created'
         set({ clocks: { white: s.wtime, black: s.btime, increment: s.winc ?? 0, at: Date.now(), running: over || uci.length < 2 ? null : chess.turn() === 'w' ? 'white' : 'black' } })
       }
-      if (s.status !== 'started' && s.status !== 'created') set({ status: 'over', result: s.winner ? `${s.winner} wins` : s.status })
+      if (s.status !== 'started' && s.status !== 'created') {
+        const think = get().think
+        set({ status: 'over', result: s.winner ? `${s.winner} wins` : s.status, ...(think ? { think: switchThinking(think, Date.now(), true) } : {}) })
+      }
     }
     const onFull = (g: LichessGameFull) => {
       set({
@@ -233,7 +258,8 @@ export const usePlayStore = create<PlayState>((set, get) => {
 
   return {
     mode: 'engine', color: 'white', strength: 3, lang: 'en', fen: START, sans: [], lastMove: null, log: [],
-    status: 'idle', result: '', error: null, lichess: null, serverEngine: null, players: null, clocks: null, gameInfo: null, judgement: null, judgements: [], gameId: 0,
+    status: 'idle', result: '', error: null, lichess: null, serverEngine: null, players: null, clocks: null, gameInfo: null, judgement: null, judgements: [], gameId: 0, think: null,
+    addNote: (who, text, fen, speak) => note(who, text, fen ?? chess.fen(), speak ?? true),
     start: (o) => {
       abort?.abort()
       chess = new Chess()
@@ -245,7 +271,8 @@ export const usePlayStore = create<PlayState>((set, get) => {
         ? (o.color === 'white' ? { white: me, black: opponent } : { white: opponent, black: me })
         : o.mode === 'human' ? { white: me, black: me } : null
       set({ mode: o.mode, color: o.color, strength: o.strength, lang: o.lang, fen: START, sans: [], lastMove: null, log: [], status: 'playing', result: '', error: null, lichess: null,
-        players, clocks: null, gameInfo: null, judgement: null, judgements: [], gameId: get().gameId + 1, serverEngine: o.serverEngine ?? null })
+        players, clocks: null, gameInfo: null, judgement: null, judgements: [], gameId: get().gameId + 1, serverEngine: o.serverEngine ?? null,
+        think: o.mode === 'lichess' || o.mode === 'lichess-ai' || o.mode === 'lichess-bot' ? null : startThinking('white', Date.now()) })
       if (o.mode === 'lichess') { void lichessGame(o.token ?? '', o.clock ?? LICHESS_CLOCKS[0]); return }
       if (o.mode === 'lichess-ai') { void lichessAi(o.token ?? '', o.clock ?? LICHESS_CLOCKS[0]); return }
       if (o.mode === 'lichess-bot') { void lichessBot(o.token ?? '', o.bot ?? 'maia5', o.clock ?? LICHESS_CLOCKS[0]); return }
@@ -268,12 +295,12 @@ export const usePlayStore = create<PlayState>((set, get) => {
     resign: () => {
       const s = get()
       if (s.lichess?.gameId) lichessResign(s.lichess.token, s.lichess.gameId).catch((err) => set({ error: String(err.message ?? err) }))
-      else if (s.status === 'playing' || s.status === 'thinking') set({ status: 'over', result: T[s.lang].resigned })
+      else if (s.status === 'playing' || s.status === 'thinking') set({ status: 'over', result: T[s.lang].resigned, ...(s.think ? { think: switchThinking(s.think, Date.now(), true) } : {}) })
     },
     reset: () => {
       abort?.abort()
       chess = new Chess()
-      set({ fen: START, sans: [], lastMove: null, log: [], status: 'idle', result: '', error: null, lichess: null, players: null, clocks: null, gameInfo: null, judgement: null, judgements: [], gameId: get().gameId + 1 })
+      set({ fen: START, sans: [], lastMove: null, log: [], status: 'idle', result: '', error: null, lichess: null, players: null, clocks: null, gameInfo: null, judgement: null, judgements: [], gameId: get().gameId + 1, think: null })
     },
   }
 })
