@@ -15,6 +15,7 @@ const HTML = '<p>1. e4 e5 2. ♘f3 ♘c6 3. ♗b5 a6</p>'
 vi.mock('../../api/libraryApi', () => ({
   useChapter: () => ({ data: { title: 'Notation', html: HTML, toc: [] }, isLoading: false }),
   useTouchBook: () => ({ mutate: vi.fn(), isPending: false }),
+  useBookTitle: () => null,
 }))
 vi.mock('react-chessboard', () => ({ Chessboard: () => <div data-testid="chessboard" /> }))
 vi.mock('../../../../shared/stockfish/useStockfishEval', () => ({

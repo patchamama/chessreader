@@ -33,6 +33,18 @@ export function useBooks() {
   })
 }
 
+/** The title of the open book: from the book list, or the in-memory external book's own title. */
+export function useBookTitle(bookId: number): string | null {
+  const externalTitle = useExternalBookStore((s) => (bookId === EXTERNAL_BOOK_ID ? s.title : null))
+  const { data } = useQuery<Book[]>({
+    queryKey: ['library', 'books'],
+    queryFn: () => httpClient<Book[]>('/api/library/books'),
+    enabled: bookId > 0,
+  })
+  if (bookId === EXTERNAL_BOOK_ID) return externalTitle ?? null
+  return data?.find((b) => b.id === bookId)?.title ?? null
+}
+
 export function useChapter(bookId: number, chapterOrder: number) {
   // The external book (games opened from the game search) is served from
   // memory; every other book comes from the API, with the errata of the book

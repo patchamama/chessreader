@@ -19,6 +19,7 @@ const HTML =
 vi.mock('../api/libraryApi', () => ({
   useChapter: () => ({ data: { title: 'Hipermoderna', html: HTML, toc: [] }, isLoading: false }),
   useTouchBook: () => ({ mutate: vi.fn(), isPending: false }),
+  useBookTitle: () => null,
 }))
 
 vi.mock('react-chessboard', () => ({

@@ -29,6 +29,7 @@ const h = vi.hoisted(() => ({ html: '' }))
 vi.mock('../../api/libraryApi', () => ({
   useChapter: () => ({ data: { title: 'Chapter', html: h.html, toc: [] }, isLoading: false }),
   useTouchBook: () => ({ mutate: vi.fn(), isPending: false }),
+  useBookTitle: () => null,
 }))
 const recommentGame = vi.hoisted(() => vi.fn())
 vi.mock('../../review/recommentGame', async (importOriginal) => ({

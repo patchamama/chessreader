@@ -20,6 +20,7 @@ vi.mock('../api/libraryApi', () => ({
     isLoading: false,
   }),
   useTouchBook: () => ({ mutate: vi.fn(), isPending: false }),
+  useBookTitle: () => null,
 }))
 
 vi.mock('react-chessboard', () => ({

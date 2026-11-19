@@ -3,7 +3,7 @@ import { diagramFenOf } from '../utils/diagramFiles'
 import { DiagramToolsPanel } from './DiagramToolsPanel'
 import { formatChapterTitle, prepareChapterHtml } from '../utils/epubContent'
 import { useParams } from 'react-router-dom'
-import { useChapter, useTouchBook, type Book } from '../api/libraryApi'
+import { useBookTitle, useChapter, useTouchBook, type Book } from '../api/libraryApi'
 import { useQueryClient } from '@tanstack/react-query'
 import { numberLine, recognizeGames } from '@chess-ebook/chess-shared'
 import type { GameTree, GameNode, IsolatedMove } from '@chess-ebook/chess-shared'
@@ -188,6 +188,7 @@ export default function BookReader() {
   const [showBookConfig, setShowBookConfig] = useState(false)
 
   const { data, isLoading } = useChapter(id, currentChapter)
+  const bookTitle = useBookTitle(id)
   const touchBook = useTouchBook()
   const contentRef = useRef<HTMLDivElement>(null)
 
@@ -285,6 +286,8 @@ export default function BookReader() {
   const pendingRefresh = useRef<{ gameIndex: number; offset: number | null } | null>(null)
   /** The active move is not followed (scrolled to) right after a rewrite: the reader keeps their place. */
   const followPausedUntil = useRef(0)
+  /** The move the board loaded on its own when the chapter opened: not scrolled to (S1). */
+  const autoLoadedKey = useRef<string | null>(null)
   const markGameRefresh = (gameIndex: number) => {
     const main = mainRef.current
     const box = contentRef.current?.querySelector(`[data-game-container="${gameIndex}"]`)
@@ -455,10 +458,12 @@ export default function BookReader() {
       const tree = games[memory.gameIndex].tree
       const nodeId = memory.nodeId && tree.nodes.has(memory.nodeId) ? memory.nodeId : tree.mainline[0] ?? null
       board.setAnnotationsByNode(memory.annotations ?? {})
+      autoLoadedKey.current = nodeId ? `${memory.gameIndex}:${nodeId}` : null
       board.loadPosition(tree, nodeId, !!nodeId && !tree.mainline.includes(nodeId))
       return
     }
     const first = games[0].tree
+    autoLoadedKey.current = first.mainline[0] ? `0:${first.mainline[0]}` : null
     board.loadPosition(first, first.mainline[0] ?? null, false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [games])
@@ -733,7 +738,7 @@ export default function BookReader() {
       span.classList.toggle('bg-yellow-300', active)
       // Keep the link colour only while inactive (active is yellow + bold).
       span.classList.toggle('text-blue-700', !active)
-      if (active && Date.now() > followPausedUntil.current) followActiveMove(span, autoscroll)
+      if (active && activeSpanKey !== autoLoadedKey.current && Date.now() > followPausedUntil.current) followActiveMove(span, autoscroll)
     })
   }, [activeSpanKey, shownHtml, games, autoscroll])
 
@@ -1078,8 +1083,16 @@ export default function BookReader() {
           </svg>
         </button>
 
-        <span className="ml-2 truncate text-sm font-medium text-slate-700 max-w-[200px]">
-          {data ? formatChapterTitle(data.title, titleSeparator) : '…'}
+        <span className="ml-2 flex min-w-0 max-w-[420px] items-baseline gap-1.5 truncate text-sm">
+          {bookTitle && (
+            <span data-testid="reader-book-title" className="truncate font-semibold text-slate-900" title={bookTitle}>
+              {bookTitle}
+            </span>
+          )}
+          {bookTitle && <span aria-hidden className="text-slate-300">·</span>}
+          <span className="truncate font-medium text-slate-600">
+            {data ? formatChapterTitle(data.title, titleSeparator) : '…'}
+          </span>
         </span>
         <span className="ml-auto text-xs text-slate-400 shrink-0">
           {toc.length > 0 ? `${currentChapter} / ${maxChapter}` : ''}
