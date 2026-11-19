@@ -13,9 +13,9 @@ import type { AnalysisBoardInput } from './analysisBoards'
 
 
 const T: Record<AppLanguage, Record<string, string>> = {
-  en: { first: 'First position', prev: 'Previous move', next: 'Next move', last: 'Last move', play: 'Play', pause: 'Pause', narrate: 'Narrate', stop: 'Stop narrating', moves: 'Moves' },
-  es: { first: 'Posición inicial', prev: 'Jugada anterior', next: 'Siguiente jugada', last: 'Última jugada', play: 'Reproducir', pause: 'Pausa', narrate: 'Narrar', stop: 'Detener la narración', moves: 'Jugadas' },
-  de: { first: 'Ausgangsstellung', prev: 'Vorheriger Zug', next: 'Nächster Zug', last: 'Letzter Zug', play: 'Abspielen', pause: 'Pause', narrate: 'Vorlesen', stop: 'Vorlesen beenden', moves: 'Züge' },
+  en: { first: 'First position', prev: 'Previous move', next: 'Next move', last: 'Last move', play: 'Play', pause: 'Pause', narrate: 'Narrate', stop: 'Stop narrating', moves: 'Moves', flip: 'Flip board' },
+  es: { first: 'Posición inicial', prev: 'Jugada anterior', next: 'Siguiente jugada', last: 'Última jugada', play: 'Reproducir', pause: 'Pausa', narrate: 'Narrar', stop: 'Detener la narración', moves: 'Jugadas', flip: 'Girar el tablero' },
+  de: { first: 'Ausgangsstellung', prev: 'Vorheriger Zug', next: 'Nächster Zug', last: 'Letzter Zug', play: 'Abspielen', pause: 'Pause', narrate: 'Vorlesen', stop: 'Vorlesen beenden', moves: 'Züge', flip: 'Brett drehen' },
 }
 
 /** One move a second when the line plays by itself. */
@@ -47,6 +47,7 @@ export function AnalysisBoardView({ board }: { board: AnalysisBoardInput }) {
   const [playing, setPlaying] = useState(false)
   const [view, setView] = useState<NarrationView | null>(null)
   const [narrating, setNarrating] = useState(false)
+  const [flipped, setFlipped] = useState(false)
   const run = useRef(0)
 
   useEffect(() => {
@@ -121,7 +122,8 @@ export function AnalysisBoardView({ board }: { board: AnalysisBoardInput }) {
   const shown = ply > 0 ? positions[ply - 1] : null
   const fen = view?.fen ?? shown?.fen ?? startFen
   const lastMove = view ? view.lastMove : shown ? { from: shown.from, to: shown.to } : null
-  const orientation = startFen.split(' ')[1] === 'b' ? 'black' : 'white'
+  const sideToMove = startFen.split(' ')[1] === 'b' ? 'black' : 'white'
+  const orientation = flipped ? (sideToMove === 'white' ? 'black' : 'white') : sideToMove
   const button = 'rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40'
   const [, turn, , , , moveNo] = startFen.split(' ')
   const firstNo = Number(moveNo) || 1
@@ -140,6 +142,7 @@ export function AnalysisBoardView({ board }: { board: AnalysisBoardInput }) {
         {playing
           ? <button type="button" className={button} aria-label={t.pause} onClick={() => setPlaying(false)}>⏸</button>
           : <button type="button" className={button} aria-label={t.play} disabled={total === 0} onClick={() => { setView(null); if (ply >= total) setPly(0); setPlaying(true) }}>▶ {t.play}</button>}
+        <button type="button" className={button} aria-label={t.flip} title={t.flip} onClick={() => setFlipped((f) => !f)}>⇅</button>
         <NotationToggle className={button} />
       </div>
       {total > 0 && (

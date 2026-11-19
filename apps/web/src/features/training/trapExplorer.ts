@@ -1,4 +1,4 @@
-import { trapsAt, type Trap } from './traps'
+import type { Trap } from './traps'
 
 /** The first moves of the traps (e4, d4, c4, Nf3…), the most common first. */
 export function firstMoves(traps: Trap[]): string[] {
@@ -7,15 +7,5 @@ export function firstMoves(traps: Trap[]): string[] {
   return [...count.entries()].sort((a, b) => b[1] - a[1]).map(([m]) => m)
 }
 
-/**
- * From a position on the line of some traps: each next move that keeps traps
- * reachable, with those traps, the move with most traps first.
- */
-export function trapContinuations(fen: string, traps: Trap[]): { san: string; traps: Trap[] }[] {
-  const by = new Map<string, Trap[]>()
-  for (const { trap, ply } of trapsAt(fen, traps)) {
-    const san = trap.sans[ply]
-    by.set(san, [...(by.get(san) ?? []), trap])
-  }
-  return [...by.entries()].map(([san, t]) => ({ san, traps: t })).sort((a, b) => b.traps.length - a.traps.length)
-}
+/** Moves that keep traps on the board, by position (kept here for existing imports). */
+export { trapContinuations } from './traps'

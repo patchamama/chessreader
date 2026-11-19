@@ -29,7 +29,7 @@ Objective: diagrams/evaluations tools, reader UX (footer, spinner, game containe
 - [x] T4 S11 S12 analysis board tab + piece notation — W4 (wave 2)
 - [x] T5 S13 training — W5 (v0.113.0, v0.113.1)
 - [x] T6 S14 play (v0.115.0) — W6 (wave 2)
-- [ ] T7 S15 S16 S17 traps by FEN, try-a-trap board, eval bar + flip — W7
+- [x] T7 S15 S16 S17 traps by FEN, try-a-trap board, eval bar + flip — W7
 - [x] T8 S18 book styles/images check — parent
 
 ## Log

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { Chess } from 'chess.js'
 import { positionHash } from '@chess-ebook/chess-shared'
 import { TrapPractice, TrapTrainer } from './TrapTrainer'
@@ -126,7 +126,7 @@ describe('try a trap in a game (S13)', () => {
     render(<TrapTryout traps={[scholar, d4trap]} opponent={opponent} />)
     expect(screen.getByTestId('tryout-traps')).toHaveTextContent('2')
     fireEvent.click(screen.getByRole('button', { name: 'Play e4' }))
-    await screen.findByText(/e5/, { selector: '[data-testid="tryout-moves"]' })
+    await waitFor(() => expect(screen.getByTestId('tryout-moves')).toHaveTextContent('e5'))
     expect(screen.getByTestId('tryout-traps')).toHaveTextContent('1')
     expect(screen.getByRole('button', { name: 'Play Bc4' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Play d4' })).toBeNull()

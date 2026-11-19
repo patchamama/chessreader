@@ -8,8 +8,8 @@ import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 
 vi.mock('../../../shared/chess/ChessBoard', () => ({
-  default: ({ fen, customSquareStyles }: { fen: string; customSquareStyles?: Record<string, CSSProperties> }) => (
-    <div data-testid="board" data-squares={Object.keys(customSquareStyles ?? {}).sort().join(',')}>{fen}</div>
+  default: ({ fen, customSquareStyles, orientation }: { fen: string; customSquareStyles?: Record<string, CSSProperties>; orientation?: string }) => (
+    <div data-testid="board" data-orientation={orientation} data-squares={Object.keys(customSquareStyles ?? {}).sort().join(',')}>{fen}</div>
   ),
 }))
 
@@ -115,5 +115,17 @@ describe('AnalysisBoardsPanel (S4: several analysis boards, opened and closed on
     expect(board().getAttribute('data-squares')).toContain('d5')
     await act(async () => { releaseLast?.() })
     expect(useStudyBoardStore.getState()).toBe(studyBefore)
+  })
+})
+
+describe('AnalysisBoardsPanel (S17: an analysis board can always be flipped)', () => {
+  it('has a flip-board button that turns the board round and back', () => {
+    render(<AnalysisBoardsPanel />)
+    act(() => { openAnalysisBoard({ title: 'Variation', startFen: START, moves: ['e4', 'e5'] }) })
+    expect(board()).toHaveAttribute('data-orientation', 'white')
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Flip board' }))
+    expect(board()).toHaveAttribute('data-orientation', 'black')
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Flip board' }))
+    expect(board()).toHaveAttribute('data-orientation', 'white')
   })
 })

@@ -2,6 +2,10 @@
 
 Every version of ChessReader, newest first: the date of its tag and the commits it brought (from the git history; versions follow `apps/web/src/version.ts`).
 
+## v0.116.0 — 2026-11-19
+
+- feat: traps are found by position, whatever the move order (transpositions included); Try a trap shows a proposed move on the board on hover, lets you go back or jump to any played move to try another branch, and shows in green the trap moves of a clicked piece; training boards can flip and show the engine evaluation bar with its line; analysis boards can flip
+
 ## v0.115.0 — 2026-11-19
 
 - feat: Play — moves the book games played from the position (with players, results and engine score), live book comments for both or one side, tutor ideas shown on the board (arrows, squares, hover, voice), the chosen piece's move colours precomputed in the background, repeated tutor notes counted (2x) and blinking, thinking time for both players in every game, a scrolling tutor panel, and the engine's view of moving a touched piece

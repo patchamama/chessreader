@@ -1,3 +1,4 @@
+import { Chess } from 'chess.js'
 import { positionHash } from '@chess-ebook/chess-shared'
 import { hasServerSession } from '../../shared/api/serverSession'
 import { httpClient } from '../../shared/api/httpClient'
@@ -64,18 +65,79 @@ export function filterTraps(traps: Trap[], f: TrapFilter): Trap[] {
     && (!f.firstMove || t.sans[0] === f.firstMove))
 }
 
+/** A trap whose line passes through a position, and the ply of that position on the line. */
+export interface TrapAt { trap: Trap; ply: number }
+
+const indexes = new WeakMap<Trap[], Map<string, TrapAt[]>>()
+
+/**
+ * The traps indexed by position: each position of each trap line (board, side
+ * to move, castling, en passant — the trap's `keys`) gives the traps whose line
+ * passes through it and the ply there. The order the moves were played in does
+ * not matter: any move order reaching the position finds the same traps.
+ */
+export function trapIndex(traps: Trap[]): Map<string, TrapAt[]> {
+  const cached = indexes.get(traps)
+  if (cached) return cached
+  const index = new Map<string, TrapAt[]>()
+  for (const trap of traps) {
+    trap.keys.forEach((key, ply) => {
+      const list = index.get(key) ?? []
+      // A line that comes back to a position keeps its first ply there.
+      if (!list.some((e) => e.trap === trap)) index.set(key, [...list, { trap, ply }])
+    })
+  }
+  indexes.set(traps, index)
+  return index
+}
+
 /**
  * The traps that can still be set from this position: the position is on the
  * trap's line before its last move, and the trap is not over yet.
  */
-export function trapsAt(fen: string, traps: Trap[]): { trap: Trap; ply: number }[] {
+export function trapsAt(fen: string, traps: Trap[]): TrapAt[] {
+  let hash: string
+  try { hash = positionHash(fen) } catch { return [] }
+  return (trapIndex(traps).get(hash) ?? [])
+    .filter(({ trap, ply }) => ply < trap.sans.length - 1)
+    .sort((a, b) => (b.trap.fall ?? 0) - (a.trap.fall ?? 0))
+}
+
+/** A move from a position that keeps traps on the board. */
+export interface TrapContinuation {
+  /** The move, in SAN, and its squares. */
+  san: string
+  from: string
+  to: string
+  /** `line`: the next move of a trap line through this position; `transposition`: it leads into a position of a trap line. */
+  kind: 'line' | 'transposition'
+  /** The traps it keeps available, the most likely to fall first. */
+  traps: Trap[]
+}
+
+/**
+ * The moves of the side to move that keep traps on the board, found by
+ * position: each legal move whose resulting position is on some trap's line
+ * (the next move of a line through this position, a move that completes a
+ * trap, or one that enters a line by another move order). Line moves first,
+ * then the move with most traps.
+ */
+export function trapContinuations(fen: string, traps: Trap[]): TrapContinuation[] {
+  let chess: Chess
+  try { chess = new Chess(fen) } catch { return [] }
+  const index = trapIndex(traps)
   const hash = positionHash(fen)
-  const out: { trap: Trap; ply: number }[] = []
-  for (const trap of traps) {
-    const ply = trap.keys.indexOf(hash)
-    if (ply >= 0 && ply < trap.sans.length - 1) out.push({ trap, ply })
+  const here = new Set((index.get(hash) ?? []).map((e) => e.trap))
+  const out: TrapContinuation[] = []
+  for (const move of chess.moves({ verbose: true })) {
+    const reached = (index.get(positionHash(move.after)) ?? []).filter((e) => e.ply > 0)
+    if (!reached.length) continue
+    // A line move: a trap through this position plays exactly this move next.
+    const onLine = reached.filter((e) => here.has(e.trap) && e.trap.keys[e.ply - 1] === hash)
+    const kept = [...new Set(reached.map((e) => e.trap))].sort((a, b) => (b.fall ?? 0) - (a.fall ?? 0))
+    out.push({ san: move.san, from: move.from, to: move.to, kind: onLine.length ? 'line' : 'transposition', traps: kept })
   }
-  return out.sort((a, b) => (b.trap.fall ?? 0) - (a.trap.fall ?? 0))
+  return out.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'line' ? -1 : 1) || b.traps.length - a.traps.length)
 }
 
 // ── Spaced repetition: a trap comes back after 1, 2, 4, 8, 16 days ──────────

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import ChessBoard from '../../shared/chess/ChessBoard'
+import { TrapBoard } from './TrapBoard'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { levelPuzzle } from './levelPuzzles'
 import { puzzleMove, puzzlePosition, type Puzzle } from '../gamesearch/puzzles'
@@ -67,9 +67,8 @@ export function LevelTest() {
   const lastMove = puzzle ? (ply === 0 ? puzzle.lastMove : puzzle.solution[ply - 1]) : null
   return (
     <div className="flex flex-col gap-3 md:flex-row">
-      <div className="w-full max-w-[420px]">
-        {position && <ChessBoard fen={position.fen()} orientation={puzzle!.fen.split(' ')[1] === 'b' ? 'black' : 'white'} lastMove={lastMove ? { from: lastMove.slice(0, 2), to: lastMove.slice(2, 4) } : null} allowDragging onPieceDrop={drop} />}
-      </div>
+      {position && <TrapBoard testId="level-board-box" fen={position.fen()} orientation={puzzle!.fen.split(' ')[1] === 'b' ? 'black' : 'white'}
+        lastMove={lastMove ? { from: lastMove.slice(0, 2), to: lastMove.slice(2, 4) } : null} onMove={drop} />}
       <div className="text-sm">
         <p className="font-semibold">Puzzle {state.answered + 1} / {LEVEL_PUZZLES}</p>
         {error && <p role="alert" className="text-red-700">{error}</p>}
