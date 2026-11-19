@@ -3,7 +3,8 @@ import type { Chapter } from '../api/libraryApi'
 import { boardSvgDataUrl } from './boardSvg'
 import { parseCommentMark, parseDiagramMark, type CommentMark } from './diagramMark'
 import { Chess } from 'chess.js'
-import { guessPieceLangs, lineSans, lineToBoardButton, markLine, markProseMoves, resolveSan, type PieceLang } from './lineMarkup'
+import { guessPieceLangs, lineSans, lineToBoardButton, markLine, resolveSan, type PieceLang } from './lineMarkup'
+import { markCommentMoves, type MainLinePositions } from './commentLines'
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 const attr = (s: string) => esc(s).replace(/"/g, '&quot;')
@@ -40,8 +41,13 @@ export function textToHtml(text: string): string {
  * The inside of a book comment quote: its text (with the moves it quotes
  * playable from `fen`) and a footer with its source and a link to it.
  */
-export function humanCommentInner(quote: Pick<CommentMark, 'text' | 'source' | 'fen' | 'gameId' | 'ply'>): string {
-  const text = quote.fen ? markProseMoves(quote.text, quote.fen, guessPieceLangs(quote.text)) : esc(quote.text)
+export function humanCommentInner(
+  quote: Pick<CommentMark, 'text' | 'source' | 'fen' | 'gameId' | 'ply'>,
+  mainLine?: MainLinePositions,
+): string {
+  // Moves are read in whatever notation the quote uses (S7), anchored on the
+  // game's main line when they carry a number ("5…Nc6"), else on the quote's position.
+  const text = quote.fen ? markCommentMoves(quote.text, quote.fen, mainLine) : esc(quote.text)
   const link = quote.gameId
     ? ` <a class="comment-source" data-comment-game="${attr(quote.gameId)}" data-comment-ply="${quote.ply ?? ''}" href="#" aria-label="Open the source of this comment" title="Open the source of this comment">↗</a>`
     : ''
@@ -86,7 +92,7 @@ class Book {
       const marked = start ? markLine(p, start, this.langs) : null
       if (marked) return `<p class="variation" data-no-recognition>${marked}</p>`
     }
-    return paragraph(p, this.langs)
+    return paragraph(p, this.langs, this.before)
   }
 }
 
@@ -95,7 +101,7 @@ class Book {
  * or a plain paragraph. The engine's lines under a diagram are marked so the
  * recogniser does not read them as moves of the game.
  */
-function paragraph(p: string, langs: PieceLang[]): string {
+function paragraph(p: string, langs: PieceLang[], before?: MainLinePositions): string {
   // A remark borrowed from a book: a quote with its source (its moves are not the game's).
   const quote = parseCommentMark(p)
   if (quote) {
@@ -103,7 +109,7 @@ function paragraph(p: string, langs: PieceLang[]): string {
     const alternatives = quote.alternatives
       ? ` data-comment-alternatives="${attr(JSON.stringify(quote.alternatives))}"${quote.fen ? ` data-comment-fen="${attr(quote.fen)}"` : ''}`
       : ''
-    return `<blockquote class="human-comment" data-no-recognition${alternatives}>${humanCommentInner(quote)}</blockquote>`
+    return `<blockquote class="human-comment" data-no-recognition${alternatives}>${humanCommentInner(quote, before)}</blockquote>`
   }
   const mark = parseDiagramMark(p)
   if (!mark) return `<p>${esc(p)}</p>`

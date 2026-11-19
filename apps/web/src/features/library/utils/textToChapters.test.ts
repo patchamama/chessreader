@@ -143,3 +143,19 @@ describe('book comments with alternatives (S4)', () => {
     expect(textToHtml('1. e4 e5\nA remark.')).toBe('<p>1. e4 e5</p>\n<p>A remark.</p>')
   })
 })
+
+describe('book comments read the moves they quote against the main line (reader-analysis-round S7)', () => {
+  it('"5…Nc6" in English letters inside a Spanish game is read from the position before Black\'s 5th move', () => {
+    const c = new Chess()
+    for (const m of ['d4', 'd5', 'c4', 'e6', 'Nc3', 'c5', 'Nf3', 'Nf6', 'e3', 'Be7', 'Bd3', 'Nc6', 'O-O']) c.move(m)
+    const text = [
+      'T',
+      '1. d4 d5 2. c4 e6 3. Cc3 c5 4. Cf3 Cf6 5. e3 Ae7 6. Ad3 Cc6 7. O-O',
+      `[Comment source="Kasparov, Mis geniales predecesores I" text="Staunton elude la Variante Simétrica, con 5…Nc6. 6" fen="${c.fen()}" game="g7" ply="13"]`,
+    ].join('\n')
+    const html = textToChapters(text).chapters[0].html
+    const quote = html.slice(html.indexOf('<blockquote'))
+    expect(quote).toMatch(/class="chess-line"[^>]*data-line-moves="Nc6"/)
+    expect(quote).toContain('>Nc6<')
+  })
+})

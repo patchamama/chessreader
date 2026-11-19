@@ -32,7 +32,7 @@ import { resetNodeCounter } from './pgnToTree.js';
 import { findMoveRepair } from './moveRepair.js';
 
 /** Parse a bare (isolated) SAN token into a square + piece for board highlight. */
-function parseIsolatedMove(token: SanToken): IsolatedMove | null {
+export function parseIsolatedMove(token: SanToken): IsolatedMove | null {
   const san = token.san!;
   const core = san.replace(/[+#!?]+$/g, '').replace(/=[QRBN]$/i, '');
   const dest = core.match(/([a-h][1-8])(?!.*[a-h][1-8])/);

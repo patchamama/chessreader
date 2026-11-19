@@ -17,7 +17,9 @@ import { figurineToAscii } from '../notation/figurineToAscii.js';
 import { ENGINE_LINE_RE, spanishToEnglish } from '../notation/spanishToEnglish.js';
 import { buildGameTree } from '../pgn/pgnToTree.js';
 import { buildGameTreeTwoPass } from '../pgn/twoPassBuilder.js';
-import { type GameTree } from '../model/gameTree.js';
+import { type GameTree, type IsolatedMove } from '../model/gameTree.js';
+import { findProsePositions, proseFen } from './prosePosition.js';
+import { parseIsolatedMove } from '../pgn/twoPassBuilder.js';
 
 const STANDARD_START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
@@ -93,6 +95,66 @@ function renumberFromFens(tokens: SanToken[]): void {
   });
 }
 
+/** The recognition text: figurines and Spanish letters as English SAN, engine lines as comments (same length). */
+function normaliseText(text: string): string {
+  return spanishToEnglish(figurineToAscii(text)).replace(ENGINE_LINE_RE, (line) =>
+    line.replace(/^([ \t]*)[^\]]*\]/, (label, indent: string) => `${indent}{${' '.repeat(label.length - indent.length - 1)}`));
+}
+
+/**
+ * The SANs of the moves chained from tokens[i]: only spaces, glyphs and move
+ * numbers between them (no prose, no bracket, same paragraph), at most `max`.
+ */
+function chainedSans(text: string, tokens: SanToken[], i: number, max = 6): string[] {
+  const out: string[] = [];
+  for (let j = i; j < tokens.length && out.length < max; j++) {
+    const t = tokens[j];
+    if (j > i && !/^[\s.,;!?…]*$/u.test(text.slice(tokens[j - 1].charEnd, t.charStart))) break;
+    if (t.type === 'move') {
+      if (t.isolated) break;
+      out.push(t.san!);
+    } else if (t.type !== 'move-number' && t.type !== 'annotation') break;
+  }
+  return out;
+}
+
+/** Can these moves be played, in order, from this FEN? */
+function playable(fen: string, sans: string[]): boolean {
+  try {
+    const chess = new Chess(fen);
+    for (const san of sans) chess.move(san);
+    return true;
+  } catch { return false; }
+}
+
+/**
+ * Turn each position described in prose into a FEN token, in place of the
+ * tokens its piece list produced. The side to move and the move number are
+ * those of the first numbered move written after it ("1." White, "1..." Black);
+ * the description is only used when the moves chained from there can all be
+ * played from it. Returns the FEN tokens added.
+ */
+function insertProsePositions(text: string, tokens: SanToken[]): Set<SanToken> {
+  const added = new Set<SanToken>();
+  const positions = findProsePositions(text);
+  positions.forEach((pos, k) => {
+    const limit = positions[k + 1]?.charStart ?? Infinity;
+    const first = tokens.findIndex((t) => t.charStart >= pos.charEnd && t.charStart < limit
+      && t.type === 'move' && !t.isolated && t.moveNumber !== undefined && t.color !== undefined);
+    if (first < 0) return;
+    const move = tokens[first];
+    const fen = proseFen(pos, move.color === 'white' ? 'w' : 'b', move.moveNumber!, chainedSans(text, tokens, first));
+    if (!fen) return;
+    const from = tokens.findIndex((t) => t.charStart >= pos.charStart);
+    let to = from;
+    while (to < tokens.length && tokens[to].charStart < pos.charEnd) to++;
+    const token: SanToken = { type: 'fen', raw: text.slice(pos.charStart, pos.charEnd), charStart: pos.charStart, charEnd: pos.charEnd, fen };
+    tokens.splice(from, to - from, token);
+    added.add(token);
+  });
+  return added;
+}
+
 export function recognizeGames(text: string, options: RecognizeOptions = {}): RecognizedGame[] {
   const algorithm = options.algorithm ?? 2;
   // Normalise figurine glyphs (♘→N) and then Spanish notation (Cf3→Nf3).
@@ -101,8 +163,7 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
   // An engine line added to the book ("Stockfish 14 eval: [+0.48] 8 cxd5 …") is
   // an alternative to the next move: its label becomes an unclosed "{", which
   // the tokenizer closes at the end of the line (same length, offsets kept).
-  const normalised = spanishToEnglish(figurineToAscii(text)).replace(ENGINE_LINE_RE, (line) =>
-    line.replace(/^([ \t]*)[^\]]*\]/, (label, indent: string) => `${indent}{${' '.repeat(label.length - indent.length - 1)}`));
+  const normalised = normaliseText(text);
 
   const tokens = tokenize(normalised);
 
@@ -117,6 +178,10 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
       token.fen = text.slice(token.charStart, token.charEnd);
     }
   }
+
+  // Positions described in prose ("♖e1, ♗e4 (blancas) - ♔g8 … (negras)") start
+  // the fragment that follows them, like a FEN written in the text.
+  const proseFens = insertProsePositions(text, tokens);
 
   renumberFromFens(tokens);
 
@@ -198,6 +263,17 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
   // The start position of each sequence that begins at a FEN of the text, and
   // the FEN token itself (the game's span starts there, under its heading).
   const startOf = new Map<SanToken[], { fen: string; token: SanToken }>();
+  // The position described in prose the current game started from, while its
+  // alternatives ("1." again) may still follow.
+  let proseStart: string | null = null;
+  const startFrom = (fen: string, token: SanToken) => {
+    startOf.set(current, { fen, token });
+    const [, side, , , , fullmove] = fen.split(' ');
+    lastMainPly = (Number(fullmove) - 1) * 2 + (side === 'b' ? 1 : 0);
+    maxTopPly = lastMainPly;
+    sawMove1 = true;
+    afterDiagram = false;
+  };
 
   for (const token of tokens) {
     // A FEN at top level starts a new game from that position, numbered as the
@@ -206,12 +282,8 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
       if (depth > 0 || !validFen(token.fen!)) continue;
       startNewGame();
       const full = token.fen!.split(' ').length >= 6 ? token.fen! : `${token.fen} 0 1`;
-      startOf.set(current, { fen: full, token });
-      const [, side, , , , fullmove] = full.split(' ');
-      lastMainPly = (Number(fullmove) - 1) * 2 + (side === 'b' ? 1 : 0);
-      maxTopPly = lastMainPly;
-      sawMove1 = true;
-      afterDiagram = false;
+      startFrom(full, token);
+      proseStart = proseFens.has(token) ? full : null;
       continue;
     }
     if (token.type === 'paragraph-break') {
@@ -228,6 +300,8 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
       depth = 0;
     } else if (token.type === 'diagram') {
       afterDiagram = true;
+      // A diagram after the moves shows another position than the one described.
+      if (current.some(t => t.type === 'move')) proseStart = null;
       // Kept in the sequence: the builder reads a bracket right after a
       // diagram as a line of the main game (see insertVariations).
       if (current.length > 0) current.push(token);
@@ -244,6 +318,11 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
       const topLevel = depth === 0 || (!openedInParagraph && !inClosedBracket.has(token));
       if (topLevel && (sawMove1 || inFragment) && (inFragment || current.some(t => t.type === 'move'))) {
         startNewGame();
+        // Another "1." after a position described in prose is an alternative
+        // first move from that position ("Si juegan 1.♖a3 … Lo correcto es 1.♘e4").
+        const next = tokens.indexOf(token) + 1;
+        if (proseStart && playable(proseStart, chainedSans(text, tokens, next, 1))) startFrom(proseStart, token);
+        else proseStart = null;
       }
       if (topLevel) { sawMove1 = true; afterDiagram = false; }
       current.push(token);
@@ -373,4 +452,31 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
   }
 
   return results;
+}
+
+/**
+ * The move notation of a text that no recognised game could place: fragments
+ * after a diagram whose position is not known, moves that cannot be played.
+ * Each one is a board-only mark (target square and piece, like an isolated
+ * prose move), so the reader can still show it as notation, not as a game.
+ * Bare squares of the prose ("the square “g4”") and the piece lists of a
+ * position described in prose are not moves and are left out.
+ */
+export function unanchoredMoves(text: string, games: RecognizedGame[]): IsolatedMove[] {
+  const placed = new Set<number>();
+  for (const { tree } of games) {
+    for (const node of tree.nodes.values()) if (node.fen && !node.invalid && node.charStart !== undefined) placed.add(node.charStart);
+    for (const iso of tree.isolatedMoves) if (iso.charStart !== undefined) placed.add(iso.charStart);
+  }
+  const lists = findProsePositions(text);
+  const inList = (at: number) => lists.some((p) => at >= p.charStart && at < p.charEnd);
+  const marks: IsolatedMove[] = [];
+  for (const t of tokenize(normaliseText(text))) {
+    if (t.type !== 'move' || placed.has(t.charStart) || inList(t.charStart)) continue;
+    // A lone square in prose is a square, not a move.
+    if (t.isolated && /^[a-h][1-8]$/.test(t.san!.replace(/[+#!?]+$/, ''))) continue;
+    const mark = parseIsolatedMove({ ...t, rawSan: text.slice(t.charStart, t.charEnd) });
+    if (mark) marks.push(mark);
+  }
+  return marks;
 }
