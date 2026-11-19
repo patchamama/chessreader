@@ -23,7 +23,8 @@ import { commentSource, lookupPositionComments, type HumanComment } from '../lib
 import type { CueBoard } from '../library/narration/cueStyles'
 import type { MoveHint } from '../library/review/reviewEngine'
 import { playAnalyse } from './playStore'
-import { usePlayPrefs, type LiveCommentSide } from './playPrefs'
+import { usePlayPrefs, type EvalBarPosition, type LiveCommentSide } from './playPrefs'
+import { TutorResizeHandle } from './TutorResizeHandle'
 import { thinkingNow } from './thinkTime'
 import { ideaCues, ideaSegments } from './ideaCues'
 import { analyseMoves, analyseSans, describePiece, formatScore, localSan, precomputeHints, type PieceMove } from './pieceAnalysis'
@@ -49,6 +50,7 @@ const TEXT = {
     thinkTime: 'Thinking time', liveComments: 'Book comments', lcOff: 'Off', lcBoth: 'Both sides', lcMine: 'After my moves', lcOpp: "After the opponent's moves",
     gm: 'Play like a human grandmaster', gmTitle: 'What the grandmasters of the books played here', games: (n: number) => `${n} ${n === 1 ? 'game' : 'games'}`,
     explainTouch: 'Explain the piece I touch', commentsTitle: 'What the books say about this position',
+    barPosition: 'Evaluation bar position', barPositions: { left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' }, config: 'Settings', resizeTutor: 'Resize the tutor',
   },
   es: {
     title: 'Jugar con un tutor', mode: 'Rival', engine: 'El motor', human: 'Una persona en este tablero', lichess: 'Alguien en Lichess (amistosa)', lichessAi: 'La IA de Lichess (Stockfish)', lichessBot: 'Un bot Maia en Lichess (juega como una persona)', serverEngine: 'Un motor del servidor (Stockfish, Maia, GNU Chess…)', engineName: 'Motor', bot: 'Bot', clock: 'Ritmo', level: 'Nivel de la IA de Lichess', color: 'Juego con', white: 'Blancas', black: 'Negras', random: 'Al azar', strength: 'Fuerza del motor', start: 'Nueva partida', tutor: 'Tutor', token: 'Pon tu token de Lichess en Ajustes → Cuentas', create: 'Crear un token para jugar ↗', thinking: 'El motor está pensando…', you: 'Tú', opp: 'Rival',
@@ -61,6 +63,7 @@ const TEXT = {
     thinkTime: 'Tiempo de reflexión', liveComments: 'Comentarios de los libros', lcOff: 'No', lcBoth: 'Ambos bandos', lcMine: 'Tras mis jugadas', lcOpp: 'Tras las del rival',
     gm: 'Jugar como un gran maestro humano', gmTitle: 'Lo que jugaron aquí los grandes maestros de los libros', games: (n: number) => `${n} ${n === 1 ? 'partida' : 'partidas'}`,
     explainTouch: 'Explicar la pieza que toco', commentsTitle: 'Lo que dicen los libros de esta posición',
+    barPosition: 'Posición de la barra de evaluación', barPositions: { left: 'Izquierda', right: 'Derecha', top: 'Arriba', bottom: 'Abajo' }, config: 'Configuración', resizeTutor: 'Cambiar el tamaño del tutor',
   },
   de: {
     title: 'Spielen mit Trainer', mode: 'Gegner', engine: 'Die Engine', human: 'Eine Person an diesem Brett', lichess: 'Jemand auf Lichess (ungewertet)', lichessAi: 'Die Lichess-KI (Stockfish)', lichessBot: 'Ein Maia-Bot auf Lichess (spielt wie ein Mensch)', serverEngine: 'Eine Engine auf dem Server (Stockfish, Maia, GNU Chess…)', engineName: 'Engine', bot: 'Bot', clock: 'Bedenkzeit', level: 'Stufe der Lichess-KI', color: 'Ich spiele', white: 'Weiß', black: 'Schwarz', random: 'Zufällig', strength: 'Engine-Stärke', start: 'Neue Partie', tutor: 'Trainer', token: 'Lichess-Token in Einstellungen → Konten eintragen', create: 'Token zum Spielen erstellen ↗', thinking: 'Die Engine denkt…', you: 'Du', opp: 'Gegner',
@@ -73,6 +76,7 @@ const TEXT = {
     thinkTime: 'Bedenkzeit', liveComments: 'Kommentare der Bücher', lcOff: 'Aus', lcBoth: 'Beide Seiten', lcMine: 'Nach meinen Zügen', lcOpp: 'Nach den Zügen des Gegners',
     gm: 'Spielen wie ein menschlicher Großmeister', gmTitle: 'Was die Großmeister der Bücher hier spielten', games: (n: number) => `${n} ${n === 1 ? 'Partie' : 'Partien'}`,
     explainTouch: 'Die berührte Figur erklären', commentsTitle: 'Was die Bücher zu dieser Stellung sagen',
+    barPosition: 'Position des Bewertungsbalkens', barPositions: { left: 'Links', right: 'Rechts', top: 'Oben', bottom: 'Unten' }, config: 'Einstellungen', resizeTutor: 'Größe des Trainers ändern',
   },
 }
 
@@ -291,7 +295,7 @@ export default function PlayPage() {
       }, () => undefined)
     }
   }
-  const field = 'rounded border border-slate-300 bg-white px-2 py-1 text-sm'
+  const field = 'max-w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm'
   const check = 'flex items-center gap-1.5 text-xs text-slate-700'
 
   const squareStyles: Record<string, CSSProperties> = {}
@@ -317,13 +321,25 @@ export default function PlayPage() {
         time={ticking?.[side]} running={p.clocks?.running === side} think={think?.[side]} thinkLabel={t.thinkTime} />
     )
 
+  const showBar = settings.playEvalBar && p.status !== 'idle'
+  const barAt = (pos: EvalBarPosition) => showBar && prefs.evalBarPosition === pos
+  // Like the training boards' bar: a narrow column stretched to the board's height, with room for the score below.
+  const sideBar = (
+    <div data-testid="play-eval-bar" className="flex w-3 shrink-0 justify-center self-stretch pb-3">
+      <EvalBar fen={p.fen} direction="vertical" />
+    </div>
+  )
+  const collapsed = prefs.configCollapsed
+
   return (
     <div className={`mx-auto flex ${pageWidth} flex-col gap-4 px-4 py-6 md:flex-row`}>
       <div className="w-full max-w-[520px]">
         {row(top)}
-        <div className="my-1 flex gap-2">
-          {settings.playEvalBar && p.status !== 'idle' && <div className="w-6 shrink-0"><EvalBar fen={p.fen} direction="vertical" /></div>}
-          <div className="min-w-0 flex-1">
+        {barAt('top') && <div data-testid="play-eval-bar" className="my-1 w-full"><EvalBar fen={p.fen} direction="horizontal" /></div>}
+        {/* The board stays square; a side bar takes the board's height beside it (S12). */}
+        <div className="my-1 flex items-start gap-1.5">
+          {barAt('left') && sideBar}
+          <div data-testid="play-board-square" className="aspect-square min-w-0 flex-1">
             <ChessBoard
               fen={p.fen}
               orientation={orientation}
@@ -337,7 +353,9 @@ export default function PlayPage() {
               arrows={cue?.arrows ?? []}
             />
           </div>
+          {barAt('right') && sideBar}
         </div>
+        {barAt('bottom') && <div data-testid="play-eval-bar" className="my-1 w-full"><EvalBar fen={p.fen} direction="horizontal" /></div>}
         {row(top === 'white' ? 'black' : 'white')}
         {p.gameInfo && (
           <a className="mt-1 block text-xs text-blue-700 underline" href={p.gameInfo.url} target="_blank" rel="noreferrer">
@@ -432,59 +450,107 @@ export default function PlayPage() {
         {p.result && <p className="mt-1 font-semibold">{p.result}</p>}
       </div>
       <div className="flex flex-1 flex-col gap-3">
-        <h1 className="text-xl font-bold text-slate-800">{t.title}</h1>
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-xl font-bold text-slate-800">{t.title}</h1>
+          <button type="button" aria-expanded={!collapsed} aria-controls="play-config" onClick={() => prefs.set({ configCollapsed: !collapsed })}
+            className="flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 text-xs text-slate-700 hover:bg-slate-50">
+            <span aria-hidden="true">{collapsed ? '▸' : '▾'}</span>{t.config}
+          </button>
+        </div>
+        {!collapsed && (
+          <div id="play-config" className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex max-w-full flex-col text-xs text-slate-600">{t.mode}
+                <select aria-label={t.mode} className={field} value={mode} onChange={(e) => setMode(e.target.value as PlayMode)}>
+                  <option value="engine">{t.engine}</option>
+                  <option value="human">{t.human}</option>
+                  <option value="lichess">{t.lichess}</option>
+                  <option value="lichess-ai">{t.lichessAi}</option>
+                  <option value="lichess-bot">{t.lichessBot}</option>
+                  {serverEngines.length > 0 && <option value="server">{t.serverEngine}</option>}
+                </select>
+              </label>
+              {(mode === 'engine' || mode === 'lichess-ai' || mode === 'lichess-bot' || mode === 'server') && (
+                <label className="flex max-w-full flex-col text-xs text-slate-600">{t.color}
+                  <select aria-label={t.color} className={field} value={color} onChange={(e) => setColor(e.target.value as 'white' | 'black' | 'random')}>
+                    <option value="white">{t.white}</option>
+                    <option value="black">{t.black}</option>
+                    <option value="random">{t.random}</option>
+                  </select>
+                </label>
+              )}
+              {(mode === 'engine' || mode === 'lichess-ai' || (mode === 'server' && !serverEngine.startsWith('maia'))) && (
+                <label className="flex max-w-full flex-col text-xs text-slate-600">{t.strength} ({strength}/8)
+                  <input aria-label={t.strength} type="range" min={1} max={8} value={strength} onChange={(e) => setStrength(Number(e.target.value))} />
+                </label>
+              )}
+              {mode === 'server' && (
+                <label className="flex max-w-full flex-col text-xs text-slate-600">{t.engineName}
+                  <select aria-label={t.engineName} className={field} value={serverEngine} onChange={(e) => setServerEngine(e.target.value)}>
+                    {serverEngines.map((e) => <option key={e.id} value={e.id} title={e.style}>{e.name}</option>)}
+                  </select>
+                </label>
+              )}
+              {mode === 'lichess-bot' && (
+                <label className="flex max-w-full flex-col text-xs text-slate-600">{t.bot}
+                  <select aria-label={t.bot} className={field} value={bot} onChange={(e) => setBot(e.target.value)}>
+                    {LICHESS_BOTS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+                  </select>
+                </label>
+              )}
+              {online && (
+                <label className="flex max-w-full flex-col text-xs text-slate-600">{t.clock}
+                  <select aria-label={t.clock} className={field} value={clock} onChange={(e) => setClock(e.target.value)}>
+                    {LICHESS_CLOCKS.map((c) => <option key={`${c.minutes}+${c.increment}`} value={`${c.minutes}+${c.increment}`}>{c.minutes}+{c.increment}</option>)}
+                  </select>
+                </label>
+              )}
+              {online && (
+                <p className="flex max-w-full flex-col text-xs text-slate-600">
+                  {token ? '✓ Lichess token (Settings → Accounts)' : t.token}
+                  {!token && <a className="text-blue-700 underline" href={LICHESS_PLAY_TOKEN_URL} target="_blank" rel="noreferrer">{t.create}</a>}
+                </p>
+              )}
+            </div>
+            <fieldset className="flex flex-wrap gap-x-4 gap-y-1.5 rounded border border-slate-200 bg-white p-2">
+              <legend className="px-1 text-xs font-semibold text-slate-700">{t.options}</legend>
+              <label className={check}><input type="checkbox" checked={settings.playMoveHints} onChange={(e) => settings.set({ playMoveHints: e.target.checked })} />{t.hints}</label>
+              <label className={check}><input type="checkbox" checked={settings.playLegend} onChange={(e) => settings.set({ playLegend: e.target.checked })} />{t.legend}</label>
+              <label className={check}><input type="checkbox" checked={settings.playMoveStatus} onChange={(e) => settings.set({ playMoveStatus: e.target.checked })} />{t.status}</label>
+              <label className={check}><input type="checkbox" checked={settings.playIdeas} onChange={(e) => settings.set({ playIdeas: e.target.checked })} />{t.ideas}</label>
+              <label className={check}><input type="checkbox" checked={settings.playEvalBar} onChange={(e) => settings.set({ playEvalBar: e.target.checked })} />{t.bar}</label>
+              <label className={check}>{t.barPosition}
+                <select aria-label={t.barPosition} className="rounded border border-slate-300 bg-white px-1 py-0.5" value={prefs.evalBarPosition} onChange={(e) => prefs.set({ evalBarPosition: e.target.value as EvalBarPosition })}>
+                  {(['left', 'right', 'top', 'bottom'] as const).map((pos) => <option key={pos} value={pos}>{t.barPositions[pos]}</option>)}
+                </select>
+              </label>
+              <label className={check}>
+                <input type="checkbox" checked={settings.playHumanHint} onChange={(e) => settings.set({ playHumanHint: e.target.checked })} />{t.humanHint}
+                <select aria-label="Maia rating" className="rounded border border-slate-300 bg-white px-1 py-0.5" value={settings.playHumanRating} onChange={(e) => settings.set({ playHumanRating: Number(e.target.value) })}>
+                  {[1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900].map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </label>
+              <label className={check}><input type="checkbox" checked={prefs.explainTouch} onChange={(e) => prefs.set({ explainTouch: e.target.checked })} />{t.explainTouch}</label>
+              <label className={check}><input type="checkbox" checked={prefs.gmMoves} onChange={(e) => prefs.set({ gmMoves: e.target.checked })} />{t.gm}</label>
+              <label className={check}>{t.liveComments}
+                <select aria-label={t.liveComments} className="rounded border border-slate-300 bg-white px-1 py-0.5" value={prefs.liveComments} onChange={(e) => prefs.set({ liveComments: e.target.value as LiveCommentSide })}>
+                  <option value="off">{t.lcOff}</option>
+                  <option value="both">{t.lcBoth}</option>
+                  <option value="mine">{t.lcMine}</option>
+                  <option value="opponent">{t.lcOpp}</option>
+                </select>
+              </label>
+              <label className={check}>{t.voice}
+                <select aria-label={t.voice} className="rounded border border-slate-300 bg-white px-1 py-0.5" value={settings.playVoice} onChange={(e) => settings.set({ playVoice: e.target.value as 'none' | 'opponent' | 'both' })}>
+                  <option value="none">{t.voiceNone}</option>
+                  <option value="opponent">{t.voiceOpp}</option>
+                  <option value="both">{t.voiceBoth}</option>
+                </select>
+              </label>
+            </fieldset>
+          </div>
+        )}
         <div className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col text-xs text-slate-600">{t.mode}
-            <select aria-label={t.mode} className={field} value={mode} onChange={(e) => setMode(e.target.value as PlayMode)}>
-              <option value="engine">{t.engine}</option>
-              <option value="human">{t.human}</option>
-              <option value="lichess">{t.lichess}</option>
-              <option value="lichess-ai">{t.lichessAi}</option>
-              <option value="lichess-bot">{t.lichessBot}</option>
-              {serverEngines.length > 0 && <option value="server">{t.serverEngine}</option>}
-            </select>
-          </label>
-          {(mode === 'engine' || mode === 'lichess-ai' || mode === 'lichess-bot' || mode === 'server') && (
-            <label className="flex flex-col text-xs text-slate-600">{t.color}
-              <select aria-label={t.color} className={field} value={color} onChange={(e) => setColor(e.target.value as 'white' | 'black' | 'random')}>
-                <option value="white">{t.white}</option>
-                <option value="black">{t.black}</option>
-                <option value="random">{t.random}</option>
-              </select>
-            </label>
-          )}
-          {(mode === 'engine' || mode === 'lichess-ai' || (mode === 'server' && !serverEngine.startsWith('maia'))) && (
-            <label className="flex flex-col text-xs text-slate-600">{t.strength} ({strength}/8)
-              <input aria-label={t.strength} type="range" min={1} max={8} value={strength} onChange={(e) => setStrength(Number(e.target.value))} />
-            </label>
-          )}
-          {mode === 'server' && (
-            <label className="flex flex-col text-xs text-slate-600">{t.engineName}
-              <select aria-label={t.engineName} className={field} value={serverEngine} onChange={(e) => setServerEngine(e.target.value)}>
-                {serverEngines.map((e) => <option key={e.id} value={e.id} title={e.style}>{e.name}</option>)}
-              </select>
-            </label>
-          )}
-          {mode === 'lichess-bot' && (
-            <label className="flex flex-col text-xs text-slate-600">{t.bot}
-              <select aria-label={t.bot} className={field} value={bot} onChange={(e) => setBot(e.target.value)}>
-                {LICHESS_BOTS.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
-              </select>
-            </label>
-          )}
-          {online && (
-            <label className="flex flex-col text-xs text-slate-600">{t.clock}
-              <select aria-label={t.clock} className={field} value={clock} onChange={(e) => setClock(e.target.value)}>
-                {LICHESS_CLOCKS.map((c) => <option key={`${c.minutes}+${c.increment}`} value={`${c.minutes}+${c.increment}`}>{c.minutes}+{c.increment}</option>)}
-              </select>
-            </label>
-          )}
-          {online && (
-            <p className="flex flex-col text-xs text-slate-600">
-              {token ? '✓ Lichess token (Settings → Accounts)' : t.token}
-              {!token && <a className="text-blue-700 underline" href={LICHESS_PLAY_TOKEN_URL} target="_blank" rel="noreferrer">{t.create}</a>}
-            </p>
-          )}
           <button
             className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             disabled={online && !token.trim()}
@@ -501,37 +567,6 @@ export default function PlayPage() {
             <button className="rounded border border-slate-300 bg-white px-3 py-1 text-sm text-slate-700 hover:bg-slate-50" onClick={p.resign}>{t.resign}</button>
           )}
         </div>
-        <fieldset className="flex flex-wrap gap-x-4 gap-y-1.5 rounded border border-slate-200 bg-white p-2">
-          <legend className="px-1 text-xs font-semibold text-slate-700">{t.options}</legend>
-          <label className={check}><input type="checkbox" checked={settings.playMoveHints} onChange={(e) => settings.set({ playMoveHints: e.target.checked })} />{t.hints}</label>
-          <label className={check}><input type="checkbox" checked={settings.playLegend} onChange={(e) => settings.set({ playLegend: e.target.checked })} />{t.legend}</label>
-          <label className={check}><input type="checkbox" checked={settings.playMoveStatus} onChange={(e) => settings.set({ playMoveStatus: e.target.checked })} />{t.status}</label>
-          <label className={check}><input type="checkbox" checked={settings.playIdeas} onChange={(e) => settings.set({ playIdeas: e.target.checked })} />{t.ideas}</label>
-          <label className={check}><input type="checkbox" checked={settings.playEvalBar} onChange={(e) => settings.set({ playEvalBar: e.target.checked })} />{t.bar}</label>
-          <label className={check}>
-            <input type="checkbox" checked={settings.playHumanHint} onChange={(e) => settings.set({ playHumanHint: e.target.checked })} />{t.humanHint}
-            <select aria-label="Maia rating" className="rounded border border-slate-300 bg-white px-1 py-0.5" value={settings.playHumanRating} onChange={(e) => settings.set({ playHumanRating: Number(e.target.value) })}>
-              {[1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900].map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
-          </label>
-          <label className={check}><input type="checkbox" checked={prefs.explainTouch} onChange={(e) => prefs.set({ explainTouch: e.target.checked })} />{t.explainTouch}</label>
-          <label className={check}><input type="checkbox" checked={prefs.gmMoves} onChange={(e) => prefs.set({ gmMoves: e.target.checked })} />{t.gm}</label>
-          <label className={check}>{t.liveComments}
-            <select aria-label={t.liveComments} className="rounded border border-slate-300 bg-white px-1 py-0.5" value={prefs.liveComments} onChange={(e) => prefs.set({ liveComments: e.target.value as LiveCommentSide })}>
-              <option value="off">{t.lcOff}</option>
-              <option value="both">{t.lcBoth}</option>
-              <option value="mine">{t.lcMine}</option>
-              <option value="opponent">{t.lcOpp}</option>
-            </select>
-          </label>
-          <label className={check}>{t.voice}
-            <select aria-label={t.voice} className="rounded border border-slate-300 bg-white px-1 py-0.5" value={settings.playVoice} onChange={(e) => settings.set({ playVoice: e.target.value as 'none' | 'opponent' | 'both' })}>
-              <option value="none">{t.voiceNone}</option>
-              <option value="opponent">{t.voiceOpp}</option>
-              <option value="both">{t.voiceBoth}</option>
-            </select>
-          </label>
-        </fieldset>
         {p.error && <p role="alert" className="rounded border border-red-300 bg-red-50 px-2 py-1 text-sm text-red-800">{p.error}</p>}
         {liveComments.length > 0 && (
           <section data-testid="live-comments" aria-label={t.commentsTitle} className="flex flex-col gap-1 rounded border border-sky-200 bg-sky-50 p-2 text-sm text-sky-950">
@@ -541,7 +576,7 @@ export default function PlayPage() {
             ))}
           </section>
         )}
-        <section ref={tutorRef} aria-label={t.tutor} className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto scroll-smooth rounded border border-slate-200 bg-white p-2">
+        <section ref={tutorRef} aria-label={t.tutor} style={{ height: prefs.tutorHeight }} className="flex flex-col gap-1 overflow-y-auto scroll-smooth rounded border border-slate-200 bg-white p-2">
           <h2 className="sticky top-0 bg-white text-sm font-semibold text-slate-700">🎓 {t.tutor}</h2>
           {p.log.map((n, i) => (
             <p key={`${i}-${n.count ?? 1}`} style={n.count ? { animation: 'cue-blink 0.6s ease-in-out 3' } : undefined}
@@ -557,6 +592,7 @@ export default function PlayPage() {
             </p>
           ))}
         </section>
+        <TutorResizeHandle height={prefs.tutorHeight} label={t.resizeTutor} onChange={(tutorHeight) => prefs.set({ tutorHeight })} />
       </div>
     </div>
   )
