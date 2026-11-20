@@ -6,6 +6,7 @@ import { engineMove } from '../play/enginePlayer'
 import { trapContinuations, trapsAt, type Trap, type TrapContinuation } from './traps'
 import { figurinesOn, localSan } from './trapNotation'
 import { TrapBoard, type BoardArrow } from './TrapBoard'
+import { TrapPreviewModal } from './TrapPreviewModal'
 
 const HOVER = '#2563eb'
 const GREEN = '#16a34a'
@@ -55,6 +56,7 @@ export function TrapTryout({ traps, opponent }: { traps: Trap[]; opponent?: Move
   const [hover, setHover] = useState<{ fen: string; move: TrapContinuation } | null>(null)
   const [picked, setPicked] = useState<{ fen: string; square: string } | null>(null)
   const [cycle, setCycle] = useState(0)
+  const [preview, setPreview] = useState<Trap | null>(null)
   const hovered = hover?.fen === fen ? hover.move : null
   const pieceLines = useMemo(() => (picked?.fen === fen ? next.filter((n) => n.from === picked.square) : []), [picked, fen, next])
   useEffect(() => {
@@ -146,7 +148,19 @@ export function TrapTryout({ traps, opponent }: { traps: Trap[]; opponent?: Move
                     onMouseEnter={() => setHover({ fen, move: n })} onMouseLeave={() => setHover(null)}
                     onFocus={() => setHover({ fen, move: n })} onBlur={() => setHover(null)}
                     className="rounded bg-blue-600 px-2 py-0.5 font-mono text-xs text-white">{localSan(n.san, lang, figurines)}</button>
-                  <span className="text-xs text-slate-600">{n.traps.slice(0, 3).map((t) => (lang === 'es' && t.titleEs ? t.titleEs : t.title)).join(' · ')}{n.traps.length > 3 ? ` +${n.traps.length - 3}` : ''}{n.kind === 'transposition' ? ' (by another move order)' : ''}</span>
+                  <span className="text-xs text-slate-600">
+                    {n.traps.slice(0, 3).map((t, i) => {
+                      const name = lang === 'es' && t.titleEs ? t.titleEs : t.title
+                      return (
+                        <Fragment key={t.id}>
+                          {i > 0 && ' · '}
+                          <button type="button" aria-label={`Show the trap ${t.title}`} title="Show this trap: replay it and read its explanation"
+                            onClick={() => setPreview(t)} className="text-blue-700 underline decoration-dotted underline-offset-2 hover:text-blue-900">{name}</button>
+                        </Fragment>
+                      )
+                    })}
+                    {n.traps.length > 3 ? ` +${n.traps.length - 3}` : ''}{n.kind === 'transposition' ? ' (by another move order)' : ''}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -156,6 +170,7 @@ export function TrapTryout({ traps, opponent }: { traps: Trap[]; opponent?: Move
         {reachable.size === 0 && sans.length > 0 && <p className="mt-2 text-xs text-slate-500">No trap is reachable from here. Start a new game to try another.</p>}
         {over && <p role="status" className="mt-2 font-semibold">{chess.isCheckmate() ? 'Checkmate!' : 'Game over.'}</p>}
       </div>
+      {preview && <TrapPreviewModal trap={preview} onClose={() => setPreview(null)} />}
     </div>
   )
 }

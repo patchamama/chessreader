@@ -125,3 +125,18 @@ describe('training boards: flip and evaluation (S17)', () => {
     expect(screen.getByTestId('training-eval')).toBeInTheDocument()
   })
 })
+
+describe('a trap offered in Try a trap opens in a modal to replay and read (llm-assistant-round S11)', () => {
+  it('each trap name is a link that opens a modal with a step-by-step board and the explanation; Escape closes it', () => {
+    const withIntro: Trap = { ...scholar, intro: 'The queen and bishop aim at f7, defended only by the king.' }
+    render(<TrapTryout traps={[withIntro, ruy]} />)
+    fireEvent.click(screen.getAllByRole('button', { name: "Show the trap Scholar's mate" })[0])
+    const dialog = screen.getByRole('dialog', { name: "Scholar's mate" })
+    expect(within(dialog).getByText(/aim at f7/)).toBeInTheDocument()
+    expect(within(dialog).getByText('Italian Game', { exact: false })).toBeInTheDocument()
+    // The trap's line can be replayed move by move.
+    expect(within(dialog).getByTestId('trap-preview-player')).toBeInTheDocument()
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+})
