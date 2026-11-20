@@ -1,0 +1,21 @@
+{
+  "studies": [
+    { "id": "Y1yXP80U", "title": "Lichess study: FIDE Candidates 2026 | Annotations" },
+    { "id": "y4CM41x8", "title": "Lichess study: Tata Steel Chess 2026 - Annotations" },
+    "9c2VHkcn",
+    "4kgBurog",
+    "PmL7NbB1",
+    "5bQdsZ7u",
+    "LF4x850G",
+    "Mj0wdEVK",
+    "450dtcgH"
+  ],
+  "users": [],
+  "broadcasts": [],
+  "minComments": 3,
+  "minCommentChars": 20,
+  "minPlies": 20,
+  "maxGames": 500,
+  "lang": "en",
+  "delayMs": 3000
+}
