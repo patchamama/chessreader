@@ -1,6 +1,7 @@
 import type { Lang } from '@chess-ebook/chess-shared'
 import { commentSource, humanCommentsForGame, lookupPositionComments, type HumanComment } from '../commentdb/commentLookup'
-import { translateBorrowedComment } from '../../comments/commentAi'
+import { isLocalLlm } from '../../../shared/llm/isLocalLlm'
+import { normalizeBorrowedComment, translateBorrowedComment } from '../../comments/commentAi'
 import { configuredLlm } from '../../../shared/llm'
 import { complete } from '../../../shared/llm/llmClient'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
@@ -32,10 +33,13 @@ function alternativesOf(all: HumanComment[], lang: Lang): CommentAlternative[] {
  * origin cannot be found again keeps no link.
  */
 export async function humanCommentsWithLinks(plies: Array<{ fenAfter: string }>, lang: Lang): Promise<Record<number, LinkedHumanComment>> {
-  const { commentSourcePriority, translateMissingComments } = useSettingsStore.getState()
-  const config = translateMissingComments ? configuredLlm() : null
+  const { commentSourcePriority, translateMissingComments, normalizeWhileCommenting } = useSettingsStore.getState()
+  const llm = configuredLlm()
+  const config = translateMissingComments ? llm : null
+  const normalizer = normalizeWhileCommenting && llm && !isLocalLlm(llm) ? llm : null
+  const normalize = normalizer ? (c: HumanComment & { fen: string }) => normalizeBorrowedComment((request) => complete(normalizer, request), c) : undefined
   const translate = config ? (c: HumanComment & { fen: string }, to: string) => translateBorrowedComment((request) => complete(config, request), c, to) : undefined
-  const found = await humanCommentsForGame(plies, lang, undefined, { priority: commentSourcePriority, translate })
+  const found = await humanCommentsForGame(plies, lang, undefined, { priority: commentSourcePriority, translate, normalize })
   const out: Record<number, LinkedHumanComment> = {}
   for (const [key, comment] of Object.entries(found)) {
     const ply = Number(key)

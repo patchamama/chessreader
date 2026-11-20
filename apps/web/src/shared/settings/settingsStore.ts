@@ -205,6 +205,8 @@ export interface AppSettings {
   commentSourcePriority: CommentSourcePriority
   /** Translate (after standardising) a borrowed remark the database has no text for in the reader's language, with the AI assistant. */
   translateMissingComments: boolean
+  /** With a non-local AI assistant, standardise a borrowed remark that has no normalized text while commenting a game (saved as a pending suggestion). */
+  normalizeWhileCommenting: boolean
   /** Book diagrams: show the engine's evaluation under each (when it has one). */
   diagramEvalShow: boolean
   /** Book diagrams: an evaluation bar above the evaluation. */
@@ -321,6 +323,7 @@ const DEFAULT: AppSettings = {
   humanComments: true,
   commentSourcePriority: 'books',
   translateMissingComments: false,
+  normalizeWhileCommenting: true,
   diagramEvalShow: true,
   diagramEvalBar: false,
   diagramEvalThumbs: true,
@@ -401,6 +404,8 @@ export function migrateSettings(persisted: unknown, version: number): Partial<Se
     s.commentSourcePriority ??= 'books'
     s.translateMissingComments ??= false
   }
+  // Version 7: standardise borrowed remarks while commenting (non-local assistants only).
+  if (version < 7) s.normalizeWhileCommenting ??= true
   if (version < 1) Object.assign(s, { commentLayout: 'split', commentDiagrams: true, commentDiagramEval: true })
   if (version < 2) {
     // The legacy recogniser (3) is retired: read with variations instead.
@@ -427,7 +432,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'chessreader-settings',
-      version: 6,
+      version: 7,
       migrate: (persisted, version) => migrateSettings(persisted, version) as SettingsStore,
       merge: (persisted, current) => mergeWithDefaults(current as SettingsStore, persisted),
     },

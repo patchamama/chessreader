@@ -172,6 +172,8 @@ export interface BorrowOptions {
   /** Which source to prefer; the setting of Settings when absent. */
   priority?: CommentSourcePriority
   /** Gives the text of a comment in the reader's language (standardised and translated), or null; absent: no translation. */
+  /** Standardises a comment in its own language (or null): asked for a chosen remark with no normalized text. Absent: never. */
+  normalize?: (comment: HumanComment & { fen: string }) => Promise<string | null>
   translate?: (comment: HumanComment & { fen: string }, lang: string) => Promise<string | null>
 }
 
@@ -180,6 +182,15 @@ function candidates(found: HumanComment[], priority: CommentSourcePriority): Hum
   if (priority === 'both') return found
   const preferred = found.filter((c) => (c.source.kind === 'lichess') === (priority === 'lichess'))
   return preferred.length ? preferred : found
+}
+
+/** A comment with a normalized (universal) text, which is under its own language. */
+const normalized = (c: HumanComment) => !!c.translations?.[c.lang]
+
+/** Preference among candidates: normalized before raw, then the reader's language (written or translated) before any other. */
+function rank(c: HumanComment, lang: string): number {
+  const mine = c.lang === lang || !!c.translations?.[lang]
+  return (normalized(c) ? 0 : 2) + (mine ? 0 : 1)
 }
 
 /** Whether the reader has no text of the comment: none in their language, or a comment without universal text yet. */
@@ -199,12 +210,13 @@ export async function humanCommentsForGame(plies: Array<{ fenAfter: string }>, l
     const found = await lookupPositionComments(plies[i].fenAfter)
     if (!found.length) continue
     const pool = candidates(found, priority)
-    // Written in the reader's language, or translated into it, before any other (inside the preferred source).
-    const best = pool.find((c) => c.lang === lang) ?? pool.find((c) => c.translations?.[lang]) ?? pool[0]
+    // Normalized before raw; then in the reader's language (written or translated) before any other.
+    const best = [...pool].sort((x, y) => rank(x, lang) - rank(y, lang))[0]
     let text = commentTextFor(best, lang)
-    if (options.translate && lacksText(best, lang)) {
+    const ask = options.translate && lacksText(best, lang) ? options.translate : !normalized(best) && !best.translations?.[lang] ? options.normalize : undefined
+    if (ask) {
       try {
-        text = (await options.translate({ ...best, fen: plies[i].fenAfter }, lang)) || text
+        text = (await ask({ ...best, fen: plies[i].fenAfter }, lang)) || text
       } catch {
         // the untranslated text stands
       }

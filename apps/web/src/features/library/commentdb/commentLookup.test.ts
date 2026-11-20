@@ -201,3 +201,44 @@ describe('translating missing comments while borrowing', () => {
     expect((await humanCommentsForGame(plies, 'de', 15, { priority: 'books', translate: async () => { throw new Error('boom') } }))[10].text).toBe('A study remark.')
   })
 })
+
+describe('normalized comments first', () => {
+  const plies = Array.from({ length: 12 }, (_, i) => ({ fenAfter: i === 9 ? FEN : `8/8/8/8/8/8/8/K${i}k w - - 0 1` }))
+  const serve = (entries: unknown[]) => vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('index.json') ? INDEX : { [HASH]: entries }), { status: 200 })))
+  const base = { game: '3-7', ply: 4, san: 'Nc6', source: 3, label: 'P7' }
+
+  it('a normalized comment beats a raw one in the reader\'s language', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve([{ ...base, id: 1, text: 'Raw es.', lang: 'es' }, { ...base, id: 2, text: 'Raw en.', lang: 'en', translations: { en: 'Normalized en.' } }])
+    expect((await humanCommentsForGame(plies, 'es'))[10].text).toBe('Normalized en.')
+  })
+
+  it('among normalized ones the reader\'s language still wins', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve([{ ...base, id: 1, text: 'Raw en.', lang: 'en', translations: { en: 'Norm en.' } }, { ...base, id: 2, text: 'Raw es.', lang: 'es', translations: { es: 'Norm es.' } }])
+    expect((await humanCommentsForGame(plies, 'es'))[10].text).toBe('Norm es.')
+  })
+
+  it('stays inside the chosen priority group, and dropped comments stay out', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve([{ ...base, id: 1, text: 'Raw book.', lang: 'es' }, { ...base, id: 2, text: 'Lichess norm.', lang: 'en', source: 18, translations: { en: 'Lichess normalized.' } }, { ...base, id: 3, text: 'Dropped.', lang: 'es', translations: { es: '' } }])
+    expect((await humanCommentsForGame(plies, 'es', 15, { priority: 'books' }))[10].text).toBe('Raw book.')
+  })
+
+  it('normalizes on the fly a chosen remark without a normalized text', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve([{ ...base, id: 1, text: 'Raw es.', lang: 'es' }])
+    const normalize = vi.fn(async () => 'Normalizado.')
+    expect((await humanCommentsForGame(plies, 'es', 15, { normalize }))[10].text).toBe('Normalizado.')
+    clearCommentCache()
+    serve([{ ...base, id: 1, text: 'Raw es.', lang: 'es', translations: { es: 'Ya normalizado.' } }])
+    expect((await humanCommentsForGame(plies, 'es', 15, { normalize }))[10].text).toBe('Ya normalizado.')
+    expect(normalize).toHaveBeenCalledTimes(1)
+  })
+
+  it('a failing normalize keeps the raw text', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve([{ ...base, id: 1, text: 'Raw es.', lang: 'es' }])
+    expect((await humanCommentsForGame(plies, 'es', 15, { normalize: async () => { throw new Error('x') } }))[10].text).toBe('Raw es.')
+  })
+})

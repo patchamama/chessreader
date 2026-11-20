@@ -5,7 +5,7 @@ vi.mock('../suggestions/suggestionsApi', () => ({ saveSuggestion: save }))
 const game = vi.hoisted(() => vi.fn())
 vi.mock('./commentsApi', async (orig) => ({ ...(await orig<typeof import('./commentsApi')>()), loadCommentGame: game }))
 
-import { translateBorrowedComment, proposeComment, proposeGameTranslation, runCommentBatch, runPagedBatch, saveCommentProposal, saveGameProposal } from './commentAi'
+import { normalizeBorrowedComment, translateBorrowedComment, proposeComment, proposeGameTranslation, runCommentBatch, runPagedBatch, saveCommentProposal, saveGameProposal } from './commentAi'
 import type { CommentEntry } from './commentsApi'
 
 const entry = (id: number, text: string): CommentEntry => ({
@@ -190,6 +190,25 @@ describe('translateBorrowedComment', () => {
     const complete = vi.fn().mockResolvedValue(answer('Die Weissen halten c4 nach 12...Sb6.'))
     const text = await translateBorrowedComment(complete, borrowed({ id: undefined, translations: { en: 'White keeps c4 after 12...Nb6.' } }), 'de', new Map())
     expect(text).toBe('Die Weissen halten c4 nach 12...Sb6.')
+    expect(save).not.toHaveBeenCalled()
+  })
+})
+
+describe('normalizeBorrowedComment', () => {
+  it('standardises in the comment\'s own language and saves a pending suggestion, once per comment', async () => {
+    const complete = vi.fn().mockResolvedValue(answer('White keeps c4 after 12...Nb6.'))
+    const c = { id: 9, text: 'Smith keeps c4 after 12...Nb6.', lang: 'en', ply: 24, san: 'Nb6', gameId: '1-1', label: null, source: { kind: 'book', title: 'B', author: null }, fen: '8/8/8/8/8/8/8/K6k w - - 0 1' }
+    const cache = new Map()
+    expect(await normalizeBorrowedComment(complete, c, cache)).toBe('White keeps c4 after 12...Nb6.')
+    await normalizeBorrowedComment(complete, c, cache)
+    expect(complete).toHaveBeenCalledTimes(1)
+    expect(save).toHaveBeenCalledTimes(1)
+    expect(save.mock.calls[0][0]).toMatchObject({ kind: 'comment', status: 'pending', author: 'ai' })
+  })
+
+  it('returns null when the model fails or the proposal is flagged', async () => {
+    const c = { id: 9, text: 'Smith keeps c4.', lang: 'en', ply: 24, san: 'Nb6', gameId: '1-1', label: null, source: { kind: 'book', title: 'B', author: null }, fen: 'x' }
+    expect(await normalizeBorrowedComment(vi.fn().mockRejectedValue(new Error('x')), c, new Map())).toBeNull()
     expect(save).not.toHaveBeenCalled()
   })
 })

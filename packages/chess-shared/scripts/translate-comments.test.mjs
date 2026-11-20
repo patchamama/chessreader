@@ -183,6 +183,30 @@ describe('v2: Ollama native, figurines, skipped comments, two models', () => {
     expect(rows()).toEqual([])
   })
 
+  it('phase normalize only standardises (no translation); phase translate only translates what is already standardised', async () => {
+    const answer = (b) => JSON.stringify({ text: b.messages[1].content.includes('♘b6') ? 'After 12...♘b6 the knight eyes c4 and d5.' : 'The ♗g5 and ...b5 are strong.' })
+    const first = ollama(answer)
+    await v2({ phase: 'normalize' }, first.fetchImpl)
+    expect(first.calls.filter((c) => c.url.endsWith('/api/chat'))).toHaveLength(2)
+    expect(rows().map((r) => `${r.comment_id}:${r.lang}`)).toEqual(['1:en', '2:en'])
+    const second = ollama(answer)
+    await v2({ phase: 'translate' }, second.fetchImpl)
+    expect(second.calls.filter((c) => c.url.endsWith('/api/chat')).map((c) => c.body.model)).toEqual(['translategemma:27b', 'translategemma:27b'])
+    expect(rows().map((r) => `${r.comment_id}:${r.lang}`)).toEqual(['1:en', '1:es', '2:en', '2:es'])
+  })
+
+  it('phase translate leaves a comment that was never standardised alone', async () => {
+    const { calls, fetchImpl } = ollama(() => JSON.stringify({ text: 'x' }))
+    await v2({ phase: 'translate' }, fetchImpl)
+    expect(calls.filter((c) => c.url.endsWith('/api/chat'))).toHaveLength(0)
+  })
+
+  it('only-lang works on the comments written in that language', async () => {
+    const { calls, fetchImpl } = ollama(() => JSON.stringify({ text: 'x' }))
+    await v2({ phase: 'normalize', onlyLang: 'es' }, fetchImpl)
+    expect(calls.filter((c) => c.url.endsWith('/api/chat'))).toHaveLength(0)
+  })
+
   it('works on several comments at once and gets through all of them', async () => {
     const { calls, fetchImpl } = ollama((b) => JSON.stringify({ text: b.messages[1].content.includes('♘b6') ? 'After 12...♘b6 the knight eyes c4 and d5.' : 'The ♗g5 and ...b5 are strong.' }))
     const summary = await v2({ concurrency: 2 }, fetchImpl)

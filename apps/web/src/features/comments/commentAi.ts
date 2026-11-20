@@ -182,6 +182,39 @@ export function saveGameProposal(c: CommentEntry, p: GameProposal): Promise<Save
 /** What was already asked this session, by comment and language (never ask twice). */
 const borrowedAsked = new Map<string, Promise<string | null>>()
 
+/** The database entry of a borrowed remark, as the AI actions and suggestions expect it. */
+function entryOfBorrowed(c: HumanComment & { fen: string }): CommentEntry {
+  return {
+    id: c.id ?? 0, hash: '', fen: c.fen, text: c.text, lang: c.lang, ply: c.ply, move: Math.ceil(c.ply / 2), san: c.san, gameId: c.gameId, chapter: null,
+    source: { id: 0, title: c.source.title, author: c.source.author, kind: c.source.kind, lang: c.lang, book: null },
+    game: { white: null, black: null, label: c.label }, ...(c.translations ? { translations: c.translations } : {}),
+  }
+}
+
+/**
+ * Standardise a borrowed remark in its own language (the original stays as it
+ * is in the database): the text is for the game right away and is saved as a
+ * PENDING suggestion by the AI. Null on a failed or flagged proposal; never throws.
+ */
+export function normalizeBorrowedComment(
+  complete: Complete, c: HumanComment & { fen: string }, cache: Map<string, Promise<string | null>> = borrowedAsked,
+): Promise<string | null> {
+  const key = `${c.id ?? `${c.gameId}:${c.ply}:${c.text}`}:normalized`
+  const known = cache.get(key)
+  if (known) return known
+  const run = (async (): Promise<string | null> => {
+    const entry = entryOfBorrowed(c)
+    const p = await proposeComment(complete, entry, { kind: 'universal' })
+    if (p.problems.length) return null
+    if (c.id !== undefined) {
+      try { await saveCommentProposal(entry, { kind: 'universal' }, p) } catch { /* the text still serves the game */ }
+    }
+    return p.text
+  })().catch(() => null)
+  cache.set(key, run)
+  return run
+}
+
 /**
  * A remark borrowed for a game that the database has no text for in the
  * reader's language: standardise it when it has no universal text, then
@@ -197,11 +230,7 @@ export function translateBorrowedComment(
   if (known) return known
   const run = (async (): Promise<string | null> => {
     if (!(TARGET_LANGS as readonly string[]).includes(lang)) return null
-    const entry: CommentEntry = {
-      id: c.id ?? 0, hash: '', fen: c.fen, text: c.text, lang: c.lang, ply: c.ply, move: Math.ceil(c.ply / 2), san: c.san, gameId: c.gameId, chapter: null,
-      source: { id: 0, title: c.source.title, author: c.source.author, kind: c.source.kind, lang: c.lang, book: null },
-      game: { white: null, black: null, label: c.label }, ...(c.translations ? { translations: c.translations } : {}),
-    }
+    const entry = entryOfBorrowed(c)
     const save = async (e: CommentEntry, action: CommentAction, p: CommentProposal) => {
       if (c.id === undefined) return
       try { await saveCommentProposal(e, action, p) } catch { /* the text still serves the game */ }

@@ -93,3 +93,16 @@ describe('SettingsPanel — comment source and translation', () => {
     expect(useSettingsStore.getState().translateMissingComments).toBe(true)
   })
 })
+
+describe('SettingsPanel — normalize while commenting', () => {
+  it('is offered only with an AI assistant, and can be turned off', () => {
+    useSettingsStore.getState().reset()
+    const { unmount } = render(<SettingsPanel onClose={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /standardise borrowed comments/i })).toBeNull()
+    unmount()
+    useSettingsStore.setState({ aiProvider: 'ollama', aiBaseUrl: 'http://localhost:11434/v1', aiModel: 'm' })
+    render(<SettingsPanel onClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /standardise borrowed comments/i }))
+    expect(useSettingsStore.getState().normalizeWhileCommenting).toBe(false)
+  })
+})

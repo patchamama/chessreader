@@ -449,6 +449,13 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
             </select>
             {llm.available && (
               <Toggle
+                on={s.normalizeWhileCommenting}
+                onClick={() => s.set({ normalizeWhileCommenting: !s.normalizeWhileCommenting })}
+                label="Standardise borrowed comments while commenting (not with a local assistant)"
+              />
+            )}
+            {llm.available && (
+              <Toggle
                 on={s.translateMissingComments}
                 onClick={() => s.set({ translateMissingComments: !s.translateMissingComments })}
                 label="Translate borrowed comments the database lacks (needs the AI assistant)"

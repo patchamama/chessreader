@@ -271,8 +271,11 @@ export async function translateComments(opts, { fetchImpl = fetch, sleep = (ms) 
 
   const handle = async (c) => {
     const own = existing.get(c.id, c.lang)?.text
-    const todo = langs.filter((l) => l !== c.lang && existing.get(c.id, l) === undefined)
-    const universalDue = opts.universal && own === undefined
+    if (opts.onlyLang && c.lang !== opts.onlyLang) return
+    const todo = opts.phase === 'normalize' ? [] : langs.filter((l) => l !== c.lang && existing.get(c.id, l) === undefined)
+    const universalDue = opts.universal && own === undefined && opts.phase !== 'translate'
+    // Translating comes after standardising: a comment not standardised yet waits for its turn.
+    if (opts.phase === 'translate' && opts.universal && own === undefined) { summary.skipped++; return }
     // An empty own-language row marks a comment dropped as not universal: nothing more is done with it.
     if (own === '' || (!todo.length && !universalDue)) { summary.skipped++; return }
     summary.comments++
@@ -324,6 +327,8 @@ function parseArgs(argv) {
     else if (a === '--review') flags.review = value()
     else if (a === '--dry-run') flags.dryRun = true
     else if (a === '--ollama') flags.ollama = true
+    else if (a === '--phase') flags.phase = value()
+    else if (a === '--only-lang') flags.onlyLang = value()
     else if (a === '--v2') flags.v2 = true
     else if (a === '--translate-model') flags.translateModel = value()
     else if (a === '--concurrency') flags.concurrency = Number(value())

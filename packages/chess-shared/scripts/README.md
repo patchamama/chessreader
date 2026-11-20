@@ -120,6 +120,7 @@ node scripts/translate-comments.mjs <comments.sqlite> --ollama --v2 --universal 
   left (results, greetings): it gets an empty row in its own language and is
   never borrowed again. The original text always stays in `position_comments.text`;
   the standardised text is the row in the comment's own language.
+- `--phase normalize|translate` runs only the standardising or only the translating (a comment not standardised yet is left for its turn), `--only-lang es` works on comments written in that language: the full run standardises Spanish books first, then the rest, and translates afterwards.
 - `--translate-model` translates with another model than the one that rewrites.
 - A rewrite that fails the checks is not translated (the original names players).
 - `--concurrency` comments in flight at once.

@@ -239,3 +239,12 @@ describe('settingsStore — comment source priority and missing translations', (
     expect(migrateSettings({ commentSourcePriority: 'both' }, 5).commentSourcePriority).toBe('both')
   })
 })
+
+describe('settingsStore — normalize while commenting', () => {
+  it('defaults to on, and a migration turns it on for existing users', () => {
+    useSettingsStore.getState().reset()
+    expect(useSettingsStore.getState().normalizeWhileCommenting).toBe(true)
+    expect(migrateSettings({}, 6).normalizeWhileCommenting).toBe(true)
+    expect(migrateSettings({ normalizeWhileCommenting: false }, 6).normalizeWhileCommenting).toBe(false)
+  })
+})
