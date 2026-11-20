@@ -20,3 +20,6 @@ export * from './teaching/commentAudit.js';
 export * from './teaching/coach.js';
 export * from './teaching/tutor.js';
 export * from './commentdb/positionComments.js';
+export * from './diagram/moveConstraints.js';
+export * from './diagram/solveDiagram.js';
+export * from './pgn/wrongMoveFinder.js';
