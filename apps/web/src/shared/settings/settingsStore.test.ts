@@ -191,3 +191,32 @@ describe('settingsStore — piece notation (S12)', () => {
     expect(mergeWithDefaults(current, { notationStyle: 'emoji' }).notationStyle).toBe('letters')
   })
 })
+
+describe('settingsStore — AI assistant (S1)', () => {
+  beforeEach(() => useSettingsStore.getState().reset())
+
+  it('is off by default, with no base URL, key, model, known vision or resources write token', () => {
+    const s = useSettingsStore.getState()
+    expect(s.aiProvider).toBe('none')
+    expect(s.aiBaseUrl).toBe('')
+    expect(s.aiKey).toBe('')
+    expect(s.aiModel).toBe('')
+    expect(s.aiVision).toBeNull()
+    expect(s.resourcesWriteToken).toBe('')
+  })
+
+  it('version 5: an older Claude or OpenAI setup keeps its key and model and gets the provider base URL', () => {
+    expect(migrateSettings({ aiProvider: 'anthropic', aiKey: 'sk-ant', aiModel: '' }, 4))
+      .toMatchObject({ aiProvider: 'anthropic', aiKey: 'sk-ant', aiModel: '', aiBaseUrl: 'https://api.anthropic.com', aiVision: null })
+    expect(migrateSettings({ aiProvider: 'openai', aiKey: 'sk', aiModel: 'gpt-x' }, 4))
+      .toMatchObject({ aiProvider: 'openai', aiKey: 'sk', aiModel: 'gpt-x', aiBaseUrl: 'https://api.openai.com/v1' })
+    expect(migrateSettings({ aiProvider: 'none' }, 4)).toMatchObject({ aiProvider: 'none' })
+    // A base URL saved by version 5 itself is never replaced.
+    expect(migrateSettings({ aiProvider: 'openai', aiBaseUrl: 'https://proxy.example/v1' }, 5)).toMatchObject({ aiBaseUrl: 'https://proxy.example/v1' })
+  })
+
+  it('an unknown saved provider falls back to off', () => {
+    expect(mergeWithDefaults(useSettingsStore.getState(), { aiProvider: 'gemini' }).aiProvider).toBe('none')
+    expect(mergeWithDefaults(useSettingsStore.getState(), { aiProvider: 'ollama' }).aiProvider).toBe('ollama')
+  })
+})

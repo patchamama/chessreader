@@ -3,7 +3,8 @@ import { VoiceSettings } from './VoiceSettings'
 import { LICHESS_TOKEN_URL } from '../lichess/tokenUrl'
 import { lichessAccount } from '../../features/gamesearch/myGames'
 import { APP_LANGUAGES, DEFAULT_RESOURCES_URL, NOTATION_STYLES, type AppLanguage, type NotationStyle } from './settingsStore'
-import { checkResources, resourcesTokenUrl } from '../../features/library/commentdb/commentLookup'
+import { checkResources, resourcesApiUrl, resourcesTokenUrl } from '../../features/library/commentdb/commentLookup'
+import { LlmSettings } from '../llm/LlmSettings'
 import { useSettingsStore, BOARD_THEMES, FONT_FAMILIES, STOCKFISH_VERSIONS, APP_THEME_PRESETS, PIECE_THEMES, type BoardTheme, type FontFamily, type EvalBarDirection, type StockfishVersion, type EngineSource,
   type ImageAlign, type HeadingStyle, type EngineVariations, type AppTheme, type PieceTheme } from './settingsStore'
 
@@ -53,6 +54,44 @@ function LichessAccountCheck({ token }: { token: string }) {
     <p className="mt-1 text-[11px] text-gray-300">
       <button className="underline" onClick={() => { setState('…'); lichessAccount(token).then((a) => setState(`✓ ${a.username}`), (e: Error) => setState(e.message)) }}>Check the token</button>
       {state && <span className="ml-2">{state}</span>}
+    </p>
+  )
+}
+
+/** GitHub's page for a fine-grained token that can write the resources repository (as the read one, with contents: write). */
+function resourcesWriteTokenUrl(url: string): string | null {
+  const read = resourcesTokenUrl(url)
+  if (!read) return null
+  const u = new URL(read)
+  const repo = u.searchParams.get('name')?.replace(/^ChessReader /, '') ?? ''
+  u.searchParams.set('name', `ChessReader ${repo} (write)`)
+  u.searchParams.set('description', `Save suggestions to ${repo} from ChessReader`)
+  u.searchParams.set('contents', 'write')
+  return u.toString()
+}
+
+/** Ask api.github.com (only there) whether the write token can push to the resources repository. */
+function WriteTokenCheck({ url, token }: { url: string; token: string }) {
+  const [state, setState] = useState<{ ok: boolean; message: string } | null>(null)
+  const repo = /^https:\/\/api\.github\.com\/repos\/([\w.-]+)\/([\w.-]+)\/contents$/.exec(resourcesApiUrl(url))
+  if (!repo || !token) return null
+  const check = async () => {
+    setState({ ok: true, message: '…' })
+    try {
+      const response = await fetch(`https://api.github.com/repos/${repo[1]}/${repo[2]}`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+      })
+      const data = (await response.json().catch(() => null)) as { permissions?: { push?: boolean }; message?: string } | null
+      if (!response.ok) setState({ ok: false, message: `GitHub answered ${response.status}${data?.message ? `: ${data.message}` : ''}` })
+      else setState(data?.permissions?.push ? { ok: true, message: '✓ can write' } : { ok: false, message: 'read only' })
+    } catch (e) {
+      setState({ ok: false, message: `Could not reach GitHub: ${(e as Error).message}` })
+    }
+  }
+  return (
+    <p className="text-[11px] text-gray-300">
+      <button className="underline" onClick={() => void check()}>Check the write token</button>
+      {state && <span role="status" aria-label="Write token check" className={`ml-2 ${state.ok ? 'text-green-300' : 'text-red-300'}`}>{state.message}</span>}
     </p>
   )
 }
@@ -154,26 +193,7 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
 
         <VoiceSettings />
 
-        {/* Commentary by a language model */}
-        <label className={labelClass} htmlFor="ai-provider">Commentary by a language model (after an engine review)</label>
-        <select id="ai-provider" className={inputClass} value={s.aiProvider} onChange={(e) => s.set({ aiProvider: e.target.value as 'none' | 'anthropic' | 'openai', aiModel: '' })}>
-          <option value="none">Off — rule-based commentary only</option>
-          <option value="anthropic">Claude — Anthropic (your own API key)</option>
-          <option value="openai">OpenAI (your own API key)</option>
-        </select>
-        {s.aiProvider !== 'none' && (
-          <>
-            <label className={labelClass} htmlFor="ai-key">API key (kept in this browser, sent only to the provider)</label>
-            <input id="ai-key" type="password" autoComplete="off" className={inputClass} value={s.aiKey} onChange={(e) => s.set({ aiKey: e.target.value })} />
-            <label className={labelClass} htmlFor="ai-model">
-              {s.aiProvider === 'anthropic' ? 'Model id (empty = claude-opus-5-5)' : 'Model id'}
-            </label>
-            <input id="ai-model" className={inputClass} value={s.aiModel} onChange={(e) => s.set({ aiModel: e.target.value })} />
-            <p className="mt-1 text-[11px] text-gray-400">
-              The model receives the moves, the engine verdicts and the board facts of the game being commented. Nothing else is sent.
-            </p>
-          </>
-        )}
+        <LlmSettings />
 
         <label className="mt-3 flex items-center gap-2 text-xs text-gray-700">
           <input type="checkbox" checked={s.autoscroll} onChange={(e) => s.set({ autoscroll: e.target.checked })} />
@@ -438,6 +458,22 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               </p>
             )}
             <ResourcesCheck url={s.commentDbUrl} token={s.commentDbToken} />
+            <input
+              aria-label="Resources write token"
+              type="password"
+              autoComplete="off"
+              placeholder="GitHub token (contents: write), only to save suggestions"
+              value={s.resourcesWriteToken}
+              onChange={(e) => s.set({ resourcesWriteToken: e.target.value.trim() })}
+              className={inputClass}
+            />
+            {resourcesWriteTokenUrl(s.commentDbUrl) && (
+              <p className="text-[11px] text-gray-300">
+                <a className="underline" href={resourcesWriteTokenUrl(s.commentDbUrl)!} target="_blank" rel="noreferrer">Create a write token for this repository ↗</a>
+                {' '}— choose "Only select repositories" and pick it; Contents: read and write is already set. It is sent only to api.github.com.
+              </p>
+            )}
+            <WriteTokenCheck url={s.commentDbUrl} token={s.resourcesWriteToken} />
             {s.hiddenExamples.length > 0 && (
               <button className="self-start text-[11px] text-gray-300 underline" onClick={() => s.set({ hiddenExamples: [] })}>
                 Show all examples ({s.hiddenExamples.length} hidden)

@@ -136,6 +136,12 @@ return function (App $app): void {
         $group->put('/books/{id:[0-9]+}/config', [BookConfigController::class, 'save']);
     })->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
 
+    // AI assistant proxy: the user's own key travels per request (require JWT + Approved)
+    $app->group('/api/llm', function (RouteCollectorProxy $group) {
+        $group->post('/complete', [\App\Presentation\Llm\LlmController::class, 'complete']);
+        $group->post('/models', [\App\Presentation\Llm\LlmController::class, 'models']);
+    })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
+
     // Suggestions: proposed improvements of books (require JWT + Approved)
     $app->group('/api/suggestions', function (RouteCollectorProxy $group) {
         $group->get('', [\App\Presentation\Suggestions\SuggestionsController::class, 'list']);

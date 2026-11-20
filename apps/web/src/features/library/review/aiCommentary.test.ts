@@ -64,4 +64,9 @@ describe('commentary by a language model', () => {
     useSettingsStore.setState({ aiModel: 'm' })
     expect(configuredModel()).not.toBeNull()
   })
+
+  it('a local Ollama model is configured without a key', () => {
+    useSettingsStore.setState({ aiProvider: 'ollama', aiBaseUrl: 'http://localhost:11434/v1', aiModel: 'llama3' })
+    expect(configuredModel()).not.toBeNull()
+  })
 })

@@ -522,6 +522,9 @@ return [
         return new \App\Infrastructure\Errata\FilesystemErrataRepository($storageDir . '/errata');
     },
 
+    \App\Infrastructure\Llm\LlmProxy::class => fn() => new \App\Infrastructure\Llm\LlmProxy(),
+    \App\Presentation\Llm\LlmController::class => fn(ContainerInterface $c) => new \App\Presentation\Llm\LlmController($c->get(\App\Infrastructure\Llm\LlmProxy::class)),
+
     \App\Application\Suggestions\SuggestionRepository::class => function (ContainerInterface $c) {
         return new \App\Infrastructure\Suggestions\DbalSuggestionRepository($c->get(Connection::class));
     },

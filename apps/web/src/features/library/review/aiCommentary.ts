@@ -1,7 +1,6 @@
 import { annotateGame, buildCommentaryRequest, parseCommentaryResponse, type AnnotateOptions } from '@chess-ebook/chess-shared'
 import type { GameReview, Lang, PlyInput } from '@chess-ebook/chess-shared'
-import { useSettingsStore } from '../../../shared/settings/settingsStore'
-import { claudeModel } from './claudeModel'
+import { complete, configuredLlm, defaultBaseUrl, LlmError, type LlmConfig, type LlmTransport } from '../../../shared/llm'
 
 /**
  * Commentary written by a language model the user brings (their own key).
@@ -14,37 +13,56 @@ export interface CommentaryModel {
   complete(system: string, user: string): Promise<string>
 }
 
-/** OpenAI chat completions with a JSON answer. */
-export function openAiModel(apiKey: string, model: string): CommentaryModel {
+/** The shape of the answer: an opening paragraph and one remark per commented ply. */
+const COMMENTARY_SCHEMA = {
+  type: 'object',
+  properties: {
+    intro: { type: 'string' },
+    comments: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { ply: { type: 'integer' }, text: { type: 'string' } },
+        required: ['ply', 'text'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['intro', 'comments'],
+  additionalProperties: false,
+}
+
+/** Any model of the shared LLM client as the commentary model (JSON answer, room for a long game). */
+export function llmCommentaryModel(config: LlmConfig, transport: LlmTransport = 'auto'): CommentaryModel {
   return {
     async complete(system, user) {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model,
-          messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-          response_format: { type: 'json_object' },
-        }),
-      })
-      const data = (await response.json().catch(() => null)) as
-        | { choices?: { message?: { content?: string } }[]; error?: { message?: string } }
-        | null
-      if (!response.ok) throw new Error(data?.error?.message ?? `The model service answered ${response.status}.`)
-      const text = data?.choices?.[0]?.message?.content
-      if (!text) throw new Error('The model returned an empty answer.')
-      return text
+      try {
+        const result = await complete(config, {
+          system,
+          messages: [{ role: 'user', text: user }],
+          json: { schema: COMMENTARY_SCHEMA },
+          // Claude needs a limit and gets a large one; OpenAI-style servers keep their own.
+          maxTokens: config.provider === 'anthropic' ? 32000 : undefined,
+        }, transport)
+        return result.text
+      } catch (error) {
+        if (error instanceof LlmError && error.code === 'refusal') throw new Error('The model declined to comment this game.')
+        if (error instanceof LlmError && error.code === 'truncated') throw new Error('The commentary was cut short (the game is too long for one answer).')
+        throw error
+      }
     },
   }
 }
 
+/** OpenAI chat completions with a JSON answer, straight from the browser. */
+export function openAiModel(apiKey: string, model: string): CommentaryModel {
+  return llmCommentaryModel({ provider: 'openai', baseUrl: defaultBaseUrl('openai'), apiKey, model }, 'direct')
+}
+
 /** The model chosen in Settings, or null when none is set up. */
 export function configuredModel(): CommentaryModel | null {
-  const s = useSettingsStore.getState()
-  // Claude has a default model; an id typed in Settings replaces it.
-  if (s.aiProvider === 'anthropic' && s.aiKey.trim()) return claudeModel(s.aiKey.trim(), s.aiModel.trim() || undefined)
-  if (s.aiProvider === 'openai' && s.aiKey.trim() && s.aiModel.trim()) return openAiModel(s.aiKey.trim(), s.aiModel.trim())
-  return null
+  const config = configuredLlm()
+  return config ? llmCommentaryModel(config) : null
 }
 
 export interface AiCommentaryInput {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLlm } from '../../../shared/llm'
 import { commentedGameText } from './recommentGame'
 import { gameLineRange } from '../utils/gameRewrite'
 import { rewriteKey, useGameRewriteStore } from '../store/gameRewriteStore'
@@ -114,7 +115,8 @@ export function GameReviewPanel({ games, text, bookId, chapter }: GameReviewPane
   const [aiError, setAiError] = useState<string | null>(null)
   const [lichessBusy, setLichessBusy] = useState(false)
   const [lichessError, setLichessError] = useState<string | null>(null)
-  const aiReady = useSettingsStore((s) => s.aiProvider !== 'none' && !!s.aiKey.trim() && (s.aiProvider === 'anthropic' || !!s.aiModel.trim()))
+  // Any configured model, Ollama (no key) included (llm-assistant-round S1).
+  const aiReady = useLlm().available
   const abort = useRef<AbortController | null>(null)
   useEffect(() => () => abort.current?.abort(), [])
 

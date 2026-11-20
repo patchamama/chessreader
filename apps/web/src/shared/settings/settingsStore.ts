@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { defaultBaseUrl, isLlmProvider, type LlmProvider } from '../llm/types'
 
 // Board color themes
 /** The private resources repository (books, commentary and game databases); readable with a GitHub token. */
@@ -151,11 +152,15 @@ export interface AppSettings {
   /** Keys of paid providers. Kept in this browser only; sent with each render request. */
   openaiKey: string
   elevenlabsKey: string
-  /** Language model that writes commentary from the engine review ('none' = rule-based only). */
-  aiProvider: 'none' | 'anthropic' | 'openai'
-  /** Its API key (kept in this browser, sent only to that provider) and model id. */
+  /** The AI assistant: language model service ('none' = off; commentary is then rule-based only). */
+  aiProvider: 'none' | LlmProvider
+  /** Its API root (prefilled per provider; Anthropic always uses its own). */
+  aiBaseUrl: string
+  /** Its API key (kept in this browser; sent to the provider, or with each request to the app's own server) and model id. */
   aiKey: string
   aiModel: string
+  /** Whether the model read the probe image of the last Test (null = not tested). */
+  aiVision: boolean | null
   /** Scroll the book so the move being played or narrated stays centred. */
   autoscroll: boolean
   /** Seconds of silence after each game move the narration says (live and in the MP3). */
@@ -188,6 +193,8 @@ export interface AppSettings {
   commentDbUrl: string
   /** Token for a private commentary database (GitHub fine-grained token, contents:read). Kept in this browser. */
   commentDbToken: string
+  /** Token that can write to the resources repository (contents:write), for saving suggestions. Sent only to api.github.com. */
+  resourcesWriteToken: string
   /** Example books of the demo the reader closed (✕); Settings shows them again. */
   hiddenExamples: number[]
   /** Borrow book remarks on the same position when writing an annotated game. */
@@ -281,8 +288,10 @@ const DEFAULT: AppSettings = {
   openaiKey: '',
   elevenlabsKey: '',
   aiProvider: 'none',
+  aiBaseUrl: '',
   aiKey: '',
   aiModel: '',
+  aiVision: null,
   lichessToken: '',
   lichessPlayToken: '',
   commentLayout: 'split',
@@ -301,6 +310,7 @@ const DEFAULT: AppSettings = {
   statusFooter: true,
   commentDbUrl: DEFAULT_RESOURCES_URL,
   commentDbToken: '',
+  resourcesWriteToken: '',
   hiddenExamples: [],
   humanComments: true,
   diagramEvalShow: true,
@@ -358,6 +368,7 @@ export function mergeWithDefaults(
   const merged = { ...current, ...(persisted as Partial<SettingsStore> | undefined) }
   // A missing or unknown notation (older or hand-edited state) falls back to the default.
   if (!(merged.notationStyle in NOTATION_STYLES)) merged.notationStyle = DEFAULT.notationStyle
+  if (merged.aiProvider !== 'none' && !isLlmProvider(merged.aiProvider)) merged.aiProvider = 'none'
   return merged
 }
 
@@ -372,6 +383,11 @@ export function migrateSettings(persisted: unknown, version: number): Partial<Se
   if (version < 3 && !s.commentDbUrl) s.commentDbUrl = DEFAULT_RESOURCES_URL
   // Version 4: a square named in the text is always shown on a hover thumbnail.
   if (version < 4) delete (s as Record<string, unknown>).mentionPreview
+  // Version 5: the AI assistant has a base URL per provider and remembers whether the model can see.
+  if (version < 5) {
+    if (isLlmProvider(s.aiProvider) && !s.aiBaseUrl) s.aiBaseUrl = defaultBaseUrl(s.aiProvider)
+    s.aiVision = null
+  }
   if (version < 1) Object.assign(s, { commentLayout: 'split', commentDiagrams: true, commentDiagramEval: true })
   if (version < 2) {
     // The legacy recogniser (3) is retired: read with variations instead.
@@ -398,7 +414,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'chessreader-settings',
-      version: 4,
+      version: 5,
       migrate: (persisted, version) => migrateSettings(persisted, version) as SettingsStore,
       merge: (persisted, current) => mergeWithDefaults(current as SettingsStore, persisted),
     },
