@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { cleanGamePgn, countPlies, filterGame, harvest, humanComments, splitPgnGames } from './harvest-lichess.mjs'
+import { cleanGamePgn, countPlies, filterGame, harvest, humanCommentText, humanComments, splitPgnGames } from './harvest-lichess.mjs'
 
 const STUDY_ID = 'abcdEFGH'
 const COMMENTED = `[Event "Invented study: The open file"]
@@ -143,5 +143,13 @@ describe('harvest', () => {
     const report = JSON.parse(readFileSync(join(out, 'lichess', 'harvest.json'), 'utf8'))
     expect(report.games).toHaveLength(1)
     expect(report.sources.find((s) => s.source === 'study-missing1')).toMatchObject({ error: 'HTTP 404' })
+  })
+})
+
+describe('humanCommentText', () => {
+  it('removes clock, eval, arrow and square commands and leaves nothing for engine-only notes', () => {
+    expect(humanCommentText(' [%clk 1:30:00] The knight [%cal Gb5c6][%csl Re5] heads for d5. [%eval 0.3] ')).toBe('The knight heads for d5.')
+    expect(humanCommentText('Mistake. Nf1 was best.')).toBe('')
+    expect(humanCommentText('[%eval 0.25]')).toBe('')
   })
 })

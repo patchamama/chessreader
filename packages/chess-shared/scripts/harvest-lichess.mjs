@@ -59,8 +59,8 @@ const movetextOf = (pgn) => {
   return i < 0 ? (pgn.startsWith('[') ? '' : pgn) : pgn.slice(i).trim()
 }
 
-/** A comment without its [%…] commands; '' when nothing human is left. */
-function humanText(raw) {
+/** A comment without its [%…] commands (clock, eval, arrows, squares); '' when nothing human is left. */
+export function humanCommentText(raw) {
   const text = raw.replace(COMMAND, ' ').replace(/\s+/g, ' ').trim()
   if (!/\p{L}{2,}/u.test(text) || ENGINE_ONLY.test(text)) return ''
   return text
@@ -68,7 +68,7 @@ function humanText(raw) {
 
 /** The human {comments} of a game, in order: no clocks, evals, arrows or engine-only annotations. */
 export function humanComments(pgn) {
-  return [...movetextOf(pgn).matchAll(COMMENT)].map((m) => humanText(m[1])).filter(Boolean)
+  return [...movetextOf(pgn).matchAll(COMMENT)].map((m) => humanCommentText(m[1])).filter(Boolean)
 }
 
 const SAN = /^(?:[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=?[QRBN])?|O-O(?:-O)?)[+#]?[!?]*$/
@@ -85,7 +85,7 @@ export function cleanGamePgn(pgn) {
   const i = pgn.search(/\n\s*\n/)
   const head = i < 0 ? '' : pgn.slice(0, i).trim()
   const moves = (i < 0 ? pgn : pgn.slice(i))
-    .replace(COMMENT, (_, raw) => { const t = humanText(raw); return t ? `{ ${t} }` : ' ' })
+    .replace(COMMENT, (_, raw) => { const t = humanCommentText(raw); return t ? `{ ${t} }` : ' ' })
     .replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').trim()
   return head ? `${head}\n\n${moves}` : moves
 }

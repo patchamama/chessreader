@@ -3,9 +3,9 @@
 Offline tools that build ChessReader's data. Each script documents its options
 in its header comment; this page covers the commentary pipeline.
 
-## Commentary from Lichess: harvest → build → translate
+## Commentary from Lichess: harvest → build → translate → rebuild
 
-Three steps turn public, human-annotated Lichess games into the commentary
+Four steps turn public, human-annotated Lichess games into the commentary
 database (`comments.sqlite`, `p/`, `g/`, `comments-index/`) that a resources
 repository such as `chessreader-resources-sample` publishes.
 
@@ -25,6 +25,9 @@ node scripts/translate-comments.mjs /path/to/work/db/comments.sqlite \
   --base-url http://localhost:11434/v1 --model <model> \
   --universal --langs es,en,de,fr --source-kind lichess --dry-run --limit 3
 # check /path/to/work/db/comments.sqlite.review.jsonl, then run again without --dry-run
+
+# 4. Rebuild: the translations of db/comments.sqlite are kept and written to the static files
+node scripts/build-comment-db.mjs /path/to/work/harvest/lichess/manifest.json /path/to/work/db
 ```
 
 ### 1. `harvest-lichess.mjs`
@@ -54,9 +57,32 @@ source whose author asks for it.
 
 ### 2. `build-comment-db.mjs`
 
-Unchanged: reads the manifest and writes the database. PGN comments are read
-as prose, so a comment counts only where the recogniser places it on a
-position; expect fewer comments than the harvest counted.
+Reads the manifest and writes the database and its static files.
+
+- **PGN sources** (`.pgn`, `kind: "lichess"`) are read straight from the moves
+  (`pgnComments.mjs`, chess.js): every human comment of the main line and the
+  variations lands on the position after the move it follows, with its `ply`,
+  full move number (`move`), `san`, game and source. A comment before the first
+  move of the game is on the start position (`ply` 0, `move` 0, `san` ""); one
+  before the first move of a variation on the position the variation branches
+  from. Comments are cleaned as the harvest cleans them (no `[%clk]`, `[%eval]`,
+  `[%cal]`, `[%csl]`, no engine-only notes), shorter than 20 characters are
+  skipped, longer than 700 are cut at a sentence end. A game needs 10 main-line
+  half-moves; a line stops at an illegal move. `g/<id>.json` holds the game's
+  PGN with its comments.
+- **Books** (`.txt`) are read with the game recogniser, as before.
+- **Translations** (`comment_translations`, written by `translate-comments.mjs`)
+  survive a rebuild: the rows of `<out-dir>/comments.sqlite` (or of
+  `--translations <comments.sqlite>`) are matched to the rebuilt comments by
+  position and original text, stored again, and written to the static files,
+  so a deploy without a backend can show the reader's language:
+
+  ```json
+  // p/<xx>.json and comments-index/<n>.json, only on comments that have some
+  { "id": 12, "text": "The Spanish: …", "lang": "en", "translations": { "es": "La española: …", "de": "…" }, … }
+  ```
+
+  `index.json` then also counts them (`"translations": <rows>`).
 
 ### 3. `translate-comments.mjs`
 
