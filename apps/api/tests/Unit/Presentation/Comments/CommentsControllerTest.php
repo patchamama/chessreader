@@ -95,4 +95,18 @@ final class CommentsControllerTest extends TestCase
         self::assertSame(404, $this->mutate('delete', 'DELETE', 99)->getStatusCode());
         self::assertSame(404, $this->mutate('restore', 'POST', 99)->getStatusCode());
     }
+
+    public function test_top_returns_the_ranking_and_caps_the_limit(): void
+    {
+        [$status, $body] = $this->call('top', '/api/comments/top?limit=500&kind=lichess');
+        self::assertSame(200, $status);
+        self::assertSame(1, $body['positions'][0]['rank']);
+        self::assertSame(1, $body['positions'][0]['count']);
+        self::assertSame(2, $body['positions'][1]['rank']);
+        self::assertSame(['id', 'title', 'author', 'book', 'kind', 'lang', 'count'], array_keys($body['positions'][0]['sources'][0]));
+        self::assertSame(['id', 'ply', 'move', 'san', 'text'], array_keys($body['positions'][0]['samples'][0]));
+        self::assertArrayNotHasKey('hash', $body['positions'][0]);
+        [$bad] = $this->call('top', '/api/comments/top?kind=zzz');
+        self::assertSame(400, $bad);
+    }
 }

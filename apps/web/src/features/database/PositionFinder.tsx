@@ -1,27 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { positionHash } from '@chess-ebook/chess-shared'
 import { lookupPositionComments, type HumanComment } from '../library/commentdb/commentLookup'
 import ChessBoard from '../../shared/chess/ChessBoard'
 import { loadTraps, type Trap } from '../training/traps'
 import { hideComment, type CommentEntry, type CommentSource } from '../comments/commentsApi'
-import { filterFound, parsePositionInput, replayLine, type FinderFilter, type PgnReading, type PositionMove } from './positionInput'
+import { entryOf, filterFound, parsePositionInput, replayLine, type FinderFilter, type PgnReading, type PositionMove } from './positionInput'
 import { normalizePgn, numberMoves, type PgnLanguageChoice } from './pgnNormalize'
 import { COMMON_OPENINGS } from './commonOpenings'
 import CommentCard from './CommentCard'
 import CommentDetailsModal from './CommentDetailsModal'
 import FinderBoard, { type FinderLine } from './FinderBoard'
 import FinderHelp from './FinderHelp'
-
-/** The editor wants a database entry: what the finder knows of the comment, plus its position. */
-function entryOf(c: HumanComment, fen: string, sources: CommentSource[]): CommentEntry {
-  const source = sources.find((s) => s.title === c.source.title)
-  return {
-    id: c.id ?? 0, hash: positionHash(fen), fen, text: c.text, lang: c.lang, ply: c.ply, move: Math.ceil(c.ply / 2), san: c.san, gameId: c.gameId, chapter: null,
-    source: { id: source?.id ?? 0, title: c.source.title, author: c.source.author, kind: c.source.kind, lang: source?.lang ?? c.lang, book: source?.book ?? null },
-    game: { white: null, black: null, label: c.label },
-    ...(c.translations ? { translations: c.translations } : {}),
-  }
-}
 
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 
@@ -53,7 +41,9 @@ function Results({ found, filter, sources, onEdit, onDelete }: { found: Found; f
  * (each can be shown on a board) or play on a board, and see the comments of each position
  * under the filters of the list; every comment can be edited; openings and traps are suggestions to replay.
  */
-export default function PositionFinder({ filter, sources = [] }: { filter?: FinderFilter; sources?: CommentSource[] }) {
+/** `request`: a position to load (a new `key` loads it again), e.g. from the ranking of the most commented positions. */
+export default function PositionFinder({ filter, sources = [], request }: { filter?: FinderFilter; sources?: CommentSource[]; request?: { fen: string; key: number } }) {
+  const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const [language, setLanguage] = useState<PgnLanguageChoice>('auto')
   const [error, setError] = useState<string | null>(null)
@@ -109,6 +99,20 @@ export default function PositionFinder({ filter, sources = [] }: { filter?: Find
   /** What the text box says about a line: the moves as numbered PGN, a FEN when it starts elsewhere. */
   const textOf = (l: FinderLine) => (l.sans.length ? (l.start === START_FEN ? numberMoves(l.start, l.sans) : `[FEN "${l.start}"]\n\n${numberMoves(l.start, l.sans)}`) : l.start === START_FEN ? '' : l.start)
   const write = (value: string) => { lastWritten.current = value; setText(value) }
+
+  useEffect(() => {
+    if (!request) return
+    const l = { start: request.fen, sans: [], ply: 0 }
+    setLine(l)
+    write(request.fen)
+    setPartial(null)
+    setError(null)
+    setReading(null)
+    setShown(null)
+    setBoardOpen(true)
+    setOpen(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request?.key])
 
   const find = (input = text, lang = language) => {
     const r = parsePositionInput(input, lang)
@@ -172,7 +176,7 @@ export default function PositionFinder({ filter, sources = [] }: { filter?: Find
   const chip = 'rounded border border-slate-300 px-1.5 py-0.5 text-xs hover:bg-slate-50'
 
   return (
-    <details className="mb-2 rounded border border-slate-200 p-2 text-sm">
+    <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)} className="mb-2 rounded border border-slate-200 p-2 text-sm">
       <summary className="cursor-pointer font-medium">Find by position</summary>
       <div className="mt-2 flex flex-col gap-2">
         <textarea aria-label="FEN or PGN" rows={3} className="rounded border border-slate-300 px-2 py-1 font-mono text-xs" placeholder="Paste a FEN or a PGN" value={text} onChange={(e) => setText(e.target.value)} />

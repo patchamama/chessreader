@@ -25,6 +25,7 @@ Objective: footer GPU check, analysis-board tabs for opened games/books, quote-p
 - S20 "también mostrar un botón a la derecha del botón flip que permita mostrar en el tablero el total de posibles comentarios a desplegar en el tablero actual, que determine que analice cada posible pieza a jugar y en cada casilla posible a jugar que vaya poniendo el número de comentarios encontrados si se jugara esa pieza a esa casilla, y así que repase después la segunda jugada y haga lo mismo y si en una casilla ya hay jugadas determinadas por una pieza anterior analizada, que se sumen y se ponga como un superíndice de las piezas hasta ahora analizadas que podrían jugar a esa casilla y así hasta terminar de revisar todas las posibles piezas que pudieran mover en esa configuración del tablero. Con este ejercicio se pudiera ver cuales son las configuraciones más comentadas y se puede ir creando progresivamente en el tablero un rango de colores que pueden ir creando un gradiente en dependencia del numero de comentarios que se vayan acumulando y de esa forma quizás se pueda ver de alguna forma las jugadas más comentadas en esta configuración actual. Pero también seguramente se puede ver las casillas más comentadas individualmente con una jugada sin sumar y me gustaría que se puedan ver esas dos opciones que pudieran dar ideas de análisis y buenas jugadas."
 - S21 "al borrar un comentario, marcarlo para no mostrarlo, pero no borrarlo fisicamente."
 - S22 "integra el board de find by position con las jugadas que se pongan ahí y las sugerencias, de tal forma que si se pone una sugerencia, que esta se integre con el board y se pueda reproducir en este, así como las que se pongan en el texto para parsear."
+- S23 "Me gustaría que en esta parte de comentarios se cree un ranking de las posiciones o fen más comentados pudiendo listar los 50 fen o posiciones más comentadas con los datos de referencia, evaluación de las posiciona y claro, los diagramas."
 
 ## Tasks
 - [x] T1 S1 footer GPU in browser — parent
@@ -40,6 +41,7 @@ Objective: footer GPU check, analysis-board tabs for opened games/books, quote-p
 - [x] T11 S18 S19 S20 finder board numbering, move counts, heat map; S17 UI delete — W1 resumed
 - [x] T12 S21 soft delete (hide) instead of physical delete, restore — W7 resumed (backend + commentsApi) and W1 (UI labels)
 - [x] T13 S22 finder board integrated with the typed text and the suggestions — W1 resumed
+- [x] T14 S23 ranking of the 50 most commented positions: backend/aggregation — W7 resumed; UI + evaluation + diagrams — W1 resumed
 
 ## Log
 - L1 2026-11-20 user: S1-S9 (quoted above), one message.

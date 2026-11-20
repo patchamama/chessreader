@@ -67,31 +67,7 @@ final class SqlitePositionCommentStore implements PositionCommentStore
         if ($pdo === null) {
             return ['total' => 0, 'comments' => []];
         }
-        $where = [];
-        $params = [];
-        if (($filters['q'] ?? '') !== '') {
-            $where[] = "p.text LIKE :q ESCAPE '\\'";
-            $params[':q'] = '%' . strtr((string) $filters['q'], ['\\' => '\\\\', '%' => '\\%', '_' => '\\_']) . '%';
-        }
-        if (isset($filters['source'])) {
-            $where[] = 's.id = :source';
-            $params[':source'] = (int) $filters['source'];
-        }
-        if (($filters['lang'] ?? '') !== '') {
-            $where[] = 'p.lang = :lang';
-            $params[':lang'] = (string) $filters['lang'];
-        }
-        if (($filters['kind'] ?? '') !== '') {
-            $where[] = 's.kind = :kind';
-            $params[':kind'] = (string) $filters['kind'];
-        }
-        if ($this->hasColumn('position_comments', 'hidden_at')) {
-            $where[] = ($filters['hidden'] ?? false) ? 'p.hidden_at IS NOT NULL' : 'p.hidden_at IS NULL';
-        } elseif ($filters['hidden'] ?? false) {
-            $where[] = '0';
-        }
-        $from = 'FROM position_comments p JOIN comment_games g ON g.id = p.game_id JOIN comment_sources s ON s.id = g.source_id'
-            . ($where ? ' WHERE ' . implode(' AND ', $where) : '');
+        [$from, $params] = $this->filtered($filters);
         $count = $pdo->prepare("SELECT COUNT(*) {$from}");
         $count->execute($params);
         $total = (int) $count->fetchColumn();
@@ -119,6 +95,100 @@ final class SqlitePositionCommentStore implements PositionCommentStore
             'game' => ['white' => $r['white'], 'black' => $r['black'], 'label' => $r['label']],
         ], $st->fetchAll(\PDO::FETCH_ASSOC));
         return ['total' => $total, 'comments' => $this->withTranslations($pdo, $comments)];
+    }
+
+    /**
+     * The FROM/WHERE shared by the list and the ranking, and its parameters.
+     *
+     * @param array<string, mixed> $filters
+     * @return array{string, array<string, mixed>}
+     */
+    private function filtered(array $filters): array
+    {
+        $where = [];
+        $params = [];
+        if (($filters['q'] ?? '') !== '') {
+            $where[] = "p.text LIKE :q ESCAPE '\\'";
+            $params[':q'] = '%' . strtr((string) $filters['q'], ['\\' => '\\\\', '%' => '\\%', '_' => '\\_']) . '%';
+        }
+        if (isset($filters['source'])) {
+            $where[] = 's.id = :source';
+            $params[':source'] = (int) $filters['source'];
+        }
+        if (($filters['lang'] ?? '') !== '') {
+            $where[] = 'p.lang = :lang';
+            $params[':lang'] = (string) $filters['lang'];
+        }
+        if (($filters['kind'] ?? '') !== '') {
+            $where[] = 's.kind = :kind';
+            $params[':kind'] = (string) $filters['kind'];
+        }
+        if ($this->hasColumn('position_comments', 'hidden_at')) {
+            $where[] = ($filters['hidden'] ?? false) ? 'p.hidden_at IS NOT NULL' : 'p.hidden_at IS NULL';
+        } elseif ($filters['hidden'] ?? false) {
+            $where[] = '0';
+        }
+        $from = 'FROM position_comments p JOIN comment_games g ON g.id = p.game_id JOIN comment_sources s ON s.id = g.source_id'
+            . ($where ? ' WHERE ' . implode(' AND ', $where) : '');
+        return [$from, $params];
+    }
+
+    public const MAX_TOP = 100;
+
+    public function top(array $filters, int $limit): array
+    {
+        $pdo = $this->pdo();
+        if ($pdo === null) {
+            return [];
+        }
+        [$from, $params] = $this->filtered(['hidden' => false] + $filters + []);
+        $params2 = $params;
+        $bind = static function (\PDOStatement $st, array $p): void {
+            foreach ($p as $k => $v) {
+                $st->bindValue($k, $v, is_int($v) ? \PDO::PARAM_INT : \PDO::PARAM_STR);
+            }
+        };
+        // A position is its hash and key (FEN without move counters), as the lookups use them.
+        $st = $pdo->prepare("SELECT p.hash, p.position, COUNT(*) AS n {$from} GROUP BY p.hash, p.position ORDER BY n DESC, p.hash, p.position LIMIT :limit");
+        $bind($st, $params);
+        $st->bindValue(':limit', max(1, min(self::MAX_TOP, $limit)), \PDO::PARAM_INT);
+        $st->execute();
+        $ranked = $st->fetchAll(\PDO::FETCH_ASSOC);
+        if ($ranked === []) {
+            return [];
+        }
+        $hashes = array_values(array_unique(array_column($ranked, 'hash')));
+        $in = '(' . implode(',', array_map(static fn(int $i): string => ":h{$i}", array_keys($hashes))) . ')';
+        $hashParams = [];
+        foreach ($hashes as $i => $h) {
+            $hashParams[":h{$i}"] = $h;
+        }
+        $glue = str_contains($from, ' WHERE ') ? ' AND ' : ' WHERE ';
+        $book = $this->hasColumn('comment_sources', 'book_id') ? 's.book_id' : 'NULL';
+        $move = $this->hasColumn('position_comments', 'move_number') ? 'p.move_number' : '(p.ply + 1) / 2';
+
+        $src = $pdo->prepare("SELECT p.hash, p.position, s.id, s.title, s.author, {$book} AS book_id, s.kind, s.lang, COUNT(*) AS n {$from}{$glue}p.hash IN {$in}
+            GROUP BY p.hash, p.position, s.id ORDER BY n DESC, s.priority, s.id");
+        $bind($src, $params2 + $hashParams);
+        $src->execute();
+        $sources = [];
+        foreach ($src->fetchAll(\PDO::FETCH_ASSOC) as $r) {
+            $sources[$r['hash'] . "\0" . $r['position']][] = ['id' => (int) $r['id'], 'title' => $r['title'], 'author' => $r['author'], 'book' => $r['book_id'],
+                'kind' => $r['kind'], 'lang' => $r['lang'], 'count' => (int) $r['n']];
+        }
+        $smp = $pdo->prepare("SELECT * FROM (SELECT p.hash, p.position, p.id, p.ply, {$move} AS move, p.san, p.text,
+                ROW_NUMBER() OVER (PARTITION BY p.hash, p.position ORDER BY s.priority, p.id) AS rn {$from}{$glue}p.hash IN {$in}) WHERE rn <= 3 ORDER BY hash, position, rn");
+        $bind($smp, $params2 + $hashParams);
+        $smp->execute();
+        $samples = [];
+        foreach ($smp->fetchAll(\PDO::FETCH_ASSOC) as $r) {
+            $samples[$r['hash'] . "\0" . $r['position']][] = ['id' => (int) $r['id'], 'ply' => (int) $r['ply'], 'move' => (int) $r['move'], 'san' => $r['san'], 'text' => mb_substr((string) $r['text'], 0, 240)];
+        }
+        return array_map(static function (array $r) use ($sources, $samples): array {
+            $key = $r['hash'] . "\0" . $r['position'];
+            return ['hash' => $r['hash'], 'fen' => $r['position'] . ' 0 1', 'count' => (int) $r['n'],
+                'sources' => array_slice($sources[$key] ?? [], 0, 6), 'samples' => $samples[$key] ?? []];
+        }, $ranked);
     }
 
     /**

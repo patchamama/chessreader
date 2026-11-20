@@ -28,6 +28,28 @@ final class CommentsController
         return $this->json($response, ['comments' => $this->store->forPosition($hash, $key, (int) ($q['limit'] ?? 5))]);
     }
 
+    /** GET /api/comments/top?limit(≤100, 50)&q&source&lang&kind: the positions with most comments. */
+    public function top(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        $q = $request->getQueryParams();
+        $kind = (string) ($q['kind'] ?? '');
+        $lang = (string) ($q['lang'] ?? '');
+        if (!in_array($kind, ['', 'book', 'lichess'], true) || !preg_match('/^[a-z]{0,3}$/', $lang)) {
+            return $this->json($response, ['error' => 'kind is book or lichess; lang is a language code'], 400);
+        }
+        $filters = ['q' => mb_substr(trim((string) ($q['q'] ?? '')), 0, 200), 'lang' => $lang, 'kind' => $kind];
+        if (isset($q['source']) && preg_match('/^\d{1,9}$/', (string) $q['source'])) {
+            $filters['source'] = (int) $q['source'];
+        }
+        $limit = max(1, min(100, (int) ($q['limit'] ?? 50)));
+        $rank = 0;
+        $positions = array_map(static function (array $p) use (&$rank): array {
+            unset($p['hash']);
+            return ['rank' => ++$rank] + $p;
+        }, $this->store->top($filters, $limit));
+        return $this->json($response, ['positions' => $positions]);
+    }
+
     /** GET /api/comments?offset&limit(≤200)&q&source&lang&kind: a page of every comment and the total. */
     public function list(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {

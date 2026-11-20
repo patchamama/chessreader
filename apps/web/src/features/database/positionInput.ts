@@ -1,6 +1,7 @@
 import { Chess } from 'chess.js'
 import type { HumanComment } from '../library/commentdb/commentLookup'
-import type { CommentFilter, CommentSource } from '../comments/commentsApi'
+import type { CommentEntry, CommentFilter, CommentSource } from '../comments/commentsApi'
+import { positionHash } from '@chess-ebook/chess-shared'
 import { normalizePgn, type PgnLanguage, type PgnLanguageChoice, type Unrecognised } from './pgnNormalize'
 
 export interface PositionMove { label: string; fen: string; san?: string }
@@ -65,3 +66,15 @@ export function replayLine(start: string, sans: string[]): PositionMove[] {
   }
   return out
 }
+
+/** The editor wants a database entry: what the finder knows of the comment, plus its position. */
+export function entryOf(c: HumanComment, fen: string, sources: CommentSource[]): CommentEntry {
+  const source = sources.find((s) => s.title === c.source.title)
+  return {
+    id: c.id ?? 0, hash: positionHash(fen), fen, text: c.text, lang: c.lang, ply: c.ply, move: Math.ceil(c.ply / 2), san: c.san, gameId: c.gameId, chapter: null,
+    source: { id: source?.id ?? 0, title: c.source.title, author: c.source.author, kind: c.source.kind, lang: source?.lang ?? c.lang, book: source?.book ?? null },
+    game: { white: null, black: null, label: c.label },
+    ...(c.translations ? { translations: c.translations } : {}),
+  }
+}
+

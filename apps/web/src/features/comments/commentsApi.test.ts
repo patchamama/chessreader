@@ -12,7 +12,7 @@ vi.mock('../library/commentdb/commentLookup', () => ({
   }),
 }))
 
-import { clearCommentListCache, deleteComment, hideComment, restoreComment, loadCommentGame, loadCommentPage, loadCommentSources, moveLabel } from './commentsApi'
+import { clearCommentListCache, deleteComment, loadTopPositions, hideComment, restoreComment, loadCommentGame, loadCommentPage, loadCommentSources, moveLabel } from './commentsApi'
 
 const sources = { 1: { kind: 'book', title: 'Invented Book', author: 'A. Writer', lang: 'es', priority: 1, book: 'invented-book' }, 2: { kind: 'lichess', title: 'Lichess studies', author: null, lang: 'en', priority: 2, book: null } }
 const entry = (id: number, source: number, text: string, lang = 'en', chapter: number | null = null) => ({
@@ -137,5 +137,44 @@ describe('hiding and restoring a comment (S21)', () => {
     expect(page.comments[0].hiddenAt).toBe('2026-11-21 10:00:00')
     await loadCommentPage({}, 0, 50)
     expect(http.mock.calls[1][0]).not.toContain('hidden')
+  })
+})
+
+describe('the most commented positions (S23)', () => {
+  const A = '8/8/8/8/8/8/8/K6k w - - 0 1'
+  const B = '8/8/8/8/8/8/8/K5k1 w - - 0 1'
+  const at = (id: number, source: number, fen: string, hash: string, text: string, lang = 'en') => ({ ...entry(id, source, text, lang), fen, hash })
+  beforeEach(() => {
+    files.set('comments-index/meta.json', { version: 1, total: 5, pages: 2, pageSize: 3, sources })
+    files.set('comments-index/0.json', { page: 0, comments: [at(1, 1, A, 'bb', 'one', 'es'), at(2, 2, A, 'bb', 'two'), at(3, 2, B, 'aa', 'x'.repeat(300))] })
+    files.set('comments-index/1.json', { page: 1, comments: [at(4, 2, A, 'bb', 'four'), at(5, 1, B, 'aa', 'five', 'es')] })
+  })
+
+  it('without a server: groups the index by position, ranks by count then hash, with sources and samples', async () => {
+    const top = await loadTopPositions()
+    expect(top.map((p) => [p.rank, p.fen, p.count])).toEqual([[1, `${A.replace(' 0 1', '')} 0 1`, 3], [2, `${B.replace(' 0 1', '')} 0 1`, 2]])
+    expect(top[0].sources.map((s) => [s.id, s.count])).toEqual([[2, 2], [1, 1]])
+    expect(top[0].sources[0]).toEqual({ id: 2, title: 'Lichess studies', author: null, book: null, kind: 'lichess', lang: 'en', count: 2 })
+    expect(top[0].samples.map((s) => s.id)).toEqual([1, 2, 4])
+    expect(top[1].samples.find((s) => s.id === 3)?.text).toHaveLength(240)
+    expect(await loadTopPositions({}, 1)).toHaveLength(1)
+  })
+
+  it('honours the filter and aggregates once per filter', async () => {
+    expect((await loadTopPositions({ lang: 'es' })).map((p) => p.count)).toEqual([1, 1])
+    expect((await loadTopPositions({ source: 2 }))[0].count).toBe(2)
+    expect((await loadTopPositions({ q: 'five' })).map((p) => p.count)).toEqual([1])
+    const { getJson } = await import('../library/commentdb/commentLookup')
+    const calls = (getJson as unknown as { mock: { calls: unknown[] } }).mock.calls.length
+    await loadTopPositions({ source: 2 })
+    expect((getJson as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(calls)
+  })
+
+  it('with a server: asks /api/comments/top with the filter and the limit', async () => {
+    session.on = true
+    http.mockResolvedValue({ positions: [{ rank: 1, fen: A, count: 2, sources: [], samples: [] }] })
+    const top = await loadTopPositions({ lang: 'es', kind: 'book', q: ' caballo ', hidden: true }, 20)
+    expect(http.mock.calls[0][0]).toBe('/api/comments/top?limit=20&q=caballo&lang=es&kind=book')
+    expect(top[0].count).toBe(2)
   })
 })

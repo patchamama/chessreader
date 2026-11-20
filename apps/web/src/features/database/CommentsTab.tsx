@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLlm } from '../../shared/llm'
 import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../shared/externalBook/externalBookStore'
@@ -16,6 +16,7 @@ import type { SaveSuggestionResult } from '../suggestions/suggestionsApi'
 import { openGameInBook } from './openInBook'
 import BatchProgressBar from './BatchProgressBar'
 import PositionFinder from './PositionFinder'
+import RankingView from './RankingView'
 import CommentDetailsModal from './CommentDetailsModal'
 import DeleteControl from './DeleteControl'
 
@@ -64,6 +65,8 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [batchAction, setBatchAction] = useState('universal')
   const [details, setDetails] = useState<CommentEntry | null>(null)
+  const [view, setView] = useState<'list' | 'ranking'>('list')
+  const [finderRequest, setFinderRequest] = useState<{ fen: string; key: number } | undefined>()
   const [hiddenView, setHiddenView] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [allMatching, setAllMatching] = useState(false)
@@ -84,6 +87,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
     return () => { live = false }
   }, [cleanFilter, offset])
 
+  const rankingFilter = useMemo<CommentFilter>(() => { const f = { ...cleanFilter() }; delete f.hidden; return f }, [cleanFilter])
   const change = (patch: Partial<typeof filter>) => {
     setFilter((f) => ({ ...f, ...patch }))
     setOffset(0)
@@ -190,7 +194,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
   const button = 'rounded border border-slate-300 px-2 py-0.5 disabled:opacity-40'
   return (
     <div className="text-sm">
-      <PositionFinder filter={filter} sources={sources} />
+      <PositionFinder filter={filter} sources={sources} request={finderRequest} />
       <div className="flex flex-wrap items-center gap-2">
         <input type="search" aria-label="Search comments" placeholder="Search comments" className={input} value={filter.q} onChange={(e) => change({ q: e.target.value })} />
         <select aria-label="Source" className={input} value={filter.source} onChange={(e) => change({ source: Number(e.target.value) })}>
@@ -206,14 +210,21 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
           <option value="book">Books</option>
           <option value="lichess">Lichess</option>
         </select>
-        <label className="flex items-center gap-1 text-xs">
+        <span role="group" aria-label="View" className="inline-flex overflow-hidden rounded border border-slate-300 text-xs">
+          <button className={`px-2 py-1 ${view === 'list' ? 'bg-violet-100 font-semibold' : 'bg-white'}`} aria-pressed={view === 'list'} onClick={() => setView('list')}>List</button>
+          <button className={`px-2 py-1 ${view === 'ranking' ? 'bg-violet-100 font-semibold' : 'bg-white'}`} aria-pressed={view === 'ranking'} onClick={() => setView('ranking')}>Most commented positions</button>
+        </span>
+        {view === 'list' && <label className="flex items-center gap-1 text-xs">
           <input type="checkbox" aria-label="Show hidden comments" checked={hiddenView} onChange={(e) => { setHiddenView(e.target.checked); setOffset(0); setSelected(new Set()); setAllMatching(false); setNotice(null) }} />
           Show hidden comments
-        </label>
-        {page && <span className="text-xs text-slate-500">{page.total ? `${offset + 1}–${offset + comments.length} of ${page.total}` : 'No comments'}</span>}
-        <button className={button} aria-label="Previous page" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>←</button>
-        <button className={button} aria-label="Next page" disabled={!page || offset + PAGE >= page.total} onClick={() => setOffset(offset + PAGE)}>→</button>
+        </label>}
+        {view === 'list' && page && <span className="text-xs text-slate-500">{page.total ? `${offset + 1}–${offset + comments.length} of ${page.total}` : 'No comments'}</span>}
+        {view === 'list' && <button className={button} aria-label="Previous page" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>←</button>}
+        {view === 'list' && <button className={button} aria-label="Next page" disabled={!page || offset + PAGE >= page.total} onClick={() => setOffset(offset + PAGE)}>→</button>}
       </div>
+      {view === 'ranking' ? (
+        <RankingView filter={rankingFilter} sources={sources} onOpenInFinder={(fen) => setFinderRequest((r) => ({ fen, key: (r?.key ?? 0) + 1 }))} />
+      ) : (<>
       {llm.available && (
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded border border-violet-200 bg-violet-50 px-2 py-1 text-xs">
           <label className="flex items-center gap-1">
@@ -305,6 +316,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
           )
         })}
       </ul>
+        </>)}
       {details && <CommentDetailsModal comment={details} onClose={() => setDetails(null)} onHidden={() => dropDeleted(details.id)} />}
     </div>
   )

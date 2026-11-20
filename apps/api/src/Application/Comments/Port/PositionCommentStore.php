@@ -41,4 +41,15 @@ interface PositionCommentStore
 
     /** Shows a hidden comment again. False when the id is unknown. @throws CommentsReadOnly */
     public function restore(int $id): bool;
+
+    /**
+     * The positions with most visible comments (a position = hash + key, the FEN without move
+     * counters), count desc then hash; filters as in list() (`hidden` is ignored). Each: the full
+     * FEN, the count, the per-source counts (max 6, count desc) and up to 3 sample comments
+     * (text cut to 240 characters). `limit` is capped at 100.
+     *
+     * @param array{q?: string, source?: int, lang?: string, kind?: string, hidden?: bool} $filters
+     * @return list<array{hash: string, fen: string, count: int, sources: list<array<string, mixed>>, samples: list<array<string, mixed>>}>
+     */
+    public function top(array $filters, int $limit): array;
 }

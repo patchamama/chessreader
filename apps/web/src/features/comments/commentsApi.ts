@@ -44,11 +44,13 @@ export const moveLabel = (c: Pick<CommentEntry, 'ply' | 'move' | 'san'>) => `${c
 
 let meta: Promise<IndexMeta> | null = null
 const pages = new Map<number, Promise<IndexEntry[]>>()
+const tops = new Map<string, Promise<TopPosition[]>>()
 
 /** Test hook: forget the pages read. */
 export function clearCommentListCache() {
   meta = null
   pages.clear()
+  tops.clear()
 }
 
 function loadMeta(): Promise<IndexMeta> {
@@ -150,3 +152,65 @@ export async function restoreComment(id: number): Promise<void> {
 
 /** @deprecated Comments are hidden, not deleted: use hideComment. */
 export const deleteComment = hideComment
+
+export interface TopPositionSource { id: number; title: string; author: string | null; book: string | null; kind: string; lang: string; count: number }
+/** `text` is cut to 240 characters. */
+export interface TopPositionSample { id: number; ply: number; move: number; san: string; text: string }
+export interface TopPosition { rank: number; fen: string; count: number; sources: TopPositionSource[]; samples: TopPositionSample[] }
+
+const MAX_TOP = 100
+const MAX_SOURCES = 6
+const MAX_SAMPLES = 3
+
+/**
+ * The positions with most comments (a position = hash + FEN without move counters, as the server
+ * groups them), count desc then hash. `q`, `source`, `lang` and `kind` of the filter are honoured;
+ * hidden comments are never counted. Without a server it is computed from the comments-index pages
+ * (aggregated once per filter and kept for the session).
+ */
+export async function loadTopPositions(filter: CommentFilter = {}, limit = 50): Promise<TopPosition[]> {
+  const n = Math.max(1, Math.min(MAX_TOP, limit))
+  if (hasServerSession()) {
+    const q = new URLSearchParams({ limit: String(n) })
+    if (filter.q?.trim()) q.set('q', filter.q.trim())
+    if (filter.source) q.set('source', String(filter.source))
+    if (filter.lang) q.set('lang', filter.lang)
+    if (filter.kind) q.set('kind', filter.kind)
+    return (await httpClient<{ positions: TopPosition[] }>(`/api/comments/top?${q}`, { method: 'GET' })).positions
+  }
+  const f: CommentFilter = { q: filter.q, source: filter.source, lang: filter.lang, kind: filter.kind }
+  const key = JSON.stringify([f.q?.trim() ?? '', f.source ?? 0, f.lang ?? '', f.kind ?? ''])
+  let ranking = tops.get(key)
+  if (!ranking) {
+    ranking = aggregateTop(f)
+    tops.set(key, ranking)
+    ranking.catch(() => tops.delete(key))
+  }
+  return (await ranking).slice(0, n)
+}
+
+async function aggregateTop(filter: CommentFilter): Promise<TopPosition[]> {
+  const m = await loadMeta()
+  const all = (await Promise.all(Array.from({ length: m.pages }, (_, i) => loadPage(i)))).flat()
+  const groups = new Map<string, { hash: string; fen: string; entries: IndexEntry[] }>()
+  for (const e of all) {
+    if (!matches(m, e, filter)) continue
+    const fen = e.fen.split(/\s+/).slice(0, 4).join(' ')
+    const k = `${e.hash}\u0000${fen}`
+    const g = groups.get(k) ?? groups.set(k, { hash: e.hash, fen: `${fen} 0 1`, entries: [] }).get(k)!
+    g.entries.push(e)
+  }
+  const priority = (id: number) => m.sources[String(id)]?.priority ?? id
+  return [...groups.values()]
+    .sort((a, b) => b.entries.length - a.entries.length || (a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0) || (a.fen < b.fen ? -1 : 1))
+    .slice(0, MAX_TOP)
+    .map((g, i) => {
+      const bySource = new Map<number, number>()
+      for (const e of g.entries) bySource.set(e.source, (bySource.get(e.source) ?? 0) + 1)
+      const sources = [...bySource].sort((a, b) => b[1] - a[1] || priority(a[0]) - priority(b[0]) || a[0] - b[0]).slice(0, MAX_SOURCES)
+        .map(([id, count]) => { const s = sourceOf(m, id); return { id, title: s.title, author: s.author, book: s.book, kind: s.kind, lang: s.lang, count } })
+      const samples = [...g.entries].sort((a, b) => priority(a.source) - priority(b.source) || a.id - b.id).slice(0, MAX_SAMPLES)
+        .map((e) => ({ id: e.id, ply: e.ply, move: e.move, san: e.san, text: e.text.slice(0, 240) }))
+      return { rank: i + 1, fen: g.fen, count: g.entries.length, sources, samples }
+    })
+}

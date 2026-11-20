@@ -207,4 +207,40 @@ final class SqlitePositionCommentStoreTest extends TestCase
             @unlink($file);
         }
     }
+
+    /** Comments 1-3 sit on one position key; add more on another so the ranking has something to order. */
+    private static function rankedDatabase(): \PDO
+    {
+        $pdo = self::database();
+        $other = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -';
+        $ins = $pdo->prepare('INSERT INTO position_comments (id, hash, position, game_id, ply, san, lang, text, move_number) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        foreach ([[4, '1111111111111111', '1-1', 'es'], [5, '1111111111111111', '2-1', 'en'], [6, '1111111111111111', '2-1', 'en'], [7, '1111111111111111', '2-1', 'en'], [8, '1111111111111111', '1-1', 'es']] as [$id, $h, $g, $l]) {
+            $ins->execute([$id, $h, $other, $g, 1, 'e4', $l, str_repeat("c{$id} ", 100), 1]);
+        }
+        return $pdo;
+    }
+
+    public function test_top_ranks_positions_by_visible_comments_with_sources_and_samples(): void
+    {
+        $top = (new SqlitePositionCommentStore('', self::rankedDatabase()))->top([], 50);
+        self::assertSame(['1111111111111111', 5, 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1'], [$top[0]['hash'], $top[0]['count'], $top[0]['fen']]);
+        self::assertSame(3, count($top[0]['samples']));
+        self::assertLessThanOrEqual(240, mb_strlen($top[0]['samples'][0]['text']));
+        self::assertSame(['id' => 2, 'title' => 'Lichess studies', 'author' => null, 'book' => null, 'kind' => 'lichess', 'lang' => 'en', 'count' => 3], $top[0]['sources'][0]);
+        self::assertSame(['id' => 1, 'title' => 'Invented Book', 'author' => 'A. Writer', 'book' => 'invented-book', 'kind' => 'book', 'lang' => 'es', 'count' => 2], $top[0]['sources'][1]);
+        self::assertSame(['0123456789abcdef', 1], [$top[1]['hash'], $top[1]['count']]); // ties: by hash
+    }
+
+    public function test_top_skips_hidden_comments_honours_filters_and_caps_the_limit(): void
+    {
+        $store = new SqlitePositionCommentStore('', self::rankedDatabase());
+        $store->hide(5);
+        $store->hide(6);
+        self::assertSame(3, $store->top([], 50)[0]['count']);
+        self::assertSame(3, $store->top(['hidden' => true], 50)[0]['count']); // hidden filter ignored
+        self::assertSame(2, $store->top(['lang' => 'es'], 50)[0]['count']);
+        self::assertSame(1, $store->top(['source' => 1, 'q' => 'c4'], 50)[0]['count']);
+        self::assertCount(1, $store->top([], 1));
+        self::assertSame([], (new SqlitePositionCommentStore(sys_get_temp_dir() . '/none-' . bin2hex(random_bytes(4)) . '.sqlite'))->top([], 50));
+    }
 }

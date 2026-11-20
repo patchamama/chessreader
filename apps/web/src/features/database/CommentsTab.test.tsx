@@ -5,7 +5,7 @@ import type { CommentEntry } from '../comments/commentsApi'
 
 const llm = vi.hoisted(() => ({ available: false, vision: false, config: null as unknown, complete: vi.fn() }))
 vi.mock('../../shared/llm', () => ({ useLlm: () => llm }))
-const api = vi.hoisted(() => ({ loadCommentPage: vi.fn(), loadCommentSources: vi.fn(), loadCommentGame: vi.fn(), hideComment: vi.fn(), restoreComment: vi.fn() }))
+const api = vi.hoisted(() => ({ loadCommentPage: vi.fn(), loadCommentSources: vi.fn(), loadCommentGame: vi.fn(), hideComment: vi.fn(), restoreComment: vi.fn(), loadTopPositions: vi.fn() }))
 vi.mock('../comments/commentsApi', async (orig) => ({ ...(await orig<typeof import('../comments/commentsApi')>()), ...api }))
 const save = vi.hoisted(() => vi.fn())
 vi.mock('../suggestions/suggestionsApi', () => ({ saveSuggestion: save }))
@@ -224,5 +224,22 @@ describe('Hiding comments (S17, S21)', () => {
     await waitFor(() => expect(api.restoreComment).toHaveBeenCalledWith(8))
     expect(await screen.findByText('Comment restored')).toBeTruthy()
     expect(screen.queryByRole('listitem', { name: 'Comment 8' })).toBeNull()
+  })
+})
+
+describe('Most commented positions switch (S23)', () => {
+  it('shows the ranking with the tab filters, and opens a position in Find by position', async () => {
+    api.loadTopPositions.mockResolvedValue([{ rank: 1, fen: FEN, count: 4, sources: [], samples: [] }])
+    show()
+    await row(7)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'es' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Most commented positions' }))
+    expect(await screen.findByRole('list', { name: 'Ranking' })).toBeTruthy()
+    expect(api.loadTopPositions).toHaveBeenCalledWith({ lang: 'es' }, 50)
+    expect(screen.queryByRole('list', { name: 'Comments' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Open in Find by position' }))
+    await waitFor(() => expect((screen.getByRole('textbox', { name: 'FEN or PGN' }) as HTMLTextAreaElement).value).toBe(FEN))
+    fireEvent.click(screen.getByRole('button', { name: 'List' }))
+    expect(await screen.findByRole('list', { name: 'Comments' })).toBeTruthy()
   })
 })
