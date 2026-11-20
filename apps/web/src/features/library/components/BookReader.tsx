@@ -41,6 +41,7 @@ import { isDevMode } from '../../../shared/env/devMode'
 import { createRoot, type Root } from 'react-dom/client'
 import { DiagramImage } from './DiagramImage'
 import { INITIAL_FEN, movesBeforeImage } from '../utils/inferDiagramFen'
+import { useSessionFenStore, withSessionFens } from '../imageAi/sessionFens'
 import { followActiveMove } from '../utils/autoscroll'
 import { NarrationPanel } from '../narration/NarrationPanel'
 import { GameReviewPanel } from '../review/GameReviewPanel'
@@ -404,10 +405,12 @@ export default function BookReader() {
   // Rewrite relative img/image src paths to the backend image endpoint
   const titleSeparator = useSettingsStore((s) => s.chapterTitleSeparator)
   // Images resolved to the API, multi-line titles joined, FENs next to diagrams hidden (kept for recognition).
+  // Diagram positions accepted this session go in as FEN lines, so the moves after them are read (S7).
+  const sessionFens = useSessionFenStore((s) => s.fens)
   const html = useMemo(() => {
     if (!rawHtml || !id) return rawHtml
-    return prepareChapterHtml(rawHtml, id, { titleSeparator })
-  }, [rawHtml, id, titleSeparator])
+    return withSessionFens(prepareChapterHtml(rawHtml, id, { titleSeparator }), sessionFens)
+  }, [rawHtml, id, titleSeparator, sessionFens])
 
   // Flatten the chapter to recognition text with the SAME DOM extraction the
   // wrapper uses on the rendered pane, so every node's charStart/charEnd points

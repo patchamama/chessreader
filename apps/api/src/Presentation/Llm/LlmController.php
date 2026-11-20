@@ -44,6 +44,11 @@ final class LlmController
     /** @param callable(array<mixed>): array<mixed> $run */
     private function handle(ServerRequestInterface $request, ResponseInterface $response, callable $run): ResponseInterface
     {
+        // A local vision model can take minutes: PHP's default 30 s would cut the
+        // answer (the proxy's own timeouts, 300 s at most, still apply).
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(330);
+        }
         $length = $request->getHeaderLine('Content-Length');
         if ($length !== '' && (int) $length > self::MAX_BODY) {
             return $this->json($response, ['error' => 'The request is too large (1 MB at most).', 'code' => 'config'], 413);

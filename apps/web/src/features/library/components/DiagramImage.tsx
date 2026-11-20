@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   useSettingsStore,
   BOARD_THEMES,
@@ -13,6 +13,10 @@ import { DiagramEvalFooter, RefreshIcon } from '../diagramEval/DiagramEvalFooter
 import type { MoveBefore } from '../utils/inferDiagramFen'
 import { BOOK_STYLE_LABEL, generatedDiagramSvg, useDiagramStyleStore, type DiagramStyle } from '../utils/boardSvg'
 import { FenHint } from './FenHint'
+import { ImageAiMenu } from '../imageAi/ImageAiMenu'
+import { registerDiagram } from '../imageAi/diagramRegistry'
+import { useSessionFenStore } from '../imageAi/sessionFens'
+import { followingTextOf } from '../imageAi/followingText'
 
 /** The value of the book style in the board theme menu. */
 const BOOK_OPTION = 'book'
@@ -35,6 +39,12 @@ interface Props {
   /** The last main-line move before the diagram, and a variation move just before it (S14). */
   mainBefore?: MoveBefore | null
   variationBefore?: MoveBefore | null
+  /**
+   * The text printed after the image, up to the next image or heading: the
+   * moves the diagram solver reads (S9). Default: read from the page around
+   * the reader's mount of this image.
+   */
+  followingText?: string
 }
 
 /**
@@ -45,7 +55,7 @@ interface Props {
  * generated board opens a config menu (style / piece set / coordinates) and a
  * FEN editor. A missing image whose position is known is regenerated at once.
  */
-export function DiagramImage({ src, alt, fen, withEval = false, textFen, fenKnown = false, mainBefore = null, variationBefore = null }: Props) {
+export function DiagramImage({ src, alt, fen, withEval = false, textFen, fenKnown = false, mainBefore = null, variationBefore = null, followingText: givenFollowing }: Props) {
   const boardTheme = useSettingsStore((s) => s.diagramBoardTheme)
   const pieceTheme = useSettingsStore((s) => s.diagramPieceTheme)
   const coordinates = useSettingsStore((s) => s.diagramCoordinates)
@@ -63,6 +73,31 @@ export function DiagramImage({ src, alt, fen, withEval = false, textFen, fenKnow
   const [activeFen, setActiveFen] = useState(fen)
   const hasBookEval = useDiagramEvalStore((s) => !!s.get(activeFen))
   const [fenDraft, setFenDraft] = useState(fen)
+  const rootRef = useRef<HTMLSpanElement>(null)
+
+  // A position accepted for this image in the AI menu (this session) is its position now (S7).
+  const sessionFen = useSessionFenStore((s) => s.fens[src])
+  useEffect(() => {
+    if (!sessionFen) return
+    setActiveFen(sessionFen)
+    setFenDraft(sessionFen)
+  }, [sessionFen])
+
+  const [pageFollowing, setPageFollowing] = useState('')
+  useEffect(() => {
+    const el = rootRef.current
+    if (givenFollowing !== undefined || !el) return
+    const host = el.closest('[data-diagram-overlay]') ?? el
+    const content = host.closest('.epub-content')
+    if (content) setPageFollowing(followingTextOf(host, content))
+  }, [givenFollowing, src])
+  const followingText = givenFollowing ?? pageFollowing
+
+  // On screen: the chapter batch and the per-book templates see this diagram.
+  useEffect(
+    () => registerDiagram({ src, followingText, printedFen: textFen, element: rootRef.current }),
+    [src, followingText, textFen],
+  )
 
   const regenerate = useCallback(
     async (overrideFen?: string) => {
@@ -129,7 +164,7 @@ export function DiagramImage({ src, alt, fen, withEval = false, textFen, fenKnow
   }
 
   return (
-    <span className="diagram-image relative mt-5 inline-block" data-diagram-src={src} data-diagram-fen={activeFen}>
+    <span ref={rootRef} className="diagram-image relative mt-5 inline-block" data-diagram-src={src} data-diagram-fen={activeFen}>
       {textFen && <FenHint fen={textFen} />}
       {/* Small icons just above the top-right corner: they never cover the board. */}
       <button
@@ -157,6 +192,9 @@ export function DiagramImage({ src, alt, fen, withEval = false, textFen, fenKnow
           </svg>
         </button>
       )}
+
+      {/* The AI actions of this image, left of the other icons (S4, S7). */}
+      <ImageAiMenu src={src} alt={alt} followingText={followingText} fen={activeFen} />
 
       {mode === 'original' ? (
         <img src={src} alt={alt} className="max-w-full h-auto" onError={onImageError} />
