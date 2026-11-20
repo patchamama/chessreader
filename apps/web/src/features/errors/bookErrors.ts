@@ -1,4 +1,4 @@
-import { recognizeGames, type RecognitionError } from '@chess-ebook/chess-shared'
+import { recognizeGames, type RecognitionError, type RecognizedGame } from '@chess-ebook/chess-shared'
 import { httpClient } from '../../shared/api/httpClient'
 import { htmlToProseText } from '../library/utils/proseText'
 import type { Chapter } from '../library/api/libraryApi'
@@ -15,15 +15,28 @@ export interface GameErrors {
   errors: RecognitionError[]
 }
 
+/** One chapter's text and its recognised games, numbered as the errors are. */
+export function chapterGames(html: string, algorithm: 1 | 2 = 2): { text: string; games: RecognizedGame[] } {
+  const text = htmlToProseText(html)
+  return { text, games: recognizeGames(text, { algorithm }) }
+}
+
+/** The line before a game (its players, when short) and its first moves, to tell it apart. */
+export function gameLabel(text: string, g: RecognizedGame): string {
+  const main = g.tree.mainline.map((id) => g.tree.nodes.get(id)!)
+  const before = text.slice(Math.max(0, g.charStart - 200), g.charStart).split('\n').map((l) => l.trim()).filter(Boolean).pop() ?? ''
+  return (before.length < 80 && !/\d+\./.test(before) ? `${before} · ` : '') + main.slice(0, 4).map((n) => n.san).join(' ')
+}
+
+/** A chapter of a library book. */
+export const fetchBookChapter = (bookId: number, chapter: number) => httpClient<Chapter>(`/api/library/books/${bookId}/chapters/${chapter}`)
+
 /** Recognise one chapter's text and list its games with their errors. */
 export function chapterErrors(bookId: number | string, chapter: number, html: string, algorithm: 1 | 2 = 2): GameErrors[] {
-  const text = htmlToProseText(html)
-  return recognizeGames(text, { algorithm }).map((g, gameIndex) => {
-    const main = g.tree.mainline.map((id) => g.tree.nodes.get(id)!)
-    const before = text.slice(Math.max(0, g.charStart - 200), g.charStart).split('\n').map((l) => l.trim()).filter(Boolean).pop() ?? ''
-    const label = (before.length < 80 && !/\d+\./.test(before) ? `${before} · ` : '') + main.slice(0, 4).map((n) => n.san).join(' ')
-    return { bookId, chapter, gameIndex, label, moves: Math.ceil(main.length / 2), errors: g.tree.errors }
-  })
+  const { text, games } = chapterGames(html, algorithm)
+  return games.map((g, gameIndex) => ({
+    bookId, chapter, gameIndex, label: gameLabel(text, g), moves: Math.ceil(g.tree.mainline.length / 2), errors: g.tree.errors,
+  }))
 }
 
 /** Every chapter of a book, recognised: its games with their errors (one chapter at a time). */
@@ -33,7 +46,7 @@ export async function bookErrors(bookId: number, onProgress?: (done: number, tot
   for (let c = 1; c <= total; c++) {
     if (signal?.aborted) break
     try {
-      const ch = await httpClient<Chapter>(`/api/library/books/${bookId}/chapters/${c}`)
+      const ch = await fetchBookChapter(bookId, c)
       if (c === 1) total = Math.max(1, ...ch.toc.map((t) => t.order))
       out.push(...chapterErrors(bookId, c, ch.html))
     } catch { /* a chapter that cannot be read is skipped */ }

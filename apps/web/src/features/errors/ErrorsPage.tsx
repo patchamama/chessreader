@@ -5,13 +5,15 @@ import { saveProgress } from '../library/store/readingStore'
 import { saveBoardMemory } from '../library/store/boardMemory'
 import { getJson } from '../library/commentdb/commentLookup'
 import { usePageWidth } from '../../shared/layout/pageWidth'
-import { withBusy } from '../../shared/layout/busyStore'
+import { withBusy, withProgress } from '../../shared/layout/busyStore'
 import { bookErrors, type GameErrors } from './bookErrors'
 import { isDemoHost } from '../../shared/env/devMode'
 import { hasResources } from '../database/resources'
 import { EXTERNAL_BOOK_ID, type ExternalChapter } from '../../shared/externalBook/externalBookStore'
 import { loadRepoBookChapters, loadRepoBooks, openRepoGame, repoBookErrors, type RepoBook } from './repoBooks'
 import SuggestionsReview from './SuggestionsReview'
+import { findWrongMoves, type WrongMoveBatch, type WrongMoveTarget } from './wrongMoveBatch'
+import { WrongMovesBatch } from './WrongMovesBatch'
 import { loadCachedErrors, saveCachedErrors, summarise, type BookErrorSummary, type ErrorsFile, type GameSummary } from './errorsSummary'
 
 type BookId = number | string
@@ -63,6 +65,8 @@ function RecognitionErrors() {
   const repoChapters = useRef(new Map<string, ExternalChapter[]>())
   const abort = useRef<AbortController | null>(null)
   const autoScanned = useRef(false)
+  const [wrongMoves, setWrongMoves] = useState<{ run: number; title: string; batch: WrongMoveBatch | null } | null>(null)
+  const runs = useRef(0)
   const books: { id: BookId; title: string }[] | undefined = repoMode ? repoBooks ?? undefined : libraryBooks
 
   const remember = (list: (BookErrorSummary | null | undefined)[]) =>
@@ -149,6 +153,26 @@ function RecognitionErrors() {
     navigate(`/read/${g.bookId}`)
   }
 
+  /** "Find the wrong moves": search the games with errors for the misprinted move (cancellable; nothing is saved by itself). */
+  const findWrong = async (title: string, targets: WrongMoveTarget[]) => {
+    const run = ++runs.current
+    setWrongMoves({ run, title, batch: null })
+    try {
+      const batch = await withProgress(`Finding the wrong moves: ${title}`, (report, signal) => findWrongMoves(targets, report, signal), { cancellable: true })
+      setWrongMoves({ run, title, batch })
+    } catch (e) {
+      setWrongMoves(null)
+      setRepoError(`${title}: ${(e as Error).message}`)
+    }
+  }
+  const target = (id: BookId, only?: WrongMoveTarget['only']): WrongMoveTarget | null => {
+    const book = books?.find((b) => b.id === id)
+    if (!book) return null
+    const repo = typeof id === 'string' ? repoBooks?.find((b) => b.id === id) : undefined
+    if (typeof id === 'string' && !repo) return null
+    return { id, title: book.title, ...(repo ? { repo } : {}), ...(only ? { only } : {}) }
+  }
+
   const shown = (books ?? []).map((b) => summaries[String(b.id)]).filter((s): s is BookErrorSummary => !!s)
   const ranking: RankedGame[] = shown
     .flatMap((s) => s.perGame.map((g) => ({ ...g, bookId: s.id })))
@@ -157,6 +181,13 @@ function RecognitionErrors() {
   const totals = shown.reduce((t, s) => ({ games: t.games + s.games, errors: t.errors + s.errors }), { games: 0, errors: 0 })
   const title = (id: BookId) => books?.find((b) => b.id === id)?.title ?? `#${id}`
   const cell = 'border-t border-slate-100 px-2 py-1'
+  const busyWrong = !!wrongMoves && !wrongMoves.batch
+  const findWrongInRanking = () => {
+    const byBook = new Map<BookId, { chapter: number; gameIndex: number }[]>()
+    for (const g of ranking) byBook.set(g.bookId, [...(byBook.get(g.bookId) ?? []), { chapter: g.chapter, gameIndex: g.gameIndex }])
+    const targets = [...byBook].map(([id, only]) => target(id, only)).filter((t): t is WrongMoveTarget => !!t)
+    if (targets.length) void findWrong('games with most errors', targets)
+  }
   return (
     <div>
       <h1 className="text-xl font-bold text-slate-800">Recognition errors</h1>
@@ -192,7 +223,11 @@ function RecognitionErrors() {
                 <td className={cell}>{s && s.games ? (s.errors / s.games).toFixed(2) : '—'}</td>
                 <td className={cell}>{s ? Object.entries(s.byKind).sort((x, y) => y[1] - x[1]).map(([k, n]) => `${k} ${n}`).join(', ') : ''}</td>
                 <td className={cell}>{s ? formatDate(s.analysedAt) : ''}</td>
-                <td className={cell}><button className="underline" disabled={!!progress} onClick={() => void scan([b])}>Analyse</button></td>
+                <td className={`${cell} whitespace-nowrap`}>
+                  <button className="underline" disabled={!!progress} onClick={() => void scan([b])}>Analyse</button>
+                  {' · '}
+                  <button className="underline" disabled={busyWrong} onClick={() => { const t = target(b.id); if (t) void findWrong(b.title, [t]) }}>Find the wrong moves</button>
+                </td>
               </tr>
             )
           })}
@@ -200,7 +235,10 @@ function RecognitionErrors() {
       </table>
       {ranking.length > 0 && (
         <>
-          <h2 className="mt-6 text-sm font-semibold">Games with most errors</h2>
+          <div className="mt-6 flex items-center gap-2">
+            <h2 className="text-sm font-semibold">Games with most errors</h2>
+            <button className="rounded border border-slate-300 px-2 py-0.5 text-xs disabled:opacity-50" disabled={busyWrong} onClick={findWrongInRanking}>Find the wrong moves in these games</button>
+          </div>
           <table className="mt-1 w-full text-xs" aria-label="Games with most errors">
             <thead><tr className="text-left text-slate-500"><th className="px-2">#</th><th>Book</th><th>Chapter</th><th>Game</th><th>Moves</th><th>Errors</th><th /></tr></thead>
             <tbody>
@@ -216,6 +254,7 @@ function RecognitionErrors() {
           </table>
         </>
       )}
+      {wrongMoves?.batch && <WrongMovesBatch key={wrongMoves.run} title={wrongMoves.title} batch={wrongMoves.batch} onClose={() => setWrongMoves(null)} />}
     </div>
   )
 }

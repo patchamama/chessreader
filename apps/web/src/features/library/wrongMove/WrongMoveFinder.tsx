@@ -3,12 +3,10 @@ import { findWrongMove, type Lang, type WrongMoveFix, type WrongMoveResult } fro
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { useLlm } from '../../../shared/llm'
 import { useErrataContext } from '../errata/errataContext'
-import type { ErrataEntry } from '../errata/errataFormat'
-import { saveErrata } from '../errata/errataSource'
-import { buildSuggestion } from '../../suggestions/suggestionFormat'
-import { saveSuggestion } from '../../suggestions/suggestionsApi'
+import type { SaveFixInput } from './gameFix'
 import type { EditableMove } from '../correction/workbench'
-import { applyFix, CONTEXT_PLIES, fixLabel, parseRank, plyLabel, previewFix, RANK_SYSTEM, rankPrompt } from './wrongMove'
+import { fixLabel, parseRank, plyLabel, previewFix, RANK_SYSTEM } from './wrongMove'
+import { rankQuestion, saveWrongMoveFix, type FixSaveResult } from './gameFix'
 
 const T: Record<Lang, Record<string, string>> = {
   en: {
@@ -41,10 +39,10 @@ interface Props {
   text: string
   gameIndex: number
   /** The errata entry for a corrected main line of the same length, or null when it cannot be built. */
-  errataFor: (corrected: { san: string; origin?: 'engine'; evidence?: string }[]) => ErrataEntry | null
+  errataFor: SaveFixInput['errataFor']
 }
 
-type SaveState = { ok: true; path: string } | { ok: false; path: string; json: string; reason?: string } | { ok: false; reason: string }
+type SaveState = FixSaveResult
 
 /**
  * "Find the wrong move": the deterministic search of chess-shared over the
@@ -72,39 +70,15 @@ export function WrongMoveFinder({ moves, startFen, text, gameIndex, errataFor }:
 
   const save = async (fix: WrongMoveFix) => {
     setSaved(null)
-    const evidence = `wrong-move finder: ${fixLabel(fix)}, ${fix.playedAfter} later moves play`
-    if (fix.kind === 'substitute') {
-      const entry = errataFor(moves.map((m, i) => (i === fix.ply ? { san: fix.to, origin: 'engine' as const, evidence } : { san: m.san })))
-      if (!entry) { setSaved({ ok: false, reason: t.noBook }); return }
-      const r = await saveErrata(entry)
-      setSaved(r.saved ? { ok: true, path: r.path } : { ok: false, path: r.path, json: r.json, reason: r.reason })
-      return
-    }
-    if (!ctx.bookTitle) { setSaved({ ok: false, reason: t.noBook }); return }
-    const s = buildSuggestion({
-      kind: 'move',
-      target: { book: ctx.bookTitle, ...(ctx.chapter !== null ? { chapter: ctx.chapter } : {}), gameIndex },
-      before: sans,
-      after: applyFix(sans, fix),
-      author: 'user',
-    })
-    const r = await saveSuggestion(s)
-    setSaved(r.saved ? { ok: true, path: r.path } : { ok: false, path: r.path, json: r.json, reason: r.reason })
+    setSaved(await saveWrongMoveFix(fix, { moves, gameIndex, errataFor, target: { book: ctx.bookTitle, chapter: ctx.chapter }, noBook: t.noBook }))
   }
 
   const askAi = async () => {
-    if (!result || result.failingPly === null) return
-    const f = result.failingPly
-    const near = moves.slice(Math.max(0, f - CONTEXT_PLIES), Math.min(moves.length, f + CONTEXT_PLIES + 1)).filter((m) => m.source)
-    const excerpt = near.length ? text.slice(near[0].source!.charStart, near[near.length - 1].source!.charEnd) : ''
+    const question = result ? rankQuestion(moves, text, result) : null
+    if (!result || !question) return
     setRank('asking')
     try {
-      const answer = await llm.complete({
-        system: RANK_SYSTEM,
-        messages: [{ role: 'user', text: rankPrompt({ moves: moves.map((m) => ({ written: m.source?.written ?? m.san })), failingPly: f, excerpt, fixes: result.fixes }) }],
-        json: true,
-        maxTokens: 400,
-      })
+      const answer = await llm.complete({ system: RANK_SYSTEM, messages: [{ role: 'user', text: question }], json: true, maxTokens: 400 })
       setRank(parseRank(answer.text, result.fixes.length) ?? 'bad')
     } catch {
       setRank('bad')

@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { extractPlayers } from '@chess-ebook/chess-shared'
 import type { Lang, RecognizedGame } from '@chess-ebook/chess-shared'
 import ChessBoard from '../../../shared/chess/ChessBoard'
 import { useStudyBoardStore } from '../store/studyBoardStore'
@@ -8,12 +7,12 @@ import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
 import { textToChapters } from '../utils/textToChapters'
 import { applyToText, checkMoves, correctionList, exportPgn, initialMoves, normaliseSan, type CheckResult, type EditableMove } from './workbench'
-import { APP_VERSION } from '../../../version'
 import { useErrataContext } from '../errata/errataContext'
-import { buildErrataEntry, coreMove, type BuildErrataInput, type ErrataEntry } from '../errata/errataFormat'
+import { coreMove, type BuildErrataInput, type ErrataEntry } from '../errata/errataFormat'
 import { saveErrata, type SaveErrataResult } from '../errata/errataSource'
 import { findOnlineReference, type OnlineLookupResult } from '../errata/onlineLookup'
 import { WrongMoveFinder } from '../wrongMove/WrongMoveFinder'
+import { buildGameErrata, gamePlayers } from '../wrongMove/gameFix'
 
 const T: Record<Lang, Record<string, string>> = {
   en: {
@@ -98,24 +97,15 @@ export function CorrectionWorkbench({ games, text }: { games: RecognizedGame[]; 
   const check = (plies: number) => setResult({ ...checkMoves(moves.map((m) => m.san), { upTo: plies }), upTo: plies })
   const changes = correctionList(text, original, moves)
   const header = text.slice(gameIndex > 0 ? games[gameIndex - 1].charEnd : 0, game.charStart)
-  const players = extractPlayers(text.slice(gameIndex > 0 ? games[gameIndex - 1].charEnd : 0, game.charEnd))
+  const players = gamePlayers(text, games, gameIndex)
   const year = Number([...header.slice(-300).matchAll(/\b(1[5-9]\d\d|20\d\d)\b/g)].pop()?.[1]) || null
 
   // An errata entry needs the book and chapter, and substituted moves only.
-  const errataFor = (corrected: BuildErrataInput['corrected']): ErrataEntry | null => {
-    if (!errataCtx.bookTitle || errataCtx.chapter === null || corrected.length !== original.length) return null
-    const last = original[original.length - 1]?.source?.charEnd ?? game.charEnd
-    return buildErrataEntry({
+  const errataFor = (corrected: BuildErrataInput['corrected']): ErrataEntry | null =>
+    !errataCtx.bookTitle || errataCtx.chapter === null ? null : buildGameErrata({
+      text, games, gameIndex, original, corrected, chapter: errataCtx.chapter,
       book: { title: errataCtx.bookTitle, ...(errataCtx.bookId !== null ? { id: errataCtx.bookId } : {}) },
-      chapter: errataCtx.chapter,
-      gameIndex,
-      game: { label: players.white && players.black ? `${players.white} – ${players.black}` : `Game ${gameIndex + 1}`, white: players.white ?? null, black: players.black ?? null },
-      original: original.map((m) => ({ written: m.source?.written ?? m.san, san: m.san })),
-      corrected,
-      text: text.slice(original[0]?.source?.charStart ?? game.charStart, last),
-      appVersion: APP_VERSION,
     })
-  }
   const entry = changes.length === 0 || changes.some((c) => c.kind !== 'replaced') ? null
     : errataFor(moves.map((m) => ({ san: normaliseSan(coreMove(m.san)), origin: m.origin, evidence: m.evidence })))
   const saveAsErrata = async (e: ErrataEntry | null) => {
