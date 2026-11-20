@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLlm } from '../../shared/llm'
 import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../shared/externalBook/externalBookStore'
@@ -9,11 +9,14 @@ import { pgnToChapters } from '../gamesearch/pgnChapters'
 import { loadCommentGame, loadCommentPage, loadCommentSources, moveLabel, type CommentEntry, type CommentFilter, type CommentSource } from '../comments/commentsApi'
 import { langName, TARGET_LANGS, type TargetLang } from '../comments/commentPrompts'
 import {
-  proposeComment, proposeGameTranslation, runCommentBatch, saveCommentProposal, saveGameProposal,
-  type BatchResult, type CommentAction, type CommentProposal, type GameProposal,
+  proposeComment, proposeGameTranslation, runPagedBatch, saveCommentProposal, saveGameProposal,
+  type BatchProgress, type CommentAction, type CommentProposal, type GameProposal,
 } from '../comments/commentAi'
 import type { SaveSuggestionResult } from '../suggestions/suggestionsApi'
 import { openGameInBook } from './openInBook'
+import BatchProgressBar from './BatchProgressBar'
+import PositionFinder from './PositionFinder'
+import CommentDetailsModal from './CommentDetailsModal'
 
 const PAGE = 50
 const LANG_OPTIONS = ['es', 'en', 'de', 'fr']
@@ -59,21 +62,30 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
   const [lang, setLang] = useState<Record<number, TargetLang>>({})
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [batchAction, setBatchAction] = useState('universal')
-  const [batch, setBatch] = useState<BatchResult | null>(null)
+  const [details, setDetails] = useState<CommentEntry | null>(null)
+  const [allMatching, setAllMatching] = useState(false)
+  const [overwrite, setOverwrite] = useState(false)
+  const [progress, setProgress] = useState<BatchProgress | null>(null)
+  const [running, setRunning] = useState(false)
+  const cancelBatch = useRef<() => void>(() => {})
 
   useEffect(() => { loadCommentSources().then(setSources, () => setSources([])) }, [])
+  const cleanFilter = useCallback((): CommentFilter => {
+    const f: CommentFilter = { q: filter.q, ...(filter.source ? { source: filter.source } : {}), lang: filter.lang, kind: filter.kind }
+    return Object.fromEntries(Object.entries(f).filter(([, v]) => v !== '' && v !== undefined)) as CommentFilter
+  }, [filter])
   useEffect(() => {
     let live = true
-    const f: CommentFilter = { q: filter.q, ...(filter.source ? { source: filter.source } : {}), lang: filter.lang, kind: filter.kind }
-    const clean = Object.fromEntries(Object.entries(f).filter(([, v]) => v !== '' && v !== undefined)) as CommentFilter
+    const clean = cleanFilter()
     loadCommentPage(clean, offset, PAGE).then((p) => { if (live) { setPage(p); setError(null) } }, (e: Error) => { if (live) setError(`The comments could not be read: ${e.message}`) })
     return () => { live = false }
-  }, [filter, offset])
+  }, [cleanFilter, offset])
 
   const change = (patch: Partial<typeof filter>) => {
     setFilter((f) => ({ ...f, ...patch }))
     setOffset(0)
     setSelected(new Set())
+    setAllMatching(false)
   }
   const patchRow = (id: number, patch: RowState) => setRows((r) => ({ ...r, [id]: { ...r[id], ...patch } }))
   const targetOf = (c: CommentEntry): TargetLang => lang[c.id] ?? (c.lang === 'es' ? 'en' : 'es')
@@ -133,24 +145,44 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
 
   const comments = page?.comments ?? []
   const allSelected = comments.length > 0 && comments.every((c) => selected.has(c.id))
-  const toggle = (id: number) => setSelected((s) => {
+  const toggle = (id: number) => { setAllMatching(false); setSelected((s) => {
     const next = new Set(s)
     if (next.has(id)) next.delete(id)
     else next.add(id)
     return next
-  })
+  }) }
   const runBatch = async () => {
+    const [kind, code] = batchAction.split(':')
+    const target = code as TargetLang
+    const actions: CommentAction[] = kind === 'universal' ? [{ kind: 'universal' }] : kind === 'both' ? [{ kind: 'universal' }, { kind: 'translate', lang: target }] : [{ kind: 'translate', lang: target }]
+    const label = kind === 'universal' ? 'Making comments universal' : kind === 'both' ? `Making comments universal and translating to ${langName(target)}` : `Translating comments to ${langName(target)}`
     const chosen = comments.filter((c) => selected.has(c.id))
-    const action: CommentAction = batchAction === 'universal' ? { kind: 'universal' } : { kind: 'translate', lang: batchAction.split(':')[1] as TargetLang }
-    const label = action.kind === 'universal' ? 'Making comments universal' : `Translating comments to ${langName(action.lang)}`
-    setBatch(null)
-    setBatch(await withProgress(label, (report, signal) => runCommentBatch(llm.complete, chosen, action, { report, signal }), { cancellable: true }))
+    const f = cleanFilter()
+    // Everything matching the filter is read lazily, page by page; the selected rows of the page are already in memory.
+    const loadPage = allMatching
+      ? (o: number, l: number) => loadCommentPage(f, o, l)
+      : async (o: number, l: number) => ({ total: chosen.length, comments: chosen.slice(o, o + l) })
+    setProgress({ saved: 0, flagged: 0, failed: 0, unsaved: [], cancelled: false, done: 0, total: allMatching ? page?.total ?? 0 : chosen.length, skipped: 0 })
+    setRunning(true)
+    try {
+      await withProgress(label, async (report, signal) => {
+        const own = new AbortController()
+        signal.addEventListener('abort', () => own.abort())
+        cancelBatch.current = () => own.abort()
+        const result = await runPagedBatch(llm.complete, loadPage, { actions, overwrite, pageSize: PAGE, signal: own.signal, report, onProgress: setProgress })
+        setProgress(result)
+      }, { cancellable: true })
+    } finally {
+      setRunning(false)
+    }
   }
+  const selectedCount = allMatching ? page?.total ?? 0 : selected.size
 
   const input = 'rounded border border-slate-300 px-2 py-1'
   const button = 'rounded border border-slate-300 px-2 py-0.5 disabled:opacity-40'
   return (
     <div className="text-sm">
+      <PositionFinder />
       <div className="flex flex-wrap items-center gap-2">
         <input type="search" aria-label="Search comments" placeholder="Search comments" className={input} value={filter.q} onChange={(e) => change({ q: e.target.value })} />
         <select aria-label="Source" className={input} value={filter.source} onChange={(e) => change({ source: Number(e.target.value) })}>
@@ -173,20 +205,23 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
       {llm.available && (
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded border border-violet-200 bg-violet-50 px-2 py-1 text-xs">
           <label className="flex items-center gap-1">
-            <input type="checkbox" aria-label="Select the page" checked={allSelected} onChange={() => setSelected(allSelected ? new Set() : new Set(comments.map((c) => c.id)))} />
+            <input type="checkbox" aria-label="Select the page" checked={allSelected} onChange={() => { setAllMatching(false); setSelected(allSelected ? new Set() : new Set(comments.map((c) => c.id))) }} />
             Select the page
           </label>
           <select aria-label="Batch action" className="rounded border border-slate-300 px-1" value={batchAction} onChange={(e) => setBatchAction(e.target.value)}>
             <option value="universal">Make universal</option>
             {TARGET_LANGS.map((l) => <option key={l} value={`translate:${l}`}>Translate to {langName(l)}</option>)}
+            {TARGET_LANGS.map((l) => <option key={l} value={`both:${l}`}>Universal + translate to {langName(l)}</option>)}
           </select>
-          <button className={button} disabled={selected.size === 0} onClick={() => void runBatch()}>Run on {selected.size} selected</button>
-          {batch && (
-            <span role="status">
-              {`${batch.saved} saved · ${batch.flagged} flagged · ${batch.failed} failed`}{batch.cancelled ? ' (cancelled)' : ''}
-              {batch.unsaved.length > 0 && <> · <a className="underline" href={downloadHref(`[${batch.unsaved.join(',\n')}]`)} download="suggestions.json">Download {batch.unsaved.length} not stored</a></>}
-            </span>
+          {page && page.total > comments.length && !allMatching && (
+            <button className={button} onClick={() => { setAllMatching(true); setSelected(new Set()) }}>Select all {page.total} matching the filter</button>
           )}
+          <label className="flex items-center gap-1">
+            <input type="checkbox" aria-label="Overwrite existing translations" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} />
+            Overwrite existing translations
+          </label>
+          <button className={button} disabled={selectedCount === 0 || running} onClick={() => void runBatch()}>Run on {selectedCount} {allMatching ? 'matching' : 'selected'}</button>
+          {progress && <BatchProgressBar progress={progress} running={running} onCancel={() => cancelBatch.current()} />}
         </div>
       )}
       {error && <p role="alert" className="mt-2 text-red-700">{error}</p>}
@@ -209,6 +244,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
                   <p className="mt-1 flex flex-wrap gap-1 text-xs">
                     <button className={button} aria-label={`Copy comment id ${c.id}`} title="Copy" onClick={() => copy(String(c.id))}>Comment #{c.id}</button>
                     <button className={button} aria-label={`Copy game id ${c.gameId}`} title="Copy" onClick={() => copy(c.gameId)}>Game {c.gameId}</button>
+                    <button className={button} onClick={() => setDetails(c)}>Details</button>
                     <button className={button} onClick={() => void openGame(c)}>Open the game</button>
                     <button className={button} disabled={!inBook || !c.chapter} title={!inBook ? 'Not from a book' : !c.chapter ? 'The chapter is unknown' : undefined} onClick={() => void openBook(c)}>Open in the book</button>
                   </p>
@@ -253,6 +289,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
           )
         })}
       </ul>
+      {details && <CommentDetailsModal comment={details} onClose={() => setDetails(null)} />}
     </div>
   )
 }

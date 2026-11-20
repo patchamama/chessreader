@@ -35,11 +35,11 @@ final class SqlitePositionCommentStore implements PositionCommentStore
         $st->bindValue(':key', $key);
         $st->bindValue(':limit', max(1, min(20, $limit)), \PDO::PARAM_INT);
         $st->execute();
-        return array_map(fn(array $r) => [
+        return $this->withTranslations($pdo, array_map(fn(array $r) => [
             'id' => (int) $r['id'], 'text' => $r['text'], 'lang' => $r['lang'], 'ply' => (int) $r['ply'], 'san' => $r['san'],
             'game' => ['id' => $r['game_id'], 'label' => $r['label']],
             'source' => ['title' => $r['title'], 'author' => $r['author'], 'kind' => $r['kind']],
-        ], $st->fetchAll(\PDO::FETCH_ASSOC));
+        ], $st->fetchAll(\PDO::FETCH_ASSOC)));
     }
 
     public function game(string $id): ?array
@@ -112,7 +112,29 @@ final class SqlitePositionCommentStore implements PositionCommentStore
             'source' => ['id' => (int) $r['source_id'], 'title' => $r['title'], 'author' => $r['author'], 'kind' => $r['kind'], 'lang' => $r['source_lang'], 'book' => $r['book_id']],
             'game' => ['white' => $r['white'], 'black' => $r['black'], 'label' => $r['label']],
         ], $st->fetchAll(\PDO::FETCH_ASSOC));
-        return ['total' => $total, 'comments' => $comments];
+        return ['total' => $total, 'comments' => $this->withTranslations($pdo, $comments)];
+    }
+
+    /**
+     * Adds `translations` (language => text; the universal text sits under the comment's own language)
+     * to the comments that have some.
+     *
+     * @param list<array<string, mixed>> $comments
+     * @return list<array<string, mixed>>
+     */
+    private function withTranslations(\PDO $pdo, array $comments): array
+    {
+        if ($comments === [] || !$this->hasColumn('comment_translations', 'text')) {
+            return $comments;
+        }
+        $ids = array_map(static fn(array $c): int => (int) $c['id'], $comments);
+        $st = $pdo->prepare('SELECT comment_id, lang, text FROM comment_translations WHERE comment_id IN (' . implode(',', array_fill(0, count($ids), '?')) . ')');
+        $st->execute($ids);
+        $byId = [];
+        foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $r) {
+            $byId[(int) $r['comment_id']][(string) $r['lang']] = (string) $r['text'];
+        }
+        return array_map(static fn(array $c): array => isset($byId[$c['id']]) ? $c + ['translations' => $byId[$c['id']]] : $c, $comments);
     }
 
     public function sources(): array

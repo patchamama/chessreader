@@ -26,14 +26,16 @@ export interface CommentEntry {
   chapter: number | null
   source: CommentSource
   game: { white: string | null; black: string | null; label: string | null }
+  /** The comment in other languages by language (the universal text is under the comment's own language); undefined when the list cannot tell. */
+  translations?: Record<string, string>
 }
 
 export interface CommentFilter { q?: string; source?: number; lang?: string; kind?: string }
 export interface CommentPage { total: number; comments: CommentEntry[] }
 
-interface IndexEntry { id: number; hash: string; fen: string; text: string; lang: string; ply: number; move: number; san: string; game: string; source: number; label: string | null; white: string | null; black: string | null; chapter: number | null }
+interface IndexEntry { id: number; hash: string; fen: string; text: string; lang: string; ply: number; move: number; san: string; game: string; source: number; label: string | null; white: string | null; black: string | null; chapter: number | null; translations?: Record<string, string> }
 interface IndexMeta { total: number; pages: number; pageSize: number; sources: Record<string, Omit<CommentSource, 'id'> & { priority?: number }> }
-interface ServerComment { id: number; hash: string; fen: string; text: string; lang: string; ply: number; move_number: number; san: string; game_id: string; chapter: number | null; source: CommentSource; game: CommentEntry['game'] }
+interface ServerComment { id: number; hash: string; fen: string; text: string; lang: string; ply: number; move_number: number; san: string; game_id: string; chapter: number | null; translations?: Record<string, string>; source: CommentSource; game: CommentEntry['game'] }
 
 /** "12...Nb6" or "8. Nc3": white moves are on odd plies. */
 export const moveLabel = (c: Pick<CommentEntry, 'ply' | 'move' | 'san'>) => `${c.move}${c.ply % 2 === 1 ? '. ' : '...'}${c.san}`
@@ -71,11 +73,12 @@ const sourceOf = (m: IndexMeta, id: number): CommentSource => {
 const fromIndex = (m: IndexMeta, e: IndexEntry): CommentEntry => ({
   id: e.id, hash: e.hash, fen: e.fen, text: e.text, lang: e.lang, ply: e.ply, move: e.move, san: e.san, gameId: e.game, chapter: e.chapter ?? null,
   source: sourceOf(m, e.source), game: { white: e.white ?? null, black: e.black ?? null, label: e.label ?? null },
+  ...(e.translations ? { translations: e.translations } : {}),
 })
 
 const fromServer = (c: ServerComment): CommentEntry => ({
   id: c.id, hash: c.hash, fen: c.fen, text: c.text, lang: c.lang, ply: c.ply, move: c.move_number, san: c.san, gameId: c.game_id, chapter: c.chapter ?? null,
-  source: c.source, game: c.game,
+  source: c.source, game: c.game, ...(c.translations ? { translations: c.translations } : {}),
 })
 
 const filtered = (f: CommentFilter) => !!(f.q?.trim() || f.source || f.lang || f.kind)

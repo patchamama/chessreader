@@ -50,6 +50,25 @@ final class SqlitePositionCommentStoreTest extends TestCase
         ], $first);
     }
 
+    public function test_lists_the_translations_a_comment_already_has(): void
+    {
+        $pdo = self::database();
+        $pdo->exec("INSERT INTO comment_translations (comment_id, lang, text) VALUES (2, 'en', 'Pinning the knight is thematic.'), (2, 'es', 'Clavar el caballo es temático.')");
+        $page = (new SqlitePositionCommentStore('', $pdo))->list([], 0, 50);
+        self::assertArrayNotHasKey('translations', $page['comments'][0]);
+        self::assertSame(['en' => 'Pinning the knight is thematic.', 'es' => 'Clavar el caballo es temático.'], $page['comments'][1]['translations']);
+    }
+
+    public function test_the_comments_of_a_position_carry_their_translations(): void
+    {
+        $pdo = self::database();
+        $pdo->exec("INSERT INTO comment_translations (comment_id, lang, text) VALUES (2, 'en', 'Universal text.'), (3, 'en', '')");
+        $found = (new SqlitePositionCommentStore('', $pdo))->forPosition('fedcba9876543210', self::KEY, 5);
+        self::assertSame(['en' => 'Universal text.'], $found[0]['translations']);
+        $dropped = (new SqlitePositionCommentStore('', $pdo))->forPosition('fedcba9876543211', self::KEY, 5);
+        self::assertSame(['en' => ''], $dropped[0]['translations']);
+    }
+
     public function test_pages_with_offset_and_limit(): void
     {
         $page = (new SqlitePositionCommentStore('', self::database()))->list([], 1, 1);

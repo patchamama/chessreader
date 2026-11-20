@@ -1,6 +1,8 @@
 import { useSettingsStore } from '../settings/settingsStore'
 import { useStatusStore, visibleStatus } from './statusStore'
 import { useBusyStore, type BusyTask } from './busyStore'
+import { useLoadedModels } from '../llm/useLoadedModels'
+import { formatLoadedModel, unloadHint } from '../llm/gpuModels'
 
 /** Height of the status footer, read by full-height pages (the reader). */
 export const FOOTER_HEIGHT = 28
@@ -39,6 +41,7 @@ export function StatusFooter() {
   const task = useBusyStore((s) => s.tasks[s.tasks.length - 1])
   const show = useSettingsStore((s) => s.statusFooter)
   const set = useSettingsStore((s) => s.set)
+  const loaded = useLoadedModels()
   if (!show) {
     return (
       <>
@@ -68,6 +71,14 @@ export function StatusFooter() {
       {items.map((i) => (
         <span key={i.key}><span className="text-slate-400">{i.label}:</span> <span className="font-mono">{i.value}</span></span>
       ))}
+      {loaded.length > 0 && (
+        <span className="flex shrink-0 items-center gap-3" data-testid="footer-gpu-models">
+          {loaded.map((m) => (
+            <span key={m.name} title={`${m.name}: ${unloadHint(m.expiresAt, Date.now())}`.replace(/: $/, '')}
+              className="font-mono text-emerald-300">{formatLoadedModel(m)}</span>
+          ))}
+        </span>
+      )}
       <button aria-label="Hide the status bar" title="Hide the status bar" onClick={() => set({ statusFooter: false })}
         className="ml-auto rounded px-1 text-slate-400 hover:text-white">▾</button>
     </footer>

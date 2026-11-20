@@ -65,6 +65,12 @@ describe('the list of comments (S2)', () => {
     expect(page.comments[0]).toMatchObject({ id: 9, move: 2, gameId: '2-1', chapter: null })
   })
 
+  it('with a server: keeps the translations a comment already has', async () => {
+    session.on = true
+    http.mockResolvedValue({ total: 1, offset: 0, limit: 50, comments: [{ id: 9, hash: 'ab', fen: 'f', text: 't', lang: 'en', ply: 3, move_number: 2, san: 'e5', game_id: '2-1', chapter: null, translations: { es: 'tt' }, source: { id: 2, title: 'L', author: null, kind: 'lichess', lang: 'en', book: null }, game: { white: 'X', black: 'Y', label: null } }] })
+    expect((await loadCommentPage({}, 0, 50)).comments[0].translations).toEqual({ es: 'tt' })
+  })
+
   it('sources: from the API with a server, from meta.json without', async () => {
     expect((await loadCommentSources()).map((s) => s.title)).toEqual(['Invented Book', 'Lichess studies'])
     session.on = true

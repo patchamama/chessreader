@@ -176,4 +176,13 @@ describe('Database → Comments with the AI (S3)', () => {
     expect(save).toHaveBeenCalledTimes(2)
     expect(save.mock.calls[0][0]).toMatchObject({ kind: 'translation', after: { lang: 'de' } })
   })
+
+  it('Details opens the comment modal and Cancel closes it (S3)', async () => {
+    show()
+    fireEvent.click(within(await row(7)).getByRole('button', { name: 'Details' }))
+    const d = await screen.findByRole('dialog', { name: 'Comment 7 details' })
+    expect(within(d).getByText('0123456789abcdef')).toBeTruthy()
+    fireEvent.click(within(d).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
 })
