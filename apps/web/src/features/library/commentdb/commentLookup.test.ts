@@ -62,3 +62,15 @@ describe('humanCommentsForGame (S5)', () => {
     expect(human).toEqual({ 10: { text: 'El caballo defiende el peón de e5.', source: 'Kasparov, Mis geniales predecesores III, Partida 7' } })
   })
 })
+
+describe('translated comments reach the reader (llm-assistant-round S3/S12)', () => {
+  it('a comment translated into the reader\'s language is used in that language, keeping its source', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    const shard = { [HASH]: [{ id: 2, text: 'A study remark.', lang: 'en', game: '18-1', ply: 4, san: 'Nc6', source: 18, label: 'A – B', translations: { de: 'Eine Studienbemerkung.' } }] }
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('index.json') ? INDEX : shard), { status: 200 })))
+    const plies = Array.from({ length: 12 }, (_, i) => ({ fenAfter: i === 9 ? FEN : `8/8/8/8/8/8/8/K${i}k w - - 0 1` }))
+    expect(await humanCommentsForGame(plies, 'de')).toEqual({ 10: { text: 'Eine Studienbemerkung.', source: 'Lichess studies, A – B' } })
+    clearCommentCache()
+    expect(await humanCommentsForGame(plies, 'es')).toEqual({ 10: { text: 'A study remark.', source: 'Lichess studies, A – B' } })
+  })
+})

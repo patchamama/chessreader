@@ -12,9 +12,11 @@ export interface HumanComment {
   gameId: string
   label: string | null
   source: { kind: string; title: string; author: string | null }
+  /** The comment in other languages (AI translations accepted into the database). */
+  translations?: Record<string, string>
 }
 
-interface ShardEntry { id: number; text: string; lang: string; game: string; ply: number; san: string; source: number; label: string | null }
+interface ShardEntry { id: number; text: string; lang: string; game: string; ply: number; san: string; source: number; label: string | null; translations?: Record<string, string> }
 interface Index { sources: Record<string, { kind: string; title: string; author: string | null; priority: number }> }
 
 const shards = new Map<string, Promise<Record<string, ShardEntry[]>>>()
@@ -119,7 +121,11 @@ export async function lookupPositionComments(fen: string): Promise<HumanComment[
       .map((e) => ({ e, s: idx.sources[String(e.source)] }))
       .filter(({ s }) => s)
       .sort((a, b) => a.s.priority - b.s.priority || a.e.id - b.e.id)
-      .map(({ e, s }) => ({ text: e.text, lang: e.lang, ply: e.ply, san: e.san, gameId: e.game, label: e.label, source: { kind: s.kind, title: s.title, author: s.author } }))
+      .map(({ e, s }) => ({
+        text: e.text, lang: e.lang, ply: e.ply, san: e.san, gameId: e.game, label: e.label,
+        source: { kind: s.kind, title: s.title, author: s.author },
+        ...(e.translations ? { translations: e.translations } : {}),
+      }))
   } catch {
     index = null
     return []
@@ -150,8 +156,10 @@ export async function humanCommentsForGame(plies: Array<{ fenAfter: string }>, l
   for (let i = FIRST_PLY; i < plies.length && Object.keys(out).length < max; i++) {
     const found = await lookupPositionComments(plies[i].fenAfter)
     if (!found.length) continue
-    const best = found.find((c) => c.lang === lang) ?? found[0]
-    out[i + 1] = { text: best.text, source: commentSource(best) }
+    // Written in the reader's language, or translated into it, before any other.
+    const best = found.find((c) => c.lang === lang) ?? found.find((c) => c.translations?.[lang]) ?? found[0]
+    const text = best.lang === lang ? best.text : best.translations?.[lang] ?? best.text
+    out[i + 1] = { text, source: commentSource(best) }
   }
   return out
 }
