@@ -42,6 +42,9 @@ import { createRoot, type Root } from 'react-dom/client'
 import { DiagramImage } from './DiagramImage'
 import { INITIAL_FEN, movesBeforeImage } from '../utils/inferDiagramFen'
 import { useSessionFenStore, withSessionFens } from '../imageAi/sessionFens'
+import { usePendingSuggestions, withPendingSuggestions } from '../../suggestions/pendingSuggestions'
+import { EditLayer } from '../edit/EditLayer'
+import { EditModeButton, PENDING_SUGGESTION_CSS } from '../edit/EditModeButton'
 import { followActiveMove } from '../utils/autoscroll'
 import { NarrationPanel } from '../narration/NarrationPanel'
 import { GameReviewPanel } from '../review/GameReviewPanel'
@@ -407,10 +410,13 @@ export default function BookReader() {
   // Images resolved to the API, multi-line titles joined, FENs next to diagrams hidden (kept for recognition).
   // Diagram positions accepted this session go in as FEN lines, so the moves after them are read (S7).
   const sessionFens = useSessionFenStore((s) => s.fens)
+  // Suggestions made in edit mode this session are shown in place until reload (S8).
+  const pendingSuggestions = usePendingSuggestions((s) => s.items)
   const html = useMemo(() => {
     if (!rawHtml || !id) return rawHtml
-    return withSessionFens(prepareChapterHtml(rawHtml, id, { titleSeparator }), sessionFens)
-  }, [rawHtml, id, titleSeparator, sessionFens])
+    const withPending = withPendingSuggestions(rawHtml, pendingSuggestions, bookTitle, currentChapter)
+    return withSessionFens(prepareChapterHtml(withPending, id, { titleSeparator }), sessionFens)
+  }, [rawHtml, id, titleSeparator, sessionFens, pendingSuggestions, bookTitle, currentChapter])
 
   // Flatten the chapter to recognition text with the SAME DOM extraction the
   // wrapper uses on the rendered pane, so every node's charStart/charEnd points
@@ -461,6 +467,11 @@ export default function BookReader() {
       : plainText === rewrittenText ? rewrittenGames
         : recognizeGames(plainText, { algorithm: recognitionAlgorithm })),
     [plainText, basePlainText, baseGames, rewrittenText, rewrittenGames, recognitionAlgorithm],
+  )
+  const [editMode, setEditMode] = useState(false)
+  const isMainlineMove = useCallback(
+    (gameIndex: number, nodeId: string) => games[gameIndex]?.tree.mainline.includes(nodeId) ?? false,
+    [games],
   )
   /** Each game's heading, label and anchor (S9, S15). */
   const gameSummaries = useMemo(() => describeGames(plainText, games), [plainText, games])
@@ -1088,7 +1099,7 @@ export default function BookReader() {
   return (
     // Fills the height the app layout gives it (the window minus the banner and the status footer, S4).
     <div data-testid="book-reader" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50">
-      <style dangerouslySetInnerHTML={{ __html: epubCss }} />
+      <style dangerouslySetInnerHTML={{ __html: epubCss + PENDING_SUGGESTION_CSS }} />
 
       {/* ── Sticky nav bar ── */}
       <nav className="sticky top-0 z-30 flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur">
@@ -1186,6 +1197,9 @@ export default function BookReader() {
         {/* Study tools: save a line to the trainer, guess the move, the trainer (S7). */}
         <StudyTools onOpen={() => setShowStudy(true)} />
 
+        {/* Edit mode: insert content between blocks, correct a paragraph (S8). */}
+        <EditModeButton active={editMode} onToggle={() => setEditMode((v) => !v)} />
+
         {/* Book config editor — admin / dev-bypass only */}
         {isAdmin && (
           <button
@@ -1258,8 +1272,9 @@ export default function BookReader() {
               className={`${solvingProblem ? 'pointer-events-none select-none blur-sm transition' : 'transition'}${bookComments ? '' : ' hide-book-comments'}`}
               aria-hidden={solvingProblem || undefined}
             >
-              <div data-testid="reader-column" className="mx-auto" style={textWidth ? { maxWidth: `${textWidth}px` } : undefined}>
+              <div data-testid="reader-column" className="relative mx-auto" style={textWidth ? { maxWidth: `${textWidth}px` } : undefined}>
                 <ProseContent ref={contentRef} html={shownHtml} />
+                {editMode && <EditLayer containerRef={contentRef} rawHtml={rawHtml} shownHtml={shownHtml} book={bookTitle} chapter={currentChapter} isMainline={isMainlineMove} />}
               </div>
             </div>
           )}
