@@ -101,6 +101,12 @@ function normaliseText(text: string): string {
     line.replace(/^([ \t]*)[^\]]*\]/, (label, indent: string) => `${indent}{${' '.repeat(label.length - indent.length - 1)}`));
 }
 
+/** Is the ")" at `at` the closer of a list label ("1)", "a)") that opens its line? */
+function isListLabelCloser(text: string, at: number): boolean {
+  const lineStart = text.lastIndexOf('\n', at - 1) + 1;
+  return /^[ \t]*(?:\d{1,2}|[a-h])$/.test(text.slice(lineStart, at)) && /^\)[ \t]+\S/.test(text.slice(at, at + 3));
+}
+
 /**
  * The SANs of the moves chained from tokens[i]: only spaces, glyphs and move
  * numbers between them (no prose, no bracket, same paragraph), at most `max`.
@@ -252,6 +258,10 @@ export function recognizeGames(text: string, options: RecognizeOptions = {}): Re
     tokens.forEach((t, i) => {
       if (t.type === 'variation-open') open.push(i);
       else if (t.type === 'variation-close' && open.length > 0) {
+        // The ")" of a list label ("1) 33…Tg3") closes nothing: taken as the
+        // closer of a "(" left open paragraphs ago, it would make that slip of
+        // the book look like a real comment and keep the game from resuming.
+        if (t.raw === ')' && isListLabelCloser(normalised, t.charStart)) return;
         for (let j = open.pop()! + 1; j < i; j++) inClosedBracket.add(tokens[j]);
       } else if (t.type === 'result') open.length = 0;
     });

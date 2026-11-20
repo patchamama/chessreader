@@ -1,5 +1,5 @@
 import { DIAGRAM_MARK } from '@chess-ebook/chess-shared'
-import type { GameNode, GameTree, IsolatedMove, RecognizedGame } from '@chess-ebook/chess-shared'
+import type { GameNode, GameTree, IsolatedMove, ProseReference, RecognizedGame } from '@chess-ebook/chess-shared'
 
 /**
  * Prose text extraction with an exact character → DOM position map.
@@ -126,6 +126,7 @@ export function htmlToProseText(html: string): string {
 export type MoveTarget =
   | { kind: 'node'; gameIndex: number; tree: GameTree; node: GameNode; start: number; end: number }
   | { kind: 'iso'; gameIndex: number; iso: IsolatedMove; start: number; end: number }
+  | { kind: 'ref'; gameIndex: number; ref: ProseReference; start: number; end: number }
 
 /**
  * Every recognised token with a source position, in text order. The move
@@ -134,7 +135,7 @@ export type MoveTarget =
  * fragments no game holds (no position to start from, chess-shared
  * `unanchoredMoves`): painted as board-only marks of no game (gameIndex -1).
  */
-export function planMoveTargets(text: string, games: RecognizedGame[], unanchored: IsolatedMove[] = []): MoveTarget[] {
+export function planMoveTargets(text: string, games: RecognizedGame[], unanchored: IsolatedMove[] = [], refs: ProseReference[] = []): MoveTarget[] {
   const targets: MoveTarget[] = []
   const withNumber = (start: number) => {
     const before = text.slice(Math.max(0, start - 10), start)
@@ -155,6 +156,16 @@ export function planMoveTargets(text: string, games: RecognizedGame[], unanchore
   for (const iso of unanchored) {
     if (iso.charStart === undefined || iso.charEnd === undefined) continue
     targets.push({ kind: 'iso', gameIndex: -1, iso, start: iso.charStart, end: iso.charEnd })
+  }
+  // A reference (idea move, plan list, advance, files…) replaces the isolated
+  // moves inside it, and gives way to a real game move.
+  const overlaps = (a: { start: number; end: number }, b: { start: number; end: number }) => a.start < b.end && b.start < a.end
+  if (refs.length > 0) {
+    const nodes = targets.filter((t) => t.kind === 'node')
+    const kept = refs.filter((r) => !nodes.some((n) => overlaps(n, r)))
+    const rest = targets.filter((t) => !(t.kind === 'iso' && kept.some((r) => overlaps(t, r))))
+    targets.length = 0
+    targets.push(...rest, ...kept.map((ref) => ({ kind: 'ref' as const, gameIndex: -1, ref, start: ref.start, end: ref.end })))
   }
   targets.sort((a, b) => a.start - b.start)
   // Defensive: drop any range overlapping the previous one.

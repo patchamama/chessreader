@@ -30,6 +30,7 @@ import {
 } from '../model/gameTree.js';
 import { resetNodeCounter } from './pgnToTree.js';
 import { findMoveRepair } from './moveRepair.js';
+import { findVariationRepair } from './variationRepair.js';
 
 /** Parse a bare (isolated) SAN token into a square + piece for board highlight. */
 export function parseIsolatedMove(token: SanToken): IsolatedMove | null {
@@ -143,6 +144,35 @@ function upcomingMainline(
     out.push(t.san!);
     if (expColor === 'white') expColor = 'black';
     else { expColor = 'white'; expNumber++; }
+  }
+  return out;
+}
+
+/**
+ * The moves written after token `from` that carry on the SAME line: the next
+ * plies in order, skipping nested brackets, up to the bracket that ends the line
+ * (or the first move that does not continue it).
+ */
+function upcomingInLine(tokens: SanToken[], from: number, usedByMainline: Set<number>): string[] {
+  const first = tokens[from];
+  if (first.moveNumber === undefined || !first.color) return [];
+  const out: string[] = [];
+  let expected = plyIndex(first.moveNumber, first.color) + 1;
+  let depth = 0;
+  for (let j = from + 1; j < tokens.length && out.length < 12; j++) {
+    const t = tokens[j];
+    if (t.type === 'variation-open') { depth++; continue; }
+    if (t.type === 'variation-close') {
+      if (depth === 0) break;
+      depth--;
+      continue;
+    }
+    if (t.type === 'paragraph-break' || t.type === 'result' || t.type === 'diagram') { if (depth === 0) break; continue; }
+    if (depth > 0 || t.type !== 'move') continue;
+    if (t.isolated || usedByMainline.has(j) || t.moveNumber === undefined || !t.color) break;
+    if (plyIndex(t.moveNumber, t.color) !== expected) break;
+    out.push(t.san!);
+    expected++;
   }
   return out;
 }
@@ -511,11 +541,38 @@ function insertVariations(
       }
     }
 
-    // Place the move in the current variation line if legal; else drop it.
+    // Place the move in the current variation line if legal. An illegal one may
+    // name the wrong piece ("28…Rf6" for "28…Qf6"): the moves that follow in the
+    // line decide the correction. Otherwise the run stops here.
+    let repairedSan: string | undefined;
     if (!isLegalFrom(cur.chess.fen(), t.san!)) {
-      // Illegal continuation of this variation → stop the run here.
-      cur = null;
-      continue;
+      const repair = findVariationRepair({
+        fen: cur.chess.fen(),
+        written: t.san!,
+        upcoming: upcomingInLine(tokens, i, usedByMainline),
+      });
+      if (!repair) {
+        // Illegal continuation of this variation → stop the run here.
+        cur = null;
+        continue;
+      }
+      repairedSan = repair.san;
+      const label = `${t.moveNumber}${t.color === 'white' ? '.' : '...'}`;
+      errors.push({
+        kind: 'wrong-move',
+        san: t.san!.replace(/[!?]+$/, ''),
+        ...(t.rawSan ? { rawSan: t.rawSan } : {}),
+        moveNumber: t.moveNumber,
+        color: t.color,
+        suggestion: repair.san,
+        confidence: 'high',
+        message:
+          `Jugada errónea en una variante ${label} ${t.rawSan ?? t.san}: ` +
+          `probablemente es ${label} ${repair.san} ` +
+          `(las ${repair.verifiedPlies} jugadas siguientes son legales con la corrección).`,
+        ...(t.charStart !== undefined ? { charStart: t.charStart, charEnd: t.charEnd } : {}),
+      });
+      errors.sort((a, b) => (a.charStart ?? 0) - (b.charStart ?? 0));
     }
     // The written number must match the position the move occupies in the line
     // (derived from the FEN's fullmove + side). A mismatch is a wrong-number.
@@ -535,7 +592,7 @@ function insertVariations(
         });
       }
     }
-    const node = makeNode(t, cur.chess, cur.parentId, t.moveNumber, t.color);
+    const node = makeNode(t, cur.chess, cur.parentId, t.moveNumber, t.color, repairedSan);
     tree.nodes.set(node.id, node);
     cur.line.push(node.id);
     cur.parentId = node.id;

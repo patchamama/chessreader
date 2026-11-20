@@ -48,7 +48,7 @@ export interface StudyBoardState {
    * CURRENT board position (the piece colour alternates white/black because the
    * side to move is unknown for a bare prose token). null = no overlay.
    */
-  isolatedHighlight: { square: string; piece: 'p' | 'n' | 'b' | 'r' | 'q' | 'k'; line?: string[]; arrow?: [string, string] } | null
+  isolatedHighlight: { square: string; piece: 'p' | 'n' | 'b' | 'r' | 'q' | 'k'; line?: string[]; arrow?: [string, string]; arrows?: [string, string][] } | null
 
   /** What the board showed before a hover preview (restored when the hover ends). */
   previewBase: { game: GameTree | null; nodeId: string | null; inVariation: boolean; highlight: StudyBoardState['isolatedHighlight'] } | null

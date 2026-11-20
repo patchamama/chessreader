@@ -210,7 +210,8 @@ export function StudyBoard() {
   // the board then belongs to what is being said.
   const cuesLit = narrationCues.length > 0 || solving
   // A plan written in the text ("d4-d5"): its arrow.
-  const planArrow = isolatedHighlight?.arrow ? [{ startSquare: isolatedHighlight.arrow[0], endSquare: isolatedHighlight.arrow[1], color: '#ca8a04' }] : []
+  const planArrow = [...(isolatedHighlight?.arrow ? [isolatedHighlight.arrow] : []), ...(isolatedHighlight?.arrows ?? [])]
+    .map(([from, to]) => ({ startSquare: from, endSquare: to, color: '#ca8a04' }))
   const boardArrows = [...planArrow, ...cueBoard.arrows, ...buildBoardArrows({
     userArrows: annotations.arrows,
     showEval: showEval && !cuesLit,

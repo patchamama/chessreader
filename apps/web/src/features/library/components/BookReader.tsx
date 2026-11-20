@@ -5,11 +5,12 @@ import { formatChapterTitle, prepareChapterHtml } from '../utils/epubContent'
 import { useParams } from 'react-router-dom'
 import { useBookTitle, useChapter, useTouchBook, type Book } from '../api/libraryApi'
 import { useQueryClient } from '@tanstack/react-query'
-import { numberLine, recognizeGames, unanchoredMoves } from '@chess-ebook/chess-shared'
-import type { GameTree, GameNode, IsolatedMove } from '@chess-ebook/chess-shared'
+import { findProseReferences, numberLine, recognizeGames, unanchoredMoves } from '@chess-ebook/chess-shared'
+import type { GameTree, GameNode, IsolatedMove, ProseReference } from '@chess-ebook/chess-shared'
 import { MoveTooltipCard } from './MoveTooltipCard'
 import { loadBoardMemory, saveBoardMemory } from '../store/boardMemory'
 import { dashedPair, squareLine } from '../utils/squareLine'
+import { positionBefore, referenceMark } from '../utils/proseReferences'
 import { applyGameLayouts, clearGameDecorations, decorateGames, describeGames, gameAnchorId, layoutToggleLabel } from '../utils/gameMarkers'
 import { detectHeadings } from '../utils/headingDetect'
 import { clearGameLayout, loadGameLayouts, saveGameLayout } from '../store/gameLayoutStore'
@@ -103,6 +104,9 @@ interface ProseChooser {
   siblingLines: string[][]
 }
 
+/** A prose reference with the position the text talks about (none: the board as it is). */
+interface RefEntry { ref: ProseReference; tree: GameTree | null; node: GameNode | null }
+
 interface MoveTooltip {
   top: number
   left: number
@@ -114,6 +118,8 @@ interface MoveTooltip {
   line?: string[]
   /** A plan the text names ("d4-d5"), as an arrow. */
   arrow?: [string, string]
+  /** More arrows the text names (a plan list, a pawn advance). */
+  arrows?: [string, string][]
   /** What is hovered: a move of the game, a move of a line in a comment, or a named square. */
   kind?: 'move' | 'line' | 'square'
   /** The hovered move, to show the engine's view of it. */
@@ -305,6 +311,19 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
     }
     setIsolatedHighlight(mark)
   }
+  // A reference of the text (idea move, plan list, advance, files): a click puts
+  // the board at the last move written before it and lights it with its arrows (S13-S15).
+  const showReference = (entry: RefEntry) => {
+    const board = useStudyBoardStore.getState()
+    if (entry.tree) {
+      board.commitPreview()
+      const at = entry.node
+      if (board.activeGame !== entry.tree || board.currentNodeId !== (at?.id ?? null) || board.playFen) {
+        loadStudyPosition(entry.tree, at ? at.id : null, !!at && !entry.tree.mainline.includes(at.id))
+      }
+    }
+    setIsolatedHighlight(referenceMark(entry.ref, entry.node?.fen ?? entry.tree?.startFen ?? shownBoardFen()))
+  }
   /**
    * A game about to be rewritten in place (S6): remember where its container is
    * on screen, so it stays there after the chapter renders again, and flash it.
@@ -401,6 +420,8 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
   const toggleRecommentRef = useRef(toggleRecomment)
   useEffect(() => { toggleRecommentRef.current = toggleRecomment })
   const showMentionRef = useRef(showMention)
+  const showReferenceRef = useRef(showReference)
+  useEffect(() => { showReferenceRef.current = showReference })
   useEffect(() => { showMentionRef.current = showMention })
 
   const rawHtml = data?.html ?? ''
@@ -553,6 +574,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
   const moveRegistry = useRef(new Map<string, ResolvedNode>())
   // Registry for isolated prose moves: span key → { square, piece }.
   const isoRegistry = useRef(new Map<string, { iso: IsolatedMove; tree: GameTree }>())
+  const refRegistry = useRef(new Map<string, RefEntry>())
 
   // Wraps SAN moves in spans. Re-runs ONLY when the content changes (new
   // chapter), NOT on click/hover — the active-move highlight is a separate,
@@ -566,7 +588,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
     // Remove the game frames and previous markers (idempotent re-wrap).
     unwrapGameContainers(container)
     clearGameDecorations(container)
-    container.querySelectorAll('span[data-san], span[data-iso-square]').forEach((el) => {
+    container.querySelectorAll('span[data-san], span[data-iso-square], span[data-ref-key]').forEach((el) => {
       const parent = el.parentNode
       if (parent) {
         // The book's own spelling (S12: the span may show another notation).
@@ -577,6 +599,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
 
     moveRegistry.current.clear()
     isoRegistry.current.clear()
+    refRegistry.current.clear()
 
     // Mark paragraphs that begin with a chess move/annotation so the config CSS
     // can zero their first-line indent. Idempotent: clears the class first.
@@ -617,8 +640,10 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
       // Each game in its own container, from its start marker to its end marker (S6).
       wrapGameContainers(container)
     }
-    if (games.length > 0 || unanchored.length > 0) {
-      const targets = planMoveTargets(prose.text, games, unanchored)
+    // Idea moves, plan lists, pawn advances and files named in the text (S13-S15).
+    const refs = findProseReferences(prose.text, { lang: 'auto' })
+    if (games.length > 0 || unanchored.length > 0 || refs.length > 0) {
+      const targets = planMoveTargets(prose.text, games, unanchored, refs)
       const pieces = piecesByTextNode(prose.map, targets)
 
       let isoSeq = 0
@@ -636,7 +661,15 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
           const t = piece.target
           const span = document.createElement('span')
           span.textContent = text.slice(piece.start, piece.end)
-          if (t.kind === 'iso') {
+          if (t.kind === 'ref') {
+            const refKey = `ref-${isoSeq++}`
+            const at = positionBefore(games, t.start)
+            refRegistry.current.set(refKey, { ref: t.ref, tree: at?.tree ?? null, node: at?.node ?? null })
+            span.setAttribute('data-ref-key', refKey)
+            span.className =
+              'cursor-pointer rounded px-0.5 font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 ring-1 ring-amber-300'
+            span.title = 'Mostrar en el tablero'
+          } else if (t.kind === 'iso') {
             // Isolated prose move (—d5—, "casilla e4", "Cb5") → board-square highlight.
             let isoKey = isoKeys.get(t)
             if (!isoKey) {
@@ -862,7 +895,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
     const findSpan = (target: EventTarget | null): HTMLElement | null => {
       let el = target as HTMLElement | null
       while (el && el !== container) {
-        if (el.dataset.nodeId || el.dataset.isoKey) return el
+        if (el.dataset.nodeId || el.dataset.isoKey || el.dataset.refKey) return el
         el = el.parentElement
       }
       return null
@@ -895,6 +928,21 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
       if (!span) return
       // A square, line or plan named in the text → shown on a thumbnail of the
       // game at that point; the study board is left alone (S7).
+      const refKey = span.dataset.refKey
+      if (refKey) {
+        const entry = refRegistry.current.get(refKey)
+        if (!entry) return
+        if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
+        const fen = entry.node?.fen ?? entry.tree?.startFen ?? shownBoardFen()
+        const mark = referenceMark(entry.ref, fen)
+        const rect = span.getBoundingClientRect()
+        setTooltipRef.current({
+          top: rect.bottom + 6, left: rect.left, fen,
+          lastMove: null, highlight: mark.square, kind: 'square', line: mark.line,
+          ...(mark.arrows ? { arrow: mark.arrows[0], arrows: mark.arrows } : {}),
+        })
+        return
+      }
       const isoKey = span.dataset.isoKey
       if (isoKey) {
         const entry = isoRegistry.current.get(isoKey)
@@ -931,7 +979,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
 
     const onOut = (e: Event) => {
       const span = findLineMove(e.target) ?? findSpan(e.target)
-      if (!span || (!span.dataset.fen && !span.dataset.isoKey && !span.classList.contains('line-move'))) return
+      if (!span || (!span.dataset.fen && !span.dataset.isoKey && !span.dataset.refKey && !span.classList.contains('line-move'))) return
       // Don't hide if moving into the tooltip itself.
       const related = (e as MouseEvent).relatedTarget as HTMLElement | null
       if (related?.closest?.('[data-move-tooltip]')) return
@@ -981,6 +1029,12 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
       if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
       setTooltipRef.current(null)
 
+      const refKey = span.dataset.refKey
+      if (refKey) {
+        const entry = refRegistry.current.get(refKey)
+        if (entry) showReferenceRef.current(entry)
+        return
+      }
       // Isolated prose move → highlight its square on the study board.
       const isoKey = span.dataset.isoKey
       if (isoKey) {
