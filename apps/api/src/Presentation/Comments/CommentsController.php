@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Presentation\Comments;
 
+use App\Application\Comments\Port\CommentsReadOnly;
 use App\Application\Comments\Port\PositionCommentStore;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -56,6 +57,17 @@ final class CommentsController
     {
         $game = $this->store->game($id);
         return $game === null ? $this->json($response, ['error' => 'not found'], 404) : $this->json($response, $game);
+    }
+
+    /** DELETE /api/comments/{id}: removes a comment (and its translations) for good; 404 unknown, 409 read-only database. */
+    public function delete(ServerRequestInterface $request, ResponseInterface $response, int $id): ResponseInterface
+    {
+        try {
+            $found = $this->store->delete($id);
+        } catch (CommentsReadOnly) {
+            return $this->json($response, ['error' => 'The comments database is read-only on this server; delete the comment where it is built'], 409);
+        }
+        return $found ? $this->json($response, ['deleted' => $id]) : $this->json($response, ['error' => 'not found'], 404);
     }
 
     /** @param array<string, mixed> $data */

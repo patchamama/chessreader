@@ -30,4 +30,12 @@ interface PositionCommentStore
 
     /** @return list<array{id: int, title: string, author: ?string, kind: string, lang: string, book: ?string, comments: int}> */
     public function sources(): array;
+
+    /**
+     * Deletes a comment and its translations (every language) in one transaction and records a
+     * tombstone so a rebuild does not bring it back. False when the id is unknown.
+     *
+     * @throws CommentsReadOnly when the database cannot be written
+     */
+    public function delete(int $id): bool;
 }

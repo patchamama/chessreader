@@ -131,3 +131,9 @@ export async function loadCommentGame(id: string): Promise<CommentGame> {
     : await getJson<CommentGame>(`g/${encodeURIComponent(id)}.json`)
   return { id: g.id, white: g.white ?? null, black: g.black ?? null, pgn: g.pgn }
 }
+
+/** Deletes a comment (and its translations) from the server's commentary database for good. */
+export async function deleteComment(id: number): Promise<void> {
+  await httpClient<{ deleted: number }>(`/api/comments/${id}`, { method: 'DELETE' })
+  clearCommentListCache()
+}

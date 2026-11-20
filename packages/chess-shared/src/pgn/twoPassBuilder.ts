@@ -565,11 +565,13 @@ function insertVariations(
         moveNumber: t.moveNumber,
         color: t.color,
         suggestion: repair.san,
-        confidence: 'high',
+        confidence: repair.confidence,
         message:
           `Jugada errónea en una variante ${label} ${t.rawSan ?? t.san}: ` +
           `probablemente es ${label} ${repair.san} ` +
-          `(las ${repair.verifiedPlies} jugadas siguientes son legales con la corrección).`,
+          (repair.verifiedPlies > 0
+            ? `(las ${repair.verifiedPlies} jugadas siguientes son legales con la corrección).`
+            : '(ninguna otra pieza puede jugar ahí; no hay jugadas siguientes que lo confirmen).'),
         ...(t.charStart !== undefined ? { charStart: t.charStart, charEnd: t.charEnd } : {}),
       });
       errors.sort((a, b) => (a.charStart ?? 0) - (b.charStart ?? 0));

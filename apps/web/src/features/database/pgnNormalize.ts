@@ -171,3 +171,18 @@ export function normalizePgn(raw: string, options: { language?: PgnLanguageChoic
     : []
   return { text: buildText(p, best), language: best.language, moves: best.moves, unrecognised }
 }
+
+/** Played moves as PGN: "1. e4 e5 2. Nc3", or "1... e5 2. Nf3" when Black moves first (S18). */
+export function numberMoves(startFen: string, sans: string[]): string {
+  let chess: Chess
+  try { chess = new Chess(startFen) } catch { return sans.join(' ') }
+  const out: string[] = []
+  sans.forEach((san, i) => {
+    const white = chess.turn() === 'w'
+    if (white) out.push(`${chess.moveNumber()}.`)
+    else if (i === 0) out.push(`${chess.moveNumber()}...`)
+    out.push(san)
+    try { chess.move(san) } catch { /* keep the text as given */ }
+  })
+  return out.join(' ')
+}

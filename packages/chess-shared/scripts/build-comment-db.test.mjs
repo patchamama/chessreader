@@ -1,5 +1,6 @@
 // scripts/build-comment-db.mjs end to end on a one-game PGN: every comment keeps its ply and full move number.
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -359,5 +360,27 @@ describe.skipIf(!built)('build-comment-db translations', () => {
     const out = join(repo, 'other')
     build(out, ['--translations', join(from, 'comments.sqlite')])
     expect(entry(out, shardOf(out)).translations).toMatchObject({ es: 'La española: el alfil presiona al caballo que defiende e5.' })
+  })
+
+  it('skips the comments tombstoned in the --translations database and carries the tombstones over', () => {
+    const from = join(repo, 'tomb-from')
+    build(from)
+    const old = new DatabaseSync(join(from, 'comments.sqlite'))
+    const gone = old.prepare("SELECT hash, text FROM position_comments WHERE san = 'Bb5'").get()
+    const total = old.prepare('SELECT COUNT(*) AS n FROM position_comments').get().n
+    old.prepare('DELETE FROM position_comments WHERE san = ?').run('Bb5')
+    old.exec('CREATE TABLE IF NOT EXISTS comment_tombstones (position_hash TEXT NOT NULL, text_hash TEXT NOT NULL, deleted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (position_hash, text_hash))')
+    old.prepare('INSERT INTO comment_tombstones (position_hash, text_hash) VALUES (?, ?)').run(gone.hash, createHash('sha256').update(gone.text).digest('hex'))
+    old.close()
+    const out = join(repo, 'tomb-out')
+    build(out, ['--translations', join(from, 'comments.sqlite')])
+    const db = new DatabaseSync(join(out, 'comments.sqlite'))
+    expect(db.prepare("SELECT COUNT(*) AS n FROM position_comments WHERE san = 'Bb5'").get().n).toBe(0)
+    expect(db.prepare('SELECT COUNT(*) AS n FROM position_comments').get().n).toBe(total - 1)
+    expect(db.prepare('SELECT position_hash, text_hash FROM comment_tombstones').all()).toEqual([
+      { position_hash: gone.hash, text_hash: createHash('sha256').update(gone.text).digest('hex') },
+    ])
+    db.close()
+    expect(JSON.parse(readFileSync(join(out, 'comments-index/0.json'), 'utf8')).comments.some((e) => e.san === 'Bb5')).toBe(false)
   })
 })

@@ -6,6 +6,8 @@ const llm = vi.hoisted(() => ({ available: true, vision: false, config: null as 
 vi.mock('../../shared/llm', () => ({ useLlm: () => llm }))
 const save = vi.hoisted(() => vi.fn())
 vi.mock('../suggestions/suggestionsApi', () => ({ saveSuggestion: save }))
+const del = vi.hoisted(() => vi.fn())
+vi.mock('../comments/commentsApi', async (orig) => ({ ...(await orig<typeof import('../comments/commentsApi')>()), deleteComment: del }))
 
 import CommentDetailsModal from './CommentDetailsModal'
 
@@ -99,5 +101,20 @@ describe('Comment details modal (S3)', () => {
     fireEvent.keyDown(dialog(), { key: 'Escape' })
     expect(onClose).toHaveBeenCalledTimes(2)
     expect(save).not.toHaveBeenCalled()
+  })
+})
+
+describe('Deleting from the details modal (S17)', () => {
+  it('asks to confirm, deletes, tells the caller and closes', async () => {
+    del.mockReset()
+    del.mockResolvedValue(undefined)
+    const onDeleted = vi.fn()
+    render(<CommentDetailsModal comment={c} onClose={onClose} onDeleted={onDeleted} />)
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Delete' }))
+    expect(del).not.toHaveBeenCalled()
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Yes, delete' }))
+    await waitFor(() => expect(del).toHaveBeenCalledWith(7))
+    await waitFor(() => expect(onDeleted).toHaveBeenCalled())
+    expect(onClose).toHaveBeenCalled()
   })
 })

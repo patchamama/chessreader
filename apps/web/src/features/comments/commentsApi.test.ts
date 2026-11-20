@@ -12,7 +12,7 @@ vi.mock('../library/commentdb/commentLookup', () => ({
   }),
 }))
 
-import { clearCommentListCache, loadCommentGame, loadCommentPage, loadCommentSources, moveLabel } from './commentsApi'
+import { clearCommentListCache, deleteComment, loadCommentGame, loadCommentPage, loadCommentSources, moveLabel } from './commentsApi'
 
 const sources = { 1: { kind: 'book', title: 'Invented Book', author: 'A. Writer', lang: 'es', priority: 1, book: 'invented-book' }, 2: { kind: 'lichess', title: 'Lichess studies', author: null, lang: 'en', priority: 2, book: null } }
 const entry = (id: number, source: number, text: string, lang = 'en', chapter: number | null = null) => ({
@@ -90,5 +90,22 @@ describe('the list of comments (S2)', () => {
   it('moveLabel: white moves on odd plies, black with an ellipsis', () => {
     expect(moveLabel({ ply: 24, move: 12, san: 'Nb6' })).toBe('12...Nb6')
     expect(moveLabel({ ply: 15, move: 8, san: 'Nc3' })).toBe('8. Nc3')
+  })
+})
+
+describe('deleting a comment (S17)', () => {
+  it('sends DELETE and forgets the cached list pages', async () => {
+    await loadCommentPage({}, 0, 50) // caches the pages
+    http.mockResolvedValue({ deleted: 2 })
+    await deleteComment(2)
+    expect(http).toHaveBeenCalledWith('/api/comments/2', { method: 'DELETE' })
+    files.set('comments-index/meta.json', { version: 1, total: 1, pages: 1, pageSize: 2, sources })
+    files.set('comments-index/0.json', { page: 0, comments: [entry(1, 1, 'El caballo vuelve.', 'es', 3)] })
+    expect((await loadCommentPage({}, 0, 50)).total).toBe(1)
+  })
+
+  it('lets a server refusal reach the caller and keeps the cache', async () => {
+    http.mockRejectedValue(new Error('read-only'))
+    await expect(deleteComment(2)).rejects.toThrow('read-only')
   })
 })

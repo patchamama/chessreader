@@ -11,7 +11,8 @@
  *   - each candidate is tested against the moves that follow in the same line
  *     (recursively: a later wrong letter is repaired the same way);
  *   - the correction is accepted only when exactly one candidate survives or one
- *     keeps strictly more of the following moves legal than every other.
+ *     keeps strictly more of the following moves legal than every other;
+ *   - with nothing following, a UNIQUE candidate is accepted with low confidence.
  */
 
 import { Chess } from 'chess.js';
@@ -36,6 +37,8 @@ export interface VariationRepair {
   san: string;
   /** How many of the following moves are legal after the correction. */
   verifiedPlies: number;
+  /** 'low' when nothing follows: the move is illegal as printed and the only fit. */
+  confidence: 'high' | 'low';
 }
 
 const MAX_LOOKAHEAD = 12;
@@ -98,8 +101,6 @@ function follow(fen: string, sans: string[], depth: number): number {
 export function findVariationRepair(input: VariationRepairInput): VariationRepair | null {
   if (playedFrom(input.fen, input.written)) return null; // legal: nothing to repair
   const upcoming = input.upcoming.slice(0, MAX_LOOKAHEAD);
-  // Without a following move there is no evidence to test a candidate against.
-  if (upcoming.length === 0) return null;
 
   const moves = new Set(candidatesFor(input.fen, input.written));
   for (const extra of input.extraCandidates?.(input.fen, input.written) ?? []) {
@@ -110,6 +111,10 @@ export function findVariationRepair(input: VariationRepairInput): VariationRepai
     return { san, plies: follow(after.fen(), upcoming, MAX_DEPTH) };
   });
   if (scored.length === 0) return null;
+  // Nothing follows: no evidence to rank candidates, so only a UNIQUE one counts.
+  if (upcoming.length === 0) {
+    return scored.length === 1 ? { san: scored[0].san, verifiedPlies: 0, confidence: 'low' } : null;
+  }
   scored.sort((a, b) => b.plies - a.plies);
 
   const [best, runnerUp] = scored;
@@ -117,5 +122,5 @@ export function findVariationRepair(input: VariationRepairInput): VariationRepai
   // only one) are legal after it.
   if (best.plies < Math.min(upcoming.length, 2)) return null;
   if (runnerUp && runnerUp.plies >= best.plies) return null; // ambiguous
-  return { san: best.san, verifiedPlies: best.plies };
+  return { san: best.san, verifiedPlies: best.plies, confidence: 'high' };
 }

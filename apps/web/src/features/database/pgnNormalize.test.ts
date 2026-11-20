@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { normalizePgn } from './pgnNormalize'
+import { Chess } from 'chess.js'
+import { normalizePgn, numberMoves } from './pgnNormalize'
 
 describe('normalizePgn (S7, S8)', () => {
   it('adds the dots to the move numbers (S7)', () => {
@@ -64,5 +65,14 @@ describe('normalizePgn (S7, S8)', () => {
   it('sets the move numbers from a FEN header', () => {
     const r = normalizePgn('[FEN "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"]\n\ne5 Nf3')
     expect(r.moves.map((m) => m.label)).toEqual(['1... e5', '2. Nf3'])
+  })
+})
+
+describe('numberMoves (S18)', () => {
+  it('numbers the moves like a PGN', () => {
+    expect(numberMoves(new Chess().fen(), ['e4', 'e5', 'Nc3'])).toBe('1. e4 e5 2. Nc3')
+  })
+  it('starts with "1..." when Black moves first', () => {
+    expect(numberMoves('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1', ['e5', 'Nf3'])).toBe('1... e5 2. Nf3')
   })
 })

@@ -57,3 +57,21 @@ describe('a wrongly named piece inside a variation', () => {
     expect(r.corrected).toEqual([])
   })
 })
+
+describe('a wrong piece letter at the end of a variation with an inner alternative', () => {
+  const fen = '6k1/5pp1/7P/4q3/8/8/3Q4/1K6 b - - 0 25'
+  const text = (tail: string) =>
+    `${fen}\n\n25...Qe6 (25...g6?! 26 h7+ Kg7 -26...Kf8 27 Qh2! f5 28 Qh6+ ${tail}) 26 Qc3 f6`
+
+  it('repairs the only move that follows the wrong letter', () => {
+    const r = lines(text('Kg7 29 Qxg7+'))
+    expect(r.corrected).toEqual([['Kg7', 'Qg7']])
+    expect(r.tree.errors.filter((e) => e.kind === 'unreferenced')).toEqual([])
+  })
+
+  it('repairs a unique candidate even when nothing follows, with low confidence', () => {
+    const r = lines(text('Kg7'))
+    expect(r.corrected).toEqual([['Kg7', 'Qg7']])
+    expect(r.tree.errors.filter((e) => e.kind === 'wrong-move').map((e) => e.confidence)).toEqual(['low'])
+  })
+})

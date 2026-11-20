@@ -6,7 +6,7 @@ import { withBusy, withProgress } from '../../shared/layout/busyStore'
 import { saveProgress } from '../library/store/readingStore'
 import { boardSvgDataUrl } from '../library/utils/boardSvg'
 import { pgnToChapters } from '../gamesearch/pgnChapters'
-import { loadCommentGame, loadCommentPage, loadCommentSources, moveLabel, type CommentEntry, type CommentFilter, type CommentSource } from '../comments/commentsApi'
+import { deleteComment, loadCommentGame, loadCommentPage, loadCommentSources, moveLabel, type CommentEntry, type CommentFilter, type CommentSource } from '../comments/commentsApi'
 import { langName, TARGET_LANGS, type TargetLang } from '../comments/commentPrompts'
 import {
   proposeComment, proposeGameTranslation, runPagedBatch, saveCommentProposal, saveGameProposal,
@@ -17,6 +17,7 @@ import { openGameInBook } from './openInBook'
 import BatchProgressBar from './BatchProgressBar'
 import PositionFinder from './PositionFinder'
 import CommentDetailsModal from './CommentDetailsModal'
+import DeleteControl from './DeleteControl'
 
 const PAGE = 50
 const LANG_OPTIONS = ['es', 'en', 'de', 'fr']
@@ -63,6 +64,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [batchAction, setBatchAction] = useState('universal')
   const [details, setDetails] = useState<CommentEntry | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [allMatching, setAllMatching] = useState(false)
   const [overwrite, setOverwrite] = useState(false)
   const [progress, setProgress] = useState<BatchProgress | null>(null)
@@ -143,6 +145,11 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
     }
   }
 
+  const dropDeleted = (id: number) => {
+    setPage((p) => (p ? { total: Math.max(0, p.total - 1), comments: p.comments.filter((x) => x.id !== id) } : p))
+    setSelected((s) => { const n = new Set(s); n.delete(id); return n })
+    setNotice(`Comment ${id} deleted from the comments database.`)
+  }
   const comments = page?.comments ?? []
   const allSelected = comments.length > 0 && comments.every((c) => selected.has(c.id))
   const toggle = (id: number) => { setAllMatching(false); setSelected((s) => {
@@ -225,6 +232,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
         </div>
       )}
       {error && <p role="alert" className="mt-2 text-red-700">{error}</p>}
+      {notice && <p role="status" className="mt-2 text-green-700">{notice}</p>}
       <ul className="mt-3 flex flex-col gap-2" aria-label="Comments">
         {comments.map((c) => {
           const move = moveLabel(c)
@@ -245,6 +253,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
                     <button className={button} aria-label={`Copy comment id ${c.id}`} title="Copy" onClick={() => copy(String(c.id))}>Comment #{c.id}</button>
                     <button className={button} aria-label={`Copy game id ${c.gameId}`} title="Copy" onClick={() => copy(c.gameId)}>Game {c.gameId}</button>
                     <button className={button} onClick={() => setDetails(c)}>Details</button>
+                    <DeleteControl onConfirm={async () => { await deleteComment(c.id); dropDeleted(c.id) }} />
                     <button className={button} onClick={() => void openGame(c)}>Open the game</button>
                     <button className={button} disabled={!inBook || !c.chapter} title={!inBook ? 'Not from a book' : !c.chapter ? 'The chapter is unknown' : undefined} onClick={() => void openBook(c)}>Open in the book</button>
                   </p>
@@ -289,7 +298,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
           )
         })}
       </ul>
-      {details && <CommentDetailsModal comment={details} onClose={() => setDetails(null)} />}
+      {details && <CommentDetailsModal comment={details} onClose={() => setDetails(null)} onDeleted={() => dropDeleted(details.id)} />}
     </div>
   )
 }

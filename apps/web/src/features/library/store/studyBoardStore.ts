@@ -73,6 +73,13 @@ export interface StudyBoardState {
   resetPlay: () => void
   /** Show an isolated prose move as a square overlay (null clears it). */
   setIsolatedHighlight: (h: StudyBoardState['isolatedHighlight']) => void
+  /**
+   * Light `squares` of a highlight one after another (`stepMs` apart), then keep
+   * them lit; `instant` (reduced motion) lights them all at once.
+   */
+  playHighlightSequence: (base: NonNullable<StudyBoardState['isolatedHighlight']>, squares: string[], stepMs: number, instant: boolean) => void
+  /** Stop a running progressive illumination (the squares lit so far stay). */
+  cancelHighlightSequence: () => void
   flip: () => void
   setTool: (m: ToolMode) => void
   setHighlightColor: (c: string) => void
@@ -85,6 +92,9 @@ export interface StudyBoardState {
   setAutoplay: (on: boolean) => void
   reset: () => void
 }
+
+let sequenceTimers: ReturnType<typeof setTimeout>[] = []
+const clearSequence = () => { sequenceTimers.forEach(clearTimeout); sequenceTimers = [] }
 
 const INITIAL = {
   activeGame: null as GameTree | null,
@@ -256,7 +266,15 @@ export const useStudyBoardStore = create<StudyBoardState>((set) => ({
 
   resetPlay: () => set({ playFen: null, selectedSquare: null, legalTargets: [] }),
 
-  setIsolatedHighlight: (h) => set({ isolatedHighlight: h }),
+  setIsolatedHighlight: (h) => { clearSequence(); set({ isolatedHighlight: h }) },
+  playHighlightSequence: (base, squares, stepMs, instant) => {
+    clearSequence()
+    const frame = (n: number) => set({ isolatedHighlight: { ...base, square: squares[0] ?? base.square, line: [...(base.line ?? []).filter((q) => !squares.includes(q)), ...squares.slice(0, n)] } })
+    if (instant || squares.length <= 1) { frame(squares.length); return }
+    frame(1)
+    for (let i = 2; i <= squares.length; i++) sequenceTimers.push(setTimeout(() => frame(i), (i - 1) * stepMs))
+  },
+  cancelHighlightSequence: () => clearSequence(),
 
   flip: () => set((s) => ({ orientation: s.orientation === 'white' ? 'black' : 'white' })),
 
@@ -292,5 +310,5 @@ export const useStudyBoardStore = create<StudyBoardState>((set) => ({
 
   setAutoplay: (on) => set({ autoplay: on }),
 
-  reset: () => set({ ...INITIAL, annotations: emptyAnnotations(), annotationsByNode: {} }),
+  reset: () => { clearSequence(); set({ ...INITIAL, annotations: emptyAnnotations(), annotationsByNode: {} }) },
 }))

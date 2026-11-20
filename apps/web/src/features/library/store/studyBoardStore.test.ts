@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { recognizeGames } from '@chess-ebook/chess-shared'
 import { useStudyBoardStore } from './studyBoardStore'
 
@@ -91,5 +91,42 @@ describe('studyBoardStore', () => {
   it('toggles autoplay', () => {
     useStudyBoardStore.getState().setAutoplay(true)
     expect(useStudyBoardStore.getState().autoplay).toBe(true)
+  })
+})
+
+describe('progressive highlight sequence (S16)', () => {
+  beforeEach(() => { reset(); vi.useFakeTimers() })
+  afterEach(() => vi.useRealTimers())
+  const base = { square: 'f2', piece: 'p' as const, line: [] as string[] }
+
+  it('lights the squares one after another, then keeps them', () => {
+    const s = useStudyBoardStore.getState()
+    s.playHighlightSequence(base, ['f2', 'g2', 'h2'], 800, false)
+    expect(useStudyBoardStore.getState().isolatedHighlight?.line).toEqual(['f2'])
+    vi.advanceTimersByTime(800)
+    expect(useStudyBoardStore.getState().isolatedHighlight?.line).toEqual(['f2', 'g2'])
+    vi.advanceTimersByTime(800)
+    expect(useStudyBoardStore.getState().isolatedHighlight?.line).toEqual(['f2', 'g2', 'h2'])
+  })
+
+  it('instant (reduced motion) lights them all at once', () => {
+    useStudyBoardStore.getState().playHighlightSequence(base, ['f2', 'g2', 'h2'], 800, true)
+    expect(useStudyBoardStore.getState().isolatedHighlight?.line).toEqual(['f2', 'g2', 'h2'])
+  })
+
+  it('cancel, a new highlight and reset stop the timers', () => {
+    const s = useStudyBoardStore.getState()
+    s.playHighlightSequence(base, ['f2', 'g2', 'h2'], 800, false)
+    s.cancelHighlightSequence()
+    vi.advanceTimersByTime(5000)
+    expect(useStudyBoardStore.getState().isolatedHighlight?.line).toEqual(['f2'])
+    s.playHighlightSequence(base, ['f2', 'g2', 'h2'], 800, false)
+    s.setIsolatedHighlight(null)
+    vi.advanceTimersByTime(5000)
+    expect(useStudyBoardStore.getState().isolatedHighlight).toBeNull()
+    s.playHighlightSequence(base, ['f2', 'g2'], 800, false)
+    s.reset()
+    vi.advanceTimersByTime(5000)
+    expect(useStudyBoardStore.getState().isolatedHighlight).toBeNull()
   })
 })

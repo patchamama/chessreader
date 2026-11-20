@@ -21,6 +21,12 @@ export function referenceMark(ref: ProseReference, fen: string | null) {
     square: line[0] ?? 'a1',
     piece: 'p' as const,
     line,
+    ...(marks.sequence && marks.sequence.length > 0 ? { sequence: marks.sequence } : {}),
     ...(marks.arrows.length > 0 ? { arrows: marks.arrows.map((a): [string, string] => [a.from, a.to]) } : {}),
   }
+}
+
+/** Does the user ask for no motion? */
+export function prefersReducedMotion(): boolean {
+  try { return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches } catch { return false }
 }

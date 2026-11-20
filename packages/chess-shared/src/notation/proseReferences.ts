@@ -22,7 +22,12 @@ export interface ProseMarks {
   files: string[]
   /** Rank digits ("7") to light entirely. */
   ranks: string[]
+  /** Squares to light one after another (a flank's pawns), in order; also in `squares`. */
+  sequence?: string[]
 }
+
+/** Time between two squares of a progressive illumination (between 0.5 and 1 s). */
+export const PROSE_REVEAL_STEP_MS = 800
 
 type Spec =
   | { kind: 'pair'; from: string; to: string }
@@ -31,6 +36,7 @@ type Spec =
   | { kind: 'files'; files: string[] }
   | { kind: 'ranks'; ranks: string[] }
   | { kind: 'pawns'; fromFile: string; toFile: string; opponent: boolean }
+  | { kind: 'flank'; flank: 'king' | 'queen'; opponent: boolean }
 
 export type ProseReference = { start: number; end: number; side: Side | null } & Spec
 
@@ -41,6 +47,20 @@ const PIECE_LETTERS: Record<Exclude<ProseLang, 'auto'>, Record<string, PieceType
 }
 // Auto: the letters that only one language uses, English for the shared ones (R = rook).
 const AUTO_LETTERS: Record<string, PieceType> = { ...PIECE_LETTERS.de, ...PIECE_LETTERS.es, ...PIECE_LETTERS.en }
+
+/** The language of a prose (Spanish, English or German) from its most common function words; null when unclear. */
+export function detectProseLang(text: string): Exclude<ProseLang, 'auto'> | null {
+  const words = text.toLowerCase().match(/[a-zà-ÿß]+/g) ?? []
+  const score = { es: 0, en: 0, de: 0 }
+  const lists: Record<keyof typeof score, Set<string>> = {
+    es: new Set(['de', 'la', 'el', 'los', 'las', 'con', 'que', 'del', 'por', 'una', 'para', 'las', 'como', 'más', 'su', 'se', 'en', 'y']),
+    en: new Set(['the', 'and', 'of', 'with', 'to', 'is', 'that', 'in', 'for', 'on', 'this', 'by', 'it', 'as', 'be', 'are']),
+    de: new Set(['der', 'die', 'und', 'mit', 'das', 'den', 'ist', 'nicht', 'von', 'zu', 'ein', 'eine', 'auf', 'dem', 'im', 'sich']),
+  }
+  for (const w of words) for (const k of ['es', 'en', 'de'] as const) if (lists[k].has(w)) score[k]++
+  const ranked = (Object.entries(score) as ['es' | 'en' | 'de', number][]).sort((a, b) => b[1] - a[1])
+  return ranked[0][1] >= 3 && ranked[0][1] > ranked[1][1] ? ranked[0][0] : null
+}
 
 function letters(lang: ProseLang): Record<string, PieceType> {
   return lang === 'auto' ? AUTO_LETTERS : PIECE_LETTERS[lang]
@@ -75,7 +95,8 @@ function parseItem(raw: string, lang: ProseLang): Spec | null {
 
 /** Find every prose reference in `text`, in text order, none overlapping. */
 export function findProseReferences(text: string, opts: { lang?: ProseLang; fen?: string | null } = {}): ProseReference[] {
-  const lang = opts.lang ?? 'auto'
+  // Auto: the language of the text itself ('R' is the king in Spanish, a rook in English).
+  const lang: ProseLang = opts.lang && opts.lang !== 'auto' ? opts.lang : detectProseLang(text) ?? 'auto'
   const found: ProseReference[] = []
   const add = (start: number, end: number, spec: Spec) => found.push({ start, end, side: sideAt(text, start), ...spec })
 
@@ -128,6 +149,16 @@ export function findProseReferences(text: string, opts: { lang?: ProseLang; fen?
     const window = text.slice(Math.max(0, m.index! - 60), m.index!)
     const opponent = /presi[oó]n|ataque|atac|sobre|pressure|attack|against|Druck|Angriff|gegen/i.test(window + m[0])
     add(m.index!, m.index! + m[0].length, { kind: 'pawns', fromFile: m[1].toLowerCase(), toFile: m[2].toLowerCase(), opponent })
+  }
+
+  // A whole flank: "peones del flanco de rey", "king-side pawns", "Königsflügel".
+  const cue = /presi[oó]n|ataque|atac|sobre|pressure|attack|against|Druck|Angriff|gegen/i
+  const flankRe = /peones\s+(?:del?\s+)?(?:flanco|ala)\s+(?:del?\s+)?(rey|dama)|(?:flanco|ala)\s+(?:del?\s+)?(rey|dama)|(king|queen)[\s-]?side(?:\s+pawns)?|(?:Bauern\s+(?:am|auf\s+dem|im)\s+)?(K[öo]nigs|Damen)fl[üu]gel/gi
+  for (const m of text.matchAll(flankRe)) {
+    const which = (m[1] ?? m[2] ?? m[3] ?? m[4]).toLowerCase()
+    const flank = /^(rey|king|k[öo]nigs)$/.test(which) ? 'king' : 'queen'
+    const window = text.slice(Math.max(0, m.index! - 60), m.index!)
+    add(m.index!, m.index! + m[0].length, { kind: 'flank', flank, opponent: cue.test(window) })
   }
 
   found.sort((a, b) => a.start - b.start || b.end - a.end)
@@ -186,6 +217,22 @@ export function resolveProseReference(ref: ProseReference, fen: string | null): 
           marks.arrows.push({ from: origins[0], to: ref.to })
         }
       } catch { /* an unreadable position: only the destination */ }
+      break
+    }
+    case 'flank': {
+      if (!fen) break
+      const color: Side = ref.opponent ? (side === 'w' ? 'b' : 'w') : side
+      const files = ref.flank === 'king' ? ['f', 'g', 'h'] : ['a', 'b', 'c']
+      try {
+        const chess = new Chess(fen, { skipValidation: true })
+        const pawns: string[] = []
+        for (const row of chess.board()) for (const cell of row) {
+          if (cell && cell.type === 'p' && cell.color === color && files.includes(cell.square[0])) pawns.push(cell.square)
+        }
+        pawns.sort()
+        marks.squares.push(...pawns)
+        marks.sequence = pawns
+      } catch { /* unreadable position */ }
       break
     }
     case 'pawns': {

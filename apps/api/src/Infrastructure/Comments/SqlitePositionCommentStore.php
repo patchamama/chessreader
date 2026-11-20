@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Comments;
 
+use App\Application\Comments\Port\CommentsReadOnly;
 use App\Application\Comments\Port\PositionCommentStore;
 
 /**
@@ -153,6 +154,48 @@ final class SqlitePositionCommentStore implements PositionCommentStore
             'id' => (int) $r['id'], 'title' => $r['title'], 'author' => $r['author'], 'kind' => $r['kind'], 'lang' => $r['lang'],
             'book' => $r['book_id'], 'comments' => (int) $r['comments'],
         ], $rows);
+    }
+
+    public function delete(int $id): bool
+    {
+        $pdo = $this->pdo();
+        if ($pdo === null) {
+            return false;
+        }
+        try {
+            $pdo->exec(
+                'CREATE TABLE IF NOT EXISTS comment_tombstones (position_hash TEXT NOT NULL, text_hash TEXT NOT NULL,
+                 deleted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (position_hash, text_hash))'
+            );
+            $pdo->beginTransaction();
+            try {
+                $st = $pdo->prepare('SELECT hash, text FROM position_comments WHERE id = :id');
+                $st->execute([':id' => $id]);
+                $row = $st->fetch(\PDO::FETCH_ASSOC);
+                if (!$row) {
+                    $pdo->rollBack();
+                    return false;
+                }
+                if ($this->hasColumn('comment_translations', 'text')) {
+                    $pdo->prepare('DELETE FROM comment_translations WHERE comment_id = :id')->execute([':id' => $id]);
+                }
+                $pdo->prepare('DELETE FROM position_comments WHERE id = :id')->execute([':id' => $id]);
+                $pdo->prepare('INSERT OR IGNORE INTO comment_tombstones (position_hash, text_hash) VALUES (:h, :t)')
+                    ->execute([':h' => $row['hash'], ':t' => hash('sha256', (string) $row['text'])]);
+                $pdo->commit();
+                return true;
+            } catch (\Throwable $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $e;
+            }
+        } catch (\PDOException $e) {
+            if (stripos($e->getMessage(), 'readonly') !== false || stripos($e->getMessage(), 'read-only') !== false || stripos($e->getMessage(), 'unable to open') !== false) {
+                throw new CommentsReadOnly('The comments database is read-only', 0, $e);
+            }
+            throw $e;
+        }
     }
 
     /** @var array<string, bool> */

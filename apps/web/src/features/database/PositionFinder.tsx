@@ -3,9 +3,9 @@ import { positionHash } from '@chess-ebook/chess-shared'
 import { lookupPositionComments, type HumanComment } from '../library/commentdb/commentLookup'
 import ChessBoard from '../../shared/chess/ChessBoard'
 import { loadTraps, type Trap } from '../training/traps'
-import type { CommentEntry, CommentSource } from '../comments/commentsApi'
+import { deleteComment, type CommentEntry, type CommentSource } from '../comments/commentsApi'
 import { filterFound, parsePositionInput, type FinderFilter, type PgnReading, type PositionMove } from './positionInput'
-import { normalizePgn, type PgnLanguageChoice } from './pgnNormalize'
+import { normalizePgn, numberMoves, type PgnLanguageChoice } from './pgnNormalize'
 import { COMMON_OPENINGS } from './commonOpenings'
 import CommentCard from './CommentCard'
 import CommentDetailsModal from './CommentDetailsModal'
@@ -23,6 +23,8 @@ function entryOf(c: HumanComment, fen: string, sources: CommentSource[]): Commen
   }
 }
 
+const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+
 const LANGUAGES: Array<{ value: PgnLanguageChoice; label: string }> = [
   { value: 'auto', label: 'Auto' }, { value: 'en', label: 'English' }, { value: 'es', label: 'Español' }, { value: 'de', label: 'Deutsch' },
 ]
@@ -30,7 +32,7 @@ const LANGUAGES: Array<{ value: PgnLanguageChoice; label: string }> = [
 interface Found { fen: string; comments: HumanComment[] }
 
 /** "N comments found for this position" (S9), the cards (editable, S6) and a note when the filters hid some. */
-function Results({ found, filter, sources, onEdit }: { found: Found; filter?: FinderFilter; sources: CommentSource[]; onEdit: (c: HumanComment, fen: string) => void }) {
+function Results({ found, filter, sources, onEdit, onDelete }: { found: Found; filter?: FinderFilter; sources: CommentSource[]; onEdit: (c: HumanComment, fen: string) => void; onDelete: (c: HumanComment) => Promise<void> }) {
   const shown = useMemo(() => filterFound(found.comments, filter, sources), [found, filter, sources])
   const hidden = found.comments.length - shown.length
   return (
@@ -40,7 +42,7 @@ function Results({ found, filter, sources, onEdit }: { found: Found; filter?: Fi
         {hidden > 0 && <span className="font-normal text-slate-600"> ({hidden} hidden by the filters)</span>}
       </p>
       {shown.length
-        ? <ul aria-label="Comments for this position" className="mt-1 flex flex-col gap-2">{shown.map((c, i) => <CommentCard key={`${c.id ?? ''}-${i}`} comment={c} fen={found.fen} onEdit={(x) => onEdit(x, found.fen)} />)}</ul>
+        ? <ul aria-label="Comments for this position" className="mt-1 flex flex-col gap-2">{shown.map((c, i) => <CommentCard key={`${c.id ?? ''}-${i}`} comment={c} fen={found.fen} onEdit={(x) => onEdit(x, found.fen)} onDelete={onDelete} />)}</ul>
         : <p className="text-slate-600">No comments for this position.</p>}
     </div>
   )
@@ -66,7 +68,19 @@ export default function PositionFinder({ filter, sources = [] }: { filter?: Find
   const [editing, setEditing] = useState<CommentEntry | null>(null)
   const [traps, setTraps] = useState<Trap[] | null>(null)
   const [trapQuery, setTrapQuery] = useState('')
+  const [notice, setNotice] = useState<string | null>(null)
   const seq = useRef(0)
+  // The comments of each position read for the board (S19, S20), shared by the badges and the map; the filters apply on top.
+  const cache = useRef(new Map<string, Promise<HumanComment[]>>())
+  const filterRef = useRef({ filter, sources })
+  filterRef.current = { filter, sources }
+  const filterKey = JSON.stringify([filter, sources.map((x) => x.id)])
+  const countFor = useCallback((fen: string): Promise<number> => {
+    let p = cache.current.get(fen)
+    if (!p) { p = lookupPositionComments(fen); cache.current.set(fen, p); p.catch(() => cache.current.delete(fen)) }
+    return p.then((all) => filterFound(all, filterRef.current.filter, filterRef.current.sources).length)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey])
 
   const read = async (fen: string): Promise<Found | null> => {
     const mine = ++seq.current
@@ -118,6 +132,15 @@ export default function PositionFinder({ filter, sources = [] }: { filter?: Find
   const visibleTraps = (traps ?? []).filter((t) => !trapQuery.trim() || `${t.title} ${t.opening}`.toLocaleLowerCase().includes(trapQuery.trim().toLocaleLowerCase())).slice(0, 12)
 
   const toggleBoard = (i: number) => setBoards((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n })
+  const remove = async (c: HumanComment) => {
+    if (c.id === undefined) throw new Error('This comment has no id in the database, so it cannot be deleted here.')
+    await deleteComment(c.id)
+    cache.current.clear()
+    const without = (f: Found | null) => (f ? { ...f, comments: f.comments.filter((x) => x.id !== c.id) } : f)
+    setShown(without)
+    setOnBoard(without)
+    setNotice(`Comment ${c.id} deleted from the comments database.`)
+  }
   const edit = (c: HumanComment, fen: string) => setEditing(entryOf(c, fen, sources))
   const chip = 'rounded border border-slate-300 px-1.5 py-0.5 text-xs hover:bg-slate-50'
 
@@ -145,11 +168,12 @@ export default function PositionFinder({ filter, sources = [] }: { filter?: Find
           </ul>
           <input type="search" aria-label="Search traps" placeholder="Search traps" className="mt-2 rounded border border-slate-300 px-2 py-0.5" value={trapQuery} onChange={(e) => setTrapQuery(e.target.value)} />
           <ul aria-label="Traps" className="mt-1 flex flex-wrap gap-1">
-            {visibleTraps.map((t) => <li key={t.id}><button className={chip} title={t.sans.join(' ')} onClick={() => loadTrap(t)}>{t.title}</button></li>)}
+            {visibleTraps.map((t) => <li key={t.id}><button className={chip} title={numberMoves(START_FEN, t.sans)} onClick={() => loadTrap(t)}>{t.title}</button></li>)}
             {traps && !visibleTraps.length && <li className="text-slate-600">No traps match.</li>}
           </ul>
         </details>
         {error && <p role="alert" className="text-red-700">{error}</p>}
+        {notice && <p role="status" className="text-green-700">{notice}</p>}
         {reading && reading.text && !error && <p className="text-xs text-slate-600">Read as: <span className="font-mono">{reading.text}</span> ({reading.language.toUpperCase()})</p>}
         {moves.length > 0 && (
           <ul aria-label="Moves" className="flex flex-wrap gap-2">
@@ -164,15 +188,15 @@ export default function PositionFinder({ filter, sources = [] }: { filter?: Find
             ))}
           </ul>
         )}
-        {shown && <Results found={shown} filter={filter} sources={sources} onEdit={edit} />}
+        {shown && <Results found={shown} filter={filter} sources={sources} onEdit={edit} onDelete={remove} />}
         {boardOpen && (
           <section aria-label="Position board" className="flex flex-col gap-2 rounded border border-slate-200 p-2 sm:flex-row">
-            <FinderBoard line={line} onFen={onFen} />
-            <div className="min-w-0 flex-1">{onBoard && <Results found={onBoard} filter={filter} sources={sources} onEdit={edit} />}</div>
+            <FinderBoard line={line} onFen={onFen} count={countFor} />
+            <div className="min-w-0 flex-1">{onBoard && <Results found={onBoard} filter={filter} sources={sources} onEdit={edit} onDelete={remove} />}</div>
           </section>
         )}
       </div>
-      {editing && <CommentDetailsModal comment={editing} onClose={() => setEditing(null)} />}
+      {editing && <CommentDetailsModal comment={editing} onClose={() => { cache.current.clear(); setEditing(null) }} onDeleted={() => { cache.current.clear(); const id = editing.id; const without = (f: Found | null) => (f ? { ...f, comments: f.comments.filter((x) => x.id !== id) } : f); setShown(without); setOnBoard(without); setNotice(`Comment ${id} deleted from the comments database.`) }} />}
     </details>
   )
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findProseReferences, resolveProseReference, marksToSquares } from './proseReferences.js'
+import { findProseReferences, resolveProseReference, marksToSquares, detectProseLang, PROSE_REVEAL_STEP_MS } from './proseReferences.js'
 
 // Black queen d8, rook b8/f8 (two rooks), white pawns a2 b2 c2 g2 h2, kings e1 e8.
 const FEN = '1r1qkr2/pp3ppp/8/8/8/8/PPP3PP/4K3 w - - 0 21'
@@ -93,5 +93,39 @@ describe('S15 pawn advance', () => {
   })
   it('a plain pair without the word is not a reference', () => {
     expect(findProseReferences('la jugada g2-g4 es fuerte')).toEqual([])
+  })
+})
+
+describe('S16 language and flanks', () => {
+  const ES = 'Las negras juegan con la idea de que el rey de las blancas queda en el centro, y luego Rf6 es posible'
+  it('Spanish text: R is the king, D/T/A/C queen, rook, bishop, knight', () => {
+    const t = `${ES} (Rf6)`
+    const [r] = findProseReferences(t)
+    expect(r).toMatchObject({ kind: 'idea', piece: 'k' })
+  })
+  it('English text keeps R as the rook', () => {
+    const t = 'Black plays the rook to the centre and the idea of the move is to win the pawn (Rf6)'
+    expect(findProseReferences(t)[0]).toMatchObject({ kind: 'idea', piece: 'r' })
+  })
+  it('detects the language of a prose', () => {
+    expect(detectProseLang(ES)).toBe('es')
+    expect(detectProseLang('Der Springer ist nicht gut und die Dame auf dem Brett mit dem Läufer')).toBe('de')
+  })
+  const FEN2 = '4k3/8/8/8/8/8/PPP2PPP/4K3 w - - 0 20'
+  it('a king-side pawns phrase lights the pawns on f, g, h one after another', () => {
+    const t = 'luego presión sobre los peones del flanco de rey'
+    const [r] = findProseReferences(t, { lang: 'es' })
+    expect(t.slice(r.start, r.end)).toBe('peones del flanco de rey')
+    const m = resolveProseReference({ ...r, side: 'b' }, FEN2)
+    expect(m.sequence).toEqual(['f2', 'g2', 'h2'])
+  })
+  it('queen-side, English and German phrases; without a pressure cue it is the mover side', () => {
+    expect(resolveProseReference({ ...findProseReferences('the queen-side pawns', { lang: 'en' })[0], side: 'w' }, FEN2).sequence).toEqual(['a2', 'b2', 'c2'])
+    expect(findProseReferences('der Königsflügel', { lang: 'de' })[0]).toMatchObject({ kind: 'flank', flank: 'king' })
+    expect(findProseReferences('los peones del flanco de dama', { lang: 'es' })[0]).toMatchObject({ flank: 'queen', opponent: false })
+  })
+  it('the step is between 0.5 and 1 s', () => {
+    expect(PROSE_REVEAL_STEP_MS).toBeGreaterThanOrEqual(500)
+    expect(PROSE_REVEAL_STEP_MS).toBeLessThanOrEqual(1000)
   })
 })

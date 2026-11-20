@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Chess } from 'chess.js'
-import { shortScore, winPercent, numberLine, type GameNode, type GameTree, type Score } from '@chess-ebook/chess-shared'
+import { shortScore, winPercent, numberLine, PROSE_REVEAL_STEP_MS, type GameNode, type GameTree, type Score } from '@chess-ebook/chess-shared'
 import ChessBoardThemed from '../../../shared/chess/ChessBoard'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { lichessThemes } from '../../../shared/chess/lichessThemes'
@@ -65,6 +65,24 @@ function useMoveEval(tree: GameTree, node: GameNode, enabled: boolean): Judged |
   return asked?.key === node.fen ? asked.value : null
 }
 
+/** The squares of `sequence` lit one after another (all at once with reduced motion); the rest of `marked` stays lit. */
+function useProgressive(marked: string[], sequence: string[] | undefined): string[] {
+  const key = (sequence ?? []).join(',')
+  const [shown, setShown] = useState(0)
+  useEffect(() => {
+    const seq = key ? key.split(',') : []
+    const reduced = typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (seq.length === 0 || reduced) { setShown(seq.length); return }
+    setShown(1)
+    const timers = seq.slice(1).map((_, i) => setTimeout(() => setShown(i + 2), (i + 1) * PROSE_REVEAL_STEP_MS))
+    return () => timers.forEach(clearTimeout)
+  }, [key])
+  if (!key) return marked
+  const seq = key.split(',')
+  const lit = new Set(seq.slice(0, shown))
+  return marked.filter((sq) => !seq.includes(sq) || lit.has(sq))
+}
+
 const center = (sq: string) => ({ x: sq.charCodeAt(0) - 97 + 0.5, y: 8 - Number(sq[1]) + 0.5 })
 
 /** The move the engine preferred, drawn as a dashed arrow over the thumbnail. */
@@ -100,6 +118,10 @@ export function MoveTooltipCard(p: {
   line?: string[]
   /** A plan the text names ("d4-d5"), drawn as an arrow. */
   arrow?: [string, string]
+  /** Every arrow of a prose reference (a plan list, a pawn advance). */
+  arrows?: [string, string][]
+  /** Squares lit one after another (a flank's pawns). */
+  sequence?: string[]
 }) {
   const lang = useSettingsStore((s) => s.language)
   const notationStyle = useSettingsStore((s) => s.notationStyle)
@@ -111,7 +133,9 @@ export function MoveTooltipCard(p: {
   const loss = judged ? Math.max(0, Math.round(mover * (winPercent(judged.before) - winPercent(judged.after)) * 10) / 10) : 0
   const fenBefore = node && p.tree ? (node.parentId ? p.tree.nodes.get(node.parentId)?.fen : p.tree.startFen) : undefined
   const themes = node && fenBefore ? lichessThemes(fenBefore, node.san) : []
-  const marked = p.line && p.line.length > 0 ? p.line : p.highlight ? [p.highlight] : []
+  const allMarked = p.line && p.line.length > 0 ? p.line : p.highlight ? [p.highlight] : []
+  const marked = useProgressive(allMarked, p.sequence)
+  const drawn = p.arrows && p.arrows.length > 0 ? p.arrows : p.arrow ? [p.arrow] : []
   const sameAsBest = judged?.best && node && judged.best.from === node.from && judged.best.to === node.to
   return (
     <div style={{ width: BOARD }}>
@@ -124,7 +148,7 @@ export function MoveTooltipCard(p: {
           customSquareStyles={marked.length > 0
             ? Object.fromEntries(marked.map((sq) => [sq, { backgroundColor: 'rgba(250, 204, 21, 0.55)', boxShadow: 'inset 0 0 0 3px rgba(202, 138, 4, 0.9)' }]))
             : undefined}
-          arrows={p.arrow ? [{ startSquare: p.arrow[0], endSquare: p.arrow[1], color: '#ca8a04' }] : undefined}
+          arrows={drawn.length > 0 ? drawn.map(([from, to]) => ({ startSquare: from, endSquare: to, color: '#ca8a04' })) : undefined}
         />
         {judged?.best && !sameAsBest && <GhostArrow from={judged.best.from} to={judged.best.to} />}
         <CapturedBadge piece={fenBefore ? capturedPiece(fenBefore, p.fen) : null} />

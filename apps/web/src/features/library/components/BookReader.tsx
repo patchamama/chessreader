@@ -5,12 +5,12 @@ import { formatChapterTitle, prepareChapterHtml } from '../utils/epubContent'
 import { useParams } from 'react-router-dom'
 import { useBookTitle, useChapter, useTouchBook, type Book } from '../api/libraryApi'
 import { useQueryClient } from '@tanstack/react-query'
-import { findProseReferences, numberLine, recognizeGames, unanchoredMoves } from '@chess-ebook/chess-shared'
+import { findProseReferences, numberLine, PROSE_REVEAL_STEP_MS, recognizeGames, unanchoredMoves } from '@chess-ebook/chess-shared'
 import type { GameTree, GameNode, IsolatedMove, ProseReference } from '@chess-ebook/chess-shared'
 import { MoveTooltipCard } from './MoveTooltipCard'
 import { loadBoardMemory, saveBoardMemory } from '../store/boardMemory'
 import { dashedPair, squareLine } from '../utils/squareLine'
-import { positionBefore, referenceMark } from '../utils/proseReferences'
+import { positionBefore, prefersReducedMotion, referenceMark } from '../utils/proseReferences'
 import { applyGameLayouts, clearGameDecorations, decorateGames, describeGames, gameAnchorId, layoutToggleLabel } from '../utils/gameMarkers'
 import { detectHeadings } from '../utils/headingDetect'
 import { clearGameLayout, loadGameLayouts, saveGameLayout } from '../store/gameLayoutStore'
@@ -120,6 +120,8 @@ interface MoveTooltip {
   arrow?: [string, string]
   /** More arrows the text names (a plan list, a pawn advance). */
   arrows?: [string, string][]
+  /** Squares to light one after another on the thumbnail (a flank's pawns). */
+  sequence?: string[]
   /** What is hovered: a move of the game, a move of a line in a comment, or a named square. */
   kind?: 'move' | 'line' | 'square'
   /** The hovered move, to show the engine's view of it. */
@@ -322,7 +324,10 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
         loadStudyPosition(entry.tree, at ? at.id : null, !!at && !entry.tree.mainline.includes(at.id))
       }
     }
-    setIsolatedHighlight(referenceMark(entry.ref, entry.node?.fen ?? entry.tree?.startFen ?? shownBoardFen()))
+    const mark = referenceMark(entry.ref, entry.node?.fen ?? entry.tree?.startFen ?? shownBoardFen())
+    const { sequence, ...base } = mark
+    if (sequence) useStudyBoardStore.getState().playHighlightSequence({ ...base, line: [] }, sequence, PROSE_REVEAL_STEP_MS, prefersReducedMotion())
+    else setIsolatedHighlight(base)
   }
   /**
    * A game about to be rewritten in place (S6): remember where its container is
@@ -423,6 +428,8 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
   const showReferenceRef = useRef(showReference)
   useEffect(() => { showReferenceRef.current = showReference })
   useEffect(() => { showMentionRef.current = showMention })
+  // A progressive illumination in flight never outlives the reader.
+  useEffect(() => () => useStudyBoardStore.getState().cancelHighlightSequence(), [])
 
   const rawHtml = data?.html ?? ''
 
@@ -940,6 +947,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
           top: rect.bottom + 6, left: rect.left, fen,
           lastMove: null, highlight: mark.square, kind: 'square', line: mark.line,
           ...(mark.arrows ? { arrow: mark.arrows[0], arrows: mark.arrows } : {}),
+          ...(mark.sequence ? { sequence: mark.sequence } : {}),
         })
         return
       }
@@ -1433,6 +1441,8 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
             highlight={tooltip.highlight}
             line={tooltip.line}
             arrow={tooltip.arrow}
+            arrows={tooltip.arrows}
+            sequence={tooltip.sequence}
             tree={tooltip.move?.tree}
             node={tooltip.move?.node}
           />

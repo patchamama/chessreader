@@ -6,10 +6,13 @@ vi.mock('../library/commentdb/commentLookup', () => ({ lookupPositionComments: l
 
 const loadTraps = vi.hoisted(() => vi.fn())
 vi.mock('../training/traps', () => ({ loadTraps }))
+const deleteComment = vi.hoisted(() => vi.fn())
+vi.mock('../comments/commentsApi', async (orig) => ({ ...(await orig<typeof import('../comments/commentsApi')>()), deleteComment }))
 vi.mock('../../shared/llm', () => ({ useLlm: () => ({ available: false, vision: false, config: null, complete: vi.fn() }) }))
 vi.mock('../../shared/chess/ChessBoard', () => ({
-  default: ({ fen, onPieceDrop }: { fen: string; onPieceDrop?: (from: string, to: string) => boolean }) => (
+  default: ({ fen, onPieceDrop, onSquareClick }: { fen: string; onPieceDrop?: (from: string, to: string) => boolean; onSquareClick?: (sq: string) => void }) => (
     <div data-testid="board" data-fen={fen}>
+      {onSquareClick && <button onClick={() => onSquareClick('e2')}>click e2</button>}
       {onPieceDrop && <button onClick={() => onPieceDrop('e2', 'e4')}>drop e2e4</button>}
       {onPieceDrop && <button onClick={() => onPieceDrop('e7', 'e5')}>drop e7e5</button>}
     </div>
@@ -26,6 +29,7 @@ beforeEach(() => {
   lookup.mockReset()
   lookup.mockResolvedValue([found])
   loadTraps.mockReset()
+  deleteComment.mockReset()
   loadTraps.mockResolvedValue([{ id: 'classic-scholar', title: "Scholar's mate", opening: 'Italian Game', sans: ['e4', 'e5', 'Bc4', 'Nc6'] }])
 })
 
@@ -168,5 +172,75 @@ describe('Find by position: count, tolerant PGN, boards, edit and suggestions (S
     fireEvent.click(await screen.findByRole('button', { name: "Scholar's mate" }))
     expect((screen.getByRole('textbox', { name: 'FEN or PGN' }) as HTMLTextAreaElement).value).toBe('1. e4 e5 2. Bc4 Nc6')
     expect(screen.getByRole('button', { name: 'Next move of the line' })).toBeTruthy()
+  })
+})
+
+describe('Find by position: numbering, move counts, comment map, delete (S17-S20)', () => {
+  const openBoard = () => { render(<PositionFinder />); fireEvent.click(screen.getByRole('button', { name: 'Board' })) }
+
+  it('prints the played moves as numbered PGN (S18)', async () => {
+    openBoard()
+    fireEvent.click(screen.getByRole('button', { name: 'drop e2e4' }))
+    fireEvent.click(screen.getByRole('button', { name: 'drop e7e5' }))
+    expect(await screen.findByText('1. e4 e5')).toBeTruthy()
+  })
+
+  it('writes on the squares of a selected piece the comments each move would find (S19)', async () => {
+    lookup.mockImplementation(async (fen: string) => (fen === AFTER_E4 ? [found] : []))
+    openBoard()
+    fireEvent.click(screen.getByRole('button', { name: 'click e2' }))
+    expect((await screen.findByTestId('badge-e4')).textContent).toBe('1')
+    expect(screen.getByTestId('badge-e3').textContent).toBe('0')
+    expect(screen.queryByTestId('badge-d4')).toBeNull()
+  })
+
+  it('does not look the same position up twice when a piece is selected again', async () => {
+    openBoard()
+    fireEvent.click(screen.getByRole('button', { name: 'click e2' }))
+    await screen.findByTestId('badge-e4')
+    const calls = lookup.mock.calls.length
+    fireEvent.click(screen.getByRole('button', { name: 'click e2' }))
+    fireEvent.click(screen.getByRole('button', { name: 'click e2' }))
+    await screen.findByTestId('badge-e4')
+    expect(lookup.mock.calls.length).toBe(calls)
+  })
+
+  it('shows the comment map per move and accumulated, with progress (S20)', async () => {
+    lookup.mockImplementation(async (fen: string) => (fen.includes(' b ') ? [found] : []))
+    openBoard()
+    fireEvent.click(screen.getByRole('button', { name: 'Comment map' }))
+    expect(await screen.findByText('Analysed 20 moves')).toBeTruthy()
+    expect(screen.getByTestId('map-c3').textContent).toBe('1')
+    fireEvent.click(screen.getByRole('button', { name: 'Accumulated' }))
+    expect(screen.getByTestId('map-c3').textContent).toMatch(/^2[NP]{2}$/)
+    expect(screen.getByTestId('map-f3').textContent).toMatch(/^2[NP]{2}$/)
+    fireEvent.click(screen.getByRole('button', { name: 'Comment map' }))
+    expect(screen.queryByTestId('map-c3')).toBeNull()
+  })
+
+  it('deletes a found comment after a confirmation and says so (S17)', async () => {
+    lookup.mockResolvedValue([{ ...found, id: 5 }])
+    deleteComment.mockResolvedValue(undefined)
+    render(<PositionFinder />)
+    type(AFTER_E4)
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    expect(deleteComment).not.toHaveBeenCalled()
+    expect(screen.getByText(/Delete this comment\? This removes it and its translations from the comments database/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, delete' }))
+    await waitFor(() => expect(deleteComment).toHaveBeenCalledWith(5))
+    expect(await screen.findByText(/Comment 5 deleted/)).toBeTruthy()
+    expect(screen.queryByText('The king pawn opens lines.')).toBeNull()
+    expect(screen.getByText(/0 comments found for this position/)).toBeTruthy()
+  })
+
+  it('shows a failed delete inline and keeps the comment', async () => {
+    lookup.mockResolvedValue([{ ...found, id: 5 }])
+    deleteComment.mockRejectedValue(new Error('The comments database is read-only here'))
+    render(<PositionFinder />)
+    type(AFTER_E4)
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, delete' }))
+    expect((await screen.findByText('The comments database is read-only here')).getAttribute('role')).toBe('alert')
+    expect(screen.getByText('The king pawn opens lines.')).toBeTruthy()
   })
 })
