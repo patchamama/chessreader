@@ -19,12 +19,12 @@ Objective: configurable LLM (Anthropic/OpenAI/Ollama/OpenAI-compatible) and the 
 - S14 "Corrije que al pulsar en el link de "Evaluar este diagrama" no se está haciendo bien la evaluación pues por alguna razón se está evaluando a partir de no sé que posición pues no se está haciendo la evaluación a partir de la posición de la última jugada de la línea principal anotada hasta esta posición en que aparece el diagrama o si hay antes una variante, de la variante, por lo que si hay una variante antes sería bueno preguntar si se hace la evaluación hasta esa última jugada de la variante o de la línea principal, por otro lado en este caso mientras se hace la evaluación me gustaría a modo de debug que se muestre hasta qué jugada se está haciendo la evaluación, hasta que aparezca la evaluación y se ponga ahí."
 
 ## Tasks
-- [ ] T1 S1 LLM client (providers, proxy, useLlm), Settings AI section with model list + Test, resources write token field — delegated W1 (wave 1)
+- [x] T1 S1 LLM client (providers, proxy, useLlm), Settings AI section with model list + Test, resources write token field — delegated W1 + verifier (DNS-pin blocker fixed, recheck FIXED) — 36b4bda v0.120.0
 - [x] T2 S5 suggestions backbone: backend DB table + routes, resources repo commit, merged loading, apply-on-load — delegated W2 + verifier (no blockers; N1/N2/sanitiser/limits fixed) — aa5ed43 v0.119.0
 - [x] T3 S9 S10 (core) diagram solver from following moves + wrong-move finder, deterministic, chess-shared — delegated W3 — c5ca4d6 v0.118.3
-- [ ] T4 S2 S3 Database Comments tab, universalise/translate with test/save/batch
-- [ ] T5 S5 S6 Errors → Suggestions review, EPUB writer with backup, download, covers
-- [ ] T6 S4 S7 image AI actions + diagram FEN UI (templates + vision + solver)
+- [ ] T4 S2 S3 Database Comments tab, universalise/translate with test/save/batch — delegated W4 (wave 2)
+- [ ] T5 S5 S6 Errors → Suggestions review, EPUB writer with backup, download, covers — delegated W5 (wave 2)
+- [ ] T6 S4 S7 image AI actions + diagram FEN UI (templates + vision + solver) — delegated W6 (wave 2)
 - [ ] T7 S8 edit mode in the reader
 - [ ] T8 S10 wrong-move finder UI + batch
 - [x] T9 S14 "Evaluar este diagrama" position (main line vs preceding variation, ask) + debug of the evaluated move — inline, b0e4129 v0.118.1
