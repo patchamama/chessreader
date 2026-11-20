@@ -236,10 +236,18 @@ final class LibraryController
             default => 'image/jpeg',
         };
 
+        // The cover can change (a cover suggestion written into the EPUB):
+        // browsers revalidate it, and an unchanged cover answers 304.
+        $etag = '"' . sha1($innerPath . "\0" . $content) . '"';
+        if (in_array($etag, array_map('trim', explode(',', $request->getHeaderLine('If-None-Match'))), true)) {
+            return $response->withStatus(304)->withHeader('ETag', $etag)->withHeader('Cache-Control', 'public, no-cache');
+        }
+
         $response->getBody()->write($content);
         return $response
             ->withHeader('Content-Type', $mime)
-            ->withHeader('Cache-Control', 'public, max-age=86400')
+            ->withHeader('ETag', $etag)
+            ->withHeader('Cache-Control', 'public, no-cache')
             ->withHeader('X-Content-Type-Options', 'nosniff')
             // A book SVG opened directly must not run scripts on the API origin.
             ->withHeader('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox");

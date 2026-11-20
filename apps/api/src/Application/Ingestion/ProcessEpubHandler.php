@@ -28,6 +28,8 @@ final class ProcessEpubHandler
         private readonly EpubExtractor     $extractor,
         private readonly NcxTocParser      $tocParser,
         private readonly OpfManifestParser $opfParser,
+        /** Where the original EPUBs are kept (the library's storage; a temporary folder in tests). */
+        private readonly string $booksDir = __DIR__ . '/../../../storage/books',
     ) {}
 
     public function handle(ProcessEpubCommand $cmd): int
@@ -86,7 +88,7 @@ final class ProcessEpubHandler
 
             // 9. Persist original EPUB for image serving, then cleanup extracted dir
             $epubStore = dirname($cmd->epubPath, 1); // same dir as tmp — will be moved by caller
-            $storagePath = __DIR__ . '/../../../storage/books/' . $bookId . '.epub';
+            $storagePath = rtrim($this->booksDir, '/') . '/' . $bookId . '.epub';
             if (!is_dir(dirname($storagePath))) {
                 mkdir(dirname($storagePath), 0755, true);
             }

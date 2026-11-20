@@ -13,6 +13,9 @@ import { openRepoBook } from '../../errors/repoBooks'
 import { withBusy } from '../../../shared/layout/busyStore'
 import { markVisited, useVisitedCheck } from '../../../shared/visited/visitedStore'
 import { VisitedMark } from '../../../shared/visited/VisitedMark'
+import { hasServerSession } from '../../../shared/api/serverSession'
+import { downloadEpub } from '../../suggestions/epubApi'
+import BookCoverDialog from './BookCoverDialog'
 
 const visitedCard = 'rounded-lg ring-2 ring-violet-300'
 
@@ -24,10 +27,20 @@ export default function LibraryGrid() {
   // In the demo every book is an example: shown unless the reader closed it.
   const shown = demo ? books?.filter((b) => !hidden.includes(b.id)) : books
   const visited = useVisitedCheck()
+  // Server books only: download the EPUB, suggest a cover (S6).
+  const server = !demo && hasServerSession()
+  const [coverOf, setCoverOf] = useState<{ id: number; title: string } | null>(null)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
+  const download = (book: { id: number; title: string }) => {
+    setDownloadError(null)
+    withBusy(`Downloading ${book.title}…`, () => downloadEpub(book.id, book.title)).catch((e: Error) => setDownloadError(`${book.title}: ${e.message}`))
+  }
 
   return (
     <div>
       <UploadBookForm />
+      {downloadError && <p role="alert" className="px-4 text-sm text-red-600">Could not download {downloadError}</p>}
+      {coverOf && <BookCoverDialog book={coverOf} onClose={() => setCoverOf(null)} />}
       {isLoading && (
         <div role="status" className="flex justify-center p-8">
           <span className="sr-only">Loading…</span>
@@ -51,6 +64,12 @@ export default function LibraryGrid() {
               <div key={book.id} data-book-card="" {...(seen ? { 'data-visited': '' } : {})} className={`relative ${seen ? visitedCard : ''}`} onClickCapture={record}>
                 {seen && <span className="pointer-events-none absolute left-2 top-2 z-10"><VisitedMark /></span>}
                 <BookCard book={book} onHide={demo ? () => set({ hiddenExamples: [...hidden, book.id] }) : undefined} />
+                {server && (
+                  <div className="mt-1 flex gap-3 px-1 text-xs">
+                    <button type="button" className="text-blue-600 hover:underline" aria-label={`Download EPUB of ${book.title}`} onClick={() => download(book)}>Download EPUB</button>
+                    <button type="button" className="text-blue-600 hover:underline" aria-label={`Cover of ${book.title}…`} onClick={() => setCoverOf({ id: book.id, title: book.title })}>Cover…</button>
+                  </div>
+                )}
               </div>
             )
           })}

@@ -25,9 +25,11 @@ final class ProcessEpubHandlerTest extends TestCase
     private NcxTocParser $tocParser;
     private OpfManifestParser $opfParser;
     private ProcessEpubHandler $handler;
+    private string $booksDir;
 
     protected function setUp(): void
     {
+        $this->booksDir = sys_get_temp_dir() . '/chessreader-test-books-' . bin2hex(random_bytes(4));
         $this->repo      = $this->createMock(BookRepository::class);
         $this->extractor = new ZipEpubExtractor();
         $this->tocParser = new NcxTocParser();
@@ -37,7 +39,28 @@ final class ProcessEpubHandlerTest extends TestCase
             $this->extractor,
             $this->tocParser,
             $this->opfParser,
+            $this->booksDir,
         );
+    }
+
+    protected function tearDown(): void
+    {
+        foreach (glob($this->booksDir . '/*') ?: [] as $f) {
+            unlink($f);
+        }
+        if (is_dir($this->booksDir)) {
+            rmdir($this->booksDir);
+        }
+    }
+
+    public function test_the_epub_is_kept_in_the_given_books_folder_never_in_the_real_storage(): void
+    {
+        $real = __DIR__ . '/../../../../storage/books/1.epub';
+        $before = is_file($real) ? hash_file('sha256', $real) : null;
+        $this->repo->method('save')->willReturn(1);
+        $this->handler->handle(new ProcessEpubCommand(ownerId: 7, epubPath: EpubFixture::create()));
+        self::assertFileExists($this->booksDir . '/1.epub');
+        self::assertSame($before, is_file($real) ? hash_file('sha256', $real) : null);
     }
 
     public function test_valid_epub_creates_ready_book_with_two_chapters(): void

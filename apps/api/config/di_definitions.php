@@ -315,6 +315,7 @@ return [
             $c->get(ZipEpubExtractor::class),
             $c->get(NcxTocParser::class),
             $c->get(OpfManifestParser::class),
+            $c->get('settings')['books_dir'] ?? dirname(__DIR__) . '/storage/books',
         );
     },
 
@@ -538,6 +539,23 @@ return [
             $c->get(\App\Application\Suggestions\SuggestionAssetStore::class),
         );
     },
+
+    // The stored EPUBs: the same folder the uploads and the cover/images routes use.
+    \App\Infrastructure\Epub\StoredEpubs::class => fn (ContainerInterface $c) => new \App\Infrastructure\Epub\StoredEpubs($c->get('settings')['books_dir'] ?? dirname(__DIR__) . '/storage/books'),
+    \App\Application\Ingestion\Port\ChapterStore::class => fn (ContainerInterface $c) => new \App\Infrastructure\Suggestions\DbalChapterStore($c->get(Connection::class)),
+    \App\Infrastructure\Epub\EpubWriter::class => fn () => new \App\Infrastructure\Epub\EpubWriter(),
+    \App\Infrastructure\Epub\EpubSuggestionEditor::class => fn (ContainerInterface $c) => new \App\Infrastructure\Epub\EpubSuggestionEditor($c->get(\App\Application\Suggestions\SuggestionAssetStore::class)),
+    \App\Application\Ingestion\ReingestEpubChapters::class => fn (ContainerInterface $c) => new \App\Application\Ingestion\ReingestEpubChapters($c->get(\App\Application\Ingestion\Port\ChapterStore::class)),
+    \App\Application\Suggestions\ApplySuggestionsToEpub::class => fn (ContainerInterface $c) => new \App\Application\Suggestions\ApplySuggestionsToEpub(
+        $c->get(BookRepository::class), $c->get(\App\Application\Suggestions\SuggestionRepository::class),
+        $c->get(\App\Infrastructure\Epub\StoredEpubs::class), $c->get(\App\Infrastructure\Epub\EpubSuggestionEditor::class),
+        $c->get(\App\Infrastructure\Epub\EpubWriter::class), $c->get(\App\Application\Ingestion\ReingestEpubChapters::class)),
+    \App\Application\Suggestions\RestoreEpubBackup::class => fn (ContainerInterface $c) => new \App\Application\Suggestions\RestoreEpubBackup(
+        $c->get(BookRepository::class), $c->get(\App\Application\Suggestions\SuggestionRepository::class),
+        $c->get(\App\Infrastructure\Epub\StoredEpubs::class), $c->get(\App\Application\Ingestion\ReingestEpubChapters::class)),
+    \App\Presentation\Suggestions\BookEpubController::class => fn (ContainerInterface $c) => new \App\Presentation\Suggestions\BookEpubController(
+        $c->get(\App\Application\Suggestions\ApplySuggestionsToEpub::class), $c->get(\App\Application\Suggestions\RestoreEpubBackup::class),
+        $c->get(\App\Infrastructure\Epub\StoredEpubs::class), $c->get(BookRepository::class)),
 
     \App\Presentation\Errata\ErrataController::class => function (ContainerInterface $c) {
         return new \App\Presentation\Errata\ErrataController($c->get(\App\Application\Errata\ErrataRepository::class));

@@ -13,7 +13,10 @@ vi.mock('../library/api/libraryApi', () => ({ useBooks: () => ({ data: env.demo 
 vi.mock('../library/commentdb/commentLookup', () => ({ getJson: env.getJson, getText: vi.fn() }))
 vi.mock('./bookErrors', async (orig) => ({ ...(await orig<typeof import('./bookErrors')>()), bookErrors: env.bookErrors }))
 
+vi.mock('./SuggestionsReview', () => ({ default: () => <p>Suggestions review stub</p> }))
+
 import ErrorsPage from './ErrorsPage'
+import { fireEvent } from '@testing-library/react'
 
 const game = (bookId: number | string, chapter: number, n: number): GameErrors => ({
   bookId, chapter, gameIndex: 0, label: `game ${chapter}`, moves: 30,
@@ -69,5 +72,20 @@ describe('errors page filled from the start (S17)', () => {
     expect(env.bookErrors).toHaveBeenCalledTimes(1)
     expect(env.bookErrors.mock.calls[0][0]).toBe(8)
     expect(JSON.parse(localStorage.getItem(`errors:${APP_VERSION}:8`) ?? 'null')).toMatchObject({ id: 8, games: 2, errors: 5 })
+  })
+})
+
+describe('errors page tabs (llm-assistant-round S5)', () => {
+  afterEach(() => { env.books = [] })
+
+  it('opens on Errors and switches to the Suggestions review', () => {
+    env.books = [{ id: 7, title: 'My System' }]
+    env.bookErrors.mockResolvedValue([])
+    page()
+    expect(screen.getByRole('tab', { name: 'Errors' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('table', { name: 'Books with errors' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Suggestions' }))
+    expect(screen.getByText('Suggestions review stub')).toBeInTheDocument()
+    expect(screen.queryByRole('table', { name: 'Books with errors' })).toBeNull()
   })
 })

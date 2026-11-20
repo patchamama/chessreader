@@ -31,6 +31,8 @@ abstract class TestCase extends \PHPUnit\Framework\TestCase
         // Override DB to use in-memory SQLite for tests
         $settings = require __DIR__ . '/../config/settings.php';
         $settings['db']['path'] = ':memory:';
+        // Uploaded EPUBs go to a temporary folder: never over the real library's books.
+        $settings['books_dir'] = sys_get_temp_dir() . '/chessreader-test-books';
 
         $definitions = require __DIR__ . '/../config/di_definitions.php';
 

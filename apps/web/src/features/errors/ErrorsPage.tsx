@@ -11,6 +11,7 @@ import { isDemoHost } from '../../shared/env/devMode'
 import { hasResources } from '../database/resources'
 import { EXTERNAL_BOOK_ID, type ExternalChapter } from '../../shared/externalBook/externalBookStore'
 import { loadRepoBookChapters, loadRepoBooks, openRepoGame, repoBookErrors, type RepoBook } from './repoBooks'
+import SuggestionsReview from './SuggestionsReview'
 import { loadCachedErrors, saveCachedErrors, summarise, type BookErrorSummary, type ErrorsFile, type GameSummary } from './errorsSummary'
 
 type BookId = number | string
@@ -35,6 +36,23 @@ const formatDate = (iso: string) => {
  */
 export default function ErrorsPage() {
   const width = usePageWidth('max-w-6xl')
+  const [tab, setTab] = useState<'errors' | 'suggestions'>('errors')
+  const tabClass = (on: boolean) => `rounded-t px-3 py-1 text-sm ${on ? 'border border-b-white border-slate-300 bg-white font-semibold' : 'text-slate-600 hover:text-slate-800'}`
+  return (
+    <div className={`mx-auto ${width} px-4 py-6`}>
+      <div role="tablist" aria-label="Errors page" className="mb-3 flex gap-1 border-b border-slate-300">
+        <button role="tab" aria-selected={tab === 'errors'} className={tabClass(tab === 'errors')} onClick={() => setTab('errors')}>Errors</button>
+        <button role="tab" aria-selected={tab === 'suggestions'} className={tabClass(tab === 'suggestions')} onClick={() => setTab('suggestions')}>Suggestions</button>
+      </div>
+      <div role="tabpanel">
+        {tab === 'errors' ? <RecognitionErrors /> : <SuggestionsReview />}
+      </div>
+    </div>
+  )
+}
+
+/** The Errors tab: recognition errors of the library books. */
+function RecognitionErrors() {
   const navigate = useNavigate()
   const repoMode = isDemoHost()
   const { data: libraryBooks } = useBooks()
@@ -140,7 +158,7 @@ export default function ErrorsPage() {
   const title = (id: BookId) => books?.find((b) => b.id === id)?.title ?? `#${id}`
   const cell = 'border-t border-slate-100 px-2 py-1'
   return (
-    <div className={`mx-auto ${width} px-4 py-6`}>
+    <div>
       <h1 className="text-xl font-bold text-slate-800">Recognition errors</h1>
       {repoMode && !hasResources() && (
         <p className="mt-2 text-sm text-slate-600">Set the resources repository and its GitHub token in Settings to see the errors of the books.</p>

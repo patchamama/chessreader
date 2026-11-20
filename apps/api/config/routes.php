@@ -130,12 +130,17 @@ return function (App $app): void {
         $group->post('/books/{id:[0-9]+}/touch', [LibraryController::class, 'touch']);
         // Per-book custom render config — READ is open to any approved user.
         $group->get('/books/{id:[0-9]+}/config', [BookConfigController::class, 'get']);
+        $group->get('/books/{id:[0-9]+}/epub', [\App\Presentation\Suggestions\BookEpubController::class, 'download']);
+        $group->get('/books/{id:[0-9]+}/images', [\App\Presentation\Suggestions\BookEpubController::class, 'images']);
         $group->post('/upload', [IngestionController::class, 'upload']);
     })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
 
     // Per-book config WRITE — admin only.
     $app->group('/api/library', function (RouteCollectorProxy $group) {
         $group->put('/books/{id:[0-9]+}/config', [BookConfigController::class, 'save']);
+        $group->post('/books/{id:[0-9]+}/apply-suggestions', [\App\Presentation\Suggestions\BookEpubController::class, 'applySuggestions']);
+        $group->get('/books/{id:[0-9]+}/backups', [\App\Presentation\Suggestions\BookEpubController::class, 'backups']);
+        $group->post('/books/{id:[0-9]+}/restore-backup', [\App\Presentation\Suggestions\BookEpubController::class, 'restoreBackup']);
     })->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
 
     // AI assistant proxy: the user's own key travels per request (require JWT + Approved)
