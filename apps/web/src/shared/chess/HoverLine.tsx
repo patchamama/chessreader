@@ -2,6 +2,7 @@ import { useState, type MouseEvent } from 'react'
 import ChessBoardThemed from './ChessBoard'
 import { useSettingsStore } from '../settings/settingsStore'
 import { useNotation } from './notation'
+import { CapturedBadge } from './CapturedBadge'
 
 import type { LinePosition } from './playLine'
 
@@ -46,7 +47,10 @@ export function HoverLine({ text, positions, className, testId, suffix, current,
       {parts}{suffix}
       {shown && hover && (
         <span className="pointer-events-none fixed z-50 block overflow-hidden rounded border border-slate-300 bg-white shadow-lg" style={{ left: hover.x + 8, top: hover.y + 12, width: 160 }}>
-          <ChessBoardThemed fen={shown.fen} orientation="white" lastMove={{ from: shown.from, to: shown.to }} hideLabels />
+          <span className="relative block">
+            <ChessBoardThemed fen={shown.fen} orientation="white" lastMove={{ from: shown.from, to: shown.to }} hideLabels />
+            <CapturedBadge piece={shown.captured} />
+          </span>
         </span>
       )}
     </span>

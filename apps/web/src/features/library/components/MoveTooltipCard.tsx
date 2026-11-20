@@ -5,6 +5,8 @@ import ChessBoardThemed from '../../../shared/chess/ChessBoard'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { lichessThemes } from '../../../shared/chess/lichessThemes'
 import { formatLine } from '../../../shared/chess/notation'
+import { capturedPiece } from '../../../shared/chess/capturedPiece'
+import { CapturedBadge } from '../../../shared/chess/CapturedBadge'
 import { reviewEngine, useReviewStore } from '../review/reviewStore'
 import { uciLineToSan } from '../review/reviewEngine'
 import type { EngineLine } from '../../../shared/stockfish/useEngineLines'
@@ -125,6 +127,7 @@ export function MoveTooltipCard(p: {
           arrows={p.arrow ? [{ startSquare: p.arrow[0], endSquare: p.arrow[1], color: '#ca8a04' }] : undefined}
         />
         {judged?.best && !sameAsBest && <GhostArrow from={judged.best.from} to={judged.best.to} />}
+        <CapturedBadge piece={fenBefore ? capturedPiece(fenBefore, p.fen) : null} />
       </div>
       {judged && node && (
         <div className="space-y-0.5 px-2 py-1 text-[11px] leading-tight text-slate-700">

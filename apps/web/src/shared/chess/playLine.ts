@@ -1,7 +1,11 @@
 import { Chess } from 'chess.js'
 
 /** A move of a line with the position after it (for its thumbnail and replay). */
-export interface LinePosition { fen: string; from: string; to: string; san: string }
+export interface LinePosition {
+  fen: string; from: string; to: string; san: string
+  /** The piece the move took, as a FEN letter (upper case = White's). */
+  captured?: string
+}
 
 const UCI = /^[a-h][1-8][a-h][1-8][qrbn]?$/
 
@@ -18,7 +22,8 @@ export function playLine(fen: string, moves: string[], max = Infinity): { positi
       const done = UCI.test(m)
         ? chess.move({ from: m.slice(0, 2), to: m.slice(2, 4), promotion: m[4] ?? 'q' })
         : chess.move(m.replace(/[!?]+$/, ''))
-      positions.push({ fen: chess.fen(), from: done.from, to: done.to, san: done.san })
+      const captured = done.captured ? (done.color === 'w' ? done.captured : done.captured.toUpperCase()) : undefined
+      positions.push({ fen: chess.fen(), from: done.from, to: done.to, san: done.san, ...(captured ? { captured } : {}) })
     } catch {
       return { positions, ok: false }
     }

@@ -61,3 +61,14 @@ describe('MoveTooltipCard (S10)', () => {
     expect(screen.queryByTestId('hint-eval')).toBeNull()
   })
 })
+
+describe('MoveTooltipCard shows the piece a capture took (llm-assistant-round S13)', () => {
+  it('a capture shows the taken piece; a quiet move shows none', () => {
+    const qxf7 = tree.nodes.get(tree.mainline[6])!
+    const { unmount } = render(<MoveTooltipCard tree={tree} node={qxf7} fen={qxf7.fen} lastMove={{ from: 'h5', to: 'f7' }} />)
+    expect(screen.getByTestId('captured-piece')).toHaveTextContent('♟')
+    unmount()
+    render(<MoveTooltipCard tree={tree} node={bc4} fen={bc4.fen} lastMove={{ from: 'f1', to: 'c4' }} />)
+    expect(screen.queryByTestId('captured-piece')).toBeNull()
+  })
+})
