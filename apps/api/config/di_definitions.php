@@ -522,6 +522,20 @@ return [
         return new \App\Infrastructure\Errata\FilesystemErrataRepository($storageDir . '/errata');
     },
 
+    \App\Application\Suggestions\SuggestionRepository::class => function (ContainerInterface $c) {
+        return new \App\Infrastructure\Suggestions\DbalSuggestionRepository($c->get(Connection::class));
+    },
+    \App\Application\Suggestions\SuggestionAssetStore::class => function (ContainerInterface $c) {
+        $storageDir = $c->get('settings')['storage_dir'] ?? dirname(__DIR__) . '/storage';
+        return new \App\Infrastructure\Suggestions\FilesystemSuggestionAssetStore($storageDir . '/suggestions/assets');
+    },
+    \App\Presentation\Suggestions\SuggestionsController::class => function (ContainerInterface $c) {
+        return new \App\Presentation\Suggestions\SuggestionsController(
+            $c->get(\App\Application\Suggestions\SuggestionRepository::class),
+            $c->get(\App\Application\Suggestions\SuggestionAssetStore::class),
+        );
+    },
+
     \App\Presentation\Errata\ErrataController::class => function (ContainerInterface $c) {
         return new \App\Presentation\Errata\ErrataController($c->get(\App\Application\Errata\ErrataRepository::class));
     },

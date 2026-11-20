@@ -136,6 +136,15 @@ return function (App $app): void {
         $group->put('/books/{id:[0-9]+}/config', [BookConfigController::class, 'save']);
     })->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
 
+    // Suggestions: proposed improvements of books (require JWT + Approved)
+    $app->group('/api/suggestions', function (RouteCollectorProxy $group) {
+        $group->get('', [\App\Presentation\Suggestions\SuggestionsController::class, 'list']);
+        $group->post('', [\App\Presentation\Suggestions\SuggestionsController::class, 'create']);
+        $group->post('/assets', [\App\Presentation\Suggestions\SuggestionsController::class, 'uploadAsset']);
+        $group->get('/assets/{name}', [\App\Presentation\Suggestions\SuggestionsController::class, 'getAsset']);
+        $group->patch('/{id}', [\App\Presentation\Suggestions\SuggestionsController::class, 'updateStatus']);
+    })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
+
     // Errata: corrected main lines of book games (require JWT + Approved)
     $app->group('/api/errata', function (RouteCollectorProxy $group) {
         $group->get('', [\App\Presentation\Errata\ErrataController::class, 'list']);

@@ -6,6 +6,7 @@ import '../../errors/repoBooks'
 import { httpClient } from '../../../shared/api/httpClient'
 import { withChapterErrata, type ChapterErrata } from '../errata/chapterErrata'
 import { useErrataContext } from '../errata/errataContext'
+import { withChapterSuggestions, type ChapterSuggestions } from '../../suggestions/suggestionsApi'
 
 export interface Book {
   id: number
@@ -26,6 +27,8 @@ export interface Chapter {
   toc: ChapterTocEntry[]
   /** The errata of this book and chapter written into `html` (added by useChapter). */
   errata?: ChapterErrata
+  /** The accepted suggestions written into `html` and the stale ones (added by useChapter). */
+  suggestions?: ChapterSuggestions
 }
 
 export function useBooks() {
@@ -64,7 +67,11 @@ export function useChapter(bookId: number, chapterOrder: number) {
       const chapter = await httpClient<Chapter>(`/api/library/books/${bookId}/chapters/${chapterOrder}`)
       const title = await bookTitle(queryClient, bookId)
       const { html, errata } = await withChapterErrata(chapter.html, title, chapterOrder)
-      return { ...chapter, html, errata }
+      // Accepted suggestions not yet written into the EPUB; never blocks reading.
+      const suggested = await withChapterSuggestions(html, title, chapterOrder).catch(() => null)
+      return suggested
+        ? { ...chapter, html: suggested.html, errata, suggestions: suggested.suggestions }
+        : { ...chapter, html, errata }
     },
   })
   const setErrataContext = useErrataContext((s) => s.set)
