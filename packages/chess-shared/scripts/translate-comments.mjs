@@ -26,6 +26,7 @@
 import { appendFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
+import { toFigurines } from './figurines.mjs'
 
 export const TARGET_LANGS = ['es', 'en', 'de', 'fr']
 const LANGS = {
@@ -70,6 +71,54 @@ export function translatePrompt(c, target) {
   }
 }
 
+const JSON_SKIP = 'Answer with JSON only: {"text": "<the new comment>"}.'
+
+/**
+ * v2 (measured with local models, see README): moves travel as figurines so no
+ * language has to convert them; names and references are removed; a comment
+ * with no chess content left is dropped ({"skip": true}).
+ */
+export function universalPromptV2(c) {
+  return {
+    system: [
+      'You are an editor of chess commentary. Rewrite the comment so that it is true and useful for ANY game that reaches the given position, not only the game it was written for.',
+      'Rules:',
+      '1. Remove every reference to a person (even only a first name or surname), tournament, date, book, chapter, note, quoted author ("(Euwe)"), or to other moments of the game ("earlier", "as we saw", "the previous move"). Speak of White and Black, the white knight, etc. Remove greetings, results and personal remarks ("I think", "my notes").',
+      '2. Keep every chess idea, plan and evaluation of the comment, in the same language as the comment. Do not add facts.',
+      '3. Moves are written with figurines (♘f3, ♗xe6, ♕h4+, O-O, e4, dxe5). Copy every move of the comment exactly as it is; never add, drop or change one. Do not use piece letters.',
+      '4. If no chess content remains after removing those references (only the result, greetings, news about the event), answer {"text": "", "skip": true}.',
+      JSON_SKIP,
+    ].join('\n'),
+    user: `Position (FEN): ${c.fen}\nLast move: ${c.move}\nComment:\n${c.text}`,
+  }
+}
+
+export function translatePromptV2(c, target) {
+  const name = langName(target)
+  return {
+    system: [
+      `You translate chess commentary into ${name}, as a chess author writing in ${name} would: natural and with the usual chess terminology.`,
+      'Moves are written with figurines (♘f3, ♗xe6, ♕h4+, O-O, e4). Copy them exactly as they are: do not convert them to letters, do not translate them, do not add or drop any. Keep move numbers and punctuation like "…" as they are.',
+      'Do not add or remove ideas.',
+      JSON_SKIP,
+    ].join('\n'),
+    user: `Comment (${langName(c.lang)}):\n${c.text}`,
+  }
+}
+
+/** {text, skip} of a model answer; an empty text is only valid with skip: true. */
+export function parseAiAnswer(answer) {
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(answer)
+  const raw = (fenced ? fenced[1] : answer).trim()
+  const start = raw.indexOf('{')
+  let value
+  try { value = JSON.parse(start >= 0 ? raw.slice(start, raw.lastIndexOf('}') + 1) : raw) } catch { /* below */ }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('The model did not answer with JSON.')
+  if (value.skip === true) return { text: '', skip: true }
+  if (typeof value.text !== 'string' || !value.text.trim()) throw new Error('The model gave an empty comment.')
+  return { text: value.text.trim(), skip: false }
+}
+
 /** The text of a {"text": …} answer (fenced or with prose around it). */
 export function parseAiText(answer) {
   const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(answer)
@@ -108,7 +157,37 @@ export function validateRewrite(original, proposal) {
 }
 
 /** One chat completion; retries 429 and 5xx with backoff. */
-async function complete(prompt, { baseUrl, model, key, fetchImpl, sleep, retries = 3 }) {
+const ollamaRoot = (baseUrl) => baseUrl.replace(/\/+$/, '').replace(/\/v1$/, '')
+const noFormat = new Set()
+
+/** Ollama's own API: keeps the model loaded in memory (keep_alive -1) and turns thinking off. */
+async function completeOllama(prompt, { baseUrl, model, fetchImpl, sleep, retries = 3 }) {
+  const url = `${ollamaRoot(baseUrl)}/api/chat`
+  for (let attempt = 0; ; attempt++) {
+    const body = {
+      model, stream: false, keep_alive: -1, options: { temperature: 0.2, num_ctx: 4096 },
+      messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
+    }
+    if (!noFormat.has(model)) body.format = 'json'
+    if (model.startsWith('gpt-oss')) body.think = 'low'
+    else if (!model.startsWith('translategemma')) body.think = false
+    const res = await fetchImpl(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(300_000) })
+    const data = await res.json().catch(() => ({}))
+    if (res.ok && !data.error) return { content: data.message?.content ?? '', model: data.model ?? model }
+    if (/structured output/i.test(data.error ?? '') && !noFormat.has(model)) { noFormat.add(model); continue }
+    if (attempt >= retries || (res.status !== 429 && res.status < 500)) throw new Error(data.error ?? `HTTP ${res.status}`)
+    await sleep(2_000 * 2 ** attempt)
+  }
+}
+
+/** Loads a model into memory and keeps it there until Ollama stops. */
+export async function preloadOllama(baseUrl, model, fetchImpl = fetch) {
+  await fetchImpl(`${ollamaRoot(baseUrl)}/api/generate`, { method: 'POST', body: JSON.stringify({ model, keep_alive: -1 }) })
+}
+
+async function complete(prompt, llmConfig) {
+  if (llmConfig.ollama) return completeOllama(prompt, llmConfig)
+  const { baseUrl, model, key, fetchImpl, sleep, retries = 3 } = llmConfig
   const headers = { 'Content-Type': 'application/json' }
   if (key) headers.Authorization = `Bearer ${key}`
   const body = JSON.stringify({
@@ -143,7 +222,11 @@ export async function translateComments(opts, { fetchImpl = fetch, sleep = (ms) 
   for (const l of langs) if (!LANGS[l]) throw new Error(`unsupported language: ${l} (use ${TARGET_LANGS.join(', ')})`)
   if (!opts.model) throw new Error('a model is needed (--model or LLM_MODEL)')
   const reviewPath = opts.review ?? `${opts.db}.review.jsonl`
-  const llm = { baseUrl: opts.baseUrl ?? 'http://localhost:11434/v1', model: opts.model, key: opts.key, fetchImpl, sleep }
+  const baseUrl = opts.baseUrl ?? 'http://localhost:11434/v1'
+  const llm = { baseUrl, model: opts.model, key: opts.key, fetchImpl, sleep, ollama: !!opts.ollama }
+  // v2 may use another model to translate (a translation model is better at it than the one that rewrites).
+  const translateLlm = { ...llm, model: opts.translateModel ?? opts.model }
+  if (llm.ollama) for (const m of new Set([llm.model, translateLlm.model])) await preloadOllama(baseUrl, m, fetchImpl)
   const db = new DatabaseSync(opts.db)
   const where = opts.sourceKind ? 'WHERE s.kind = ?' : ''
   const hasMoveNumber = db.prepare('PRAGMA table_info(position_comments)').all().some((c) => c.name === 'move_number')
@@ -152,48 +235,76 @@ export async function translateComments(opts, { fetchImpl = fetch, sleep = (ms) 
     .all(...(opts.sourceKind ? [opts.sourceKind] : []))
   const existing = db.prepare('SELECT text FROM comment_translations WHERE comment_id = ? AND lang = ?')
   const insert = db.prepare('INSERT OR REPLACE INTO comment_translations (comment_id, lang, text) VALUES (?, ?, ?)')
-  const summary = { comments: 0, accepted: 0, written: 0, rejected: 0, failed: 0, skipped: 0 }
+  const summary = { comments: 0, accepted: 0, written: 0, rejected: 0, failed: 0, skipped: 0, dropped: 0 }
   let calls = 0
 
-  const propose = async (c, action, lang, prompt) => {
+  const propose = async (c, action, lang, prompt, source, config) => {
     if (calls++ > 0 && opts.delayMs) await sleep(opts.delayMs)
-    const line = { id: c.id, lang, action, original: c.text, proposal: null, problems: [], model: llm.model, status: 'failed' }
+    const line = { id: c.id, lang, action, original: source, proposal: null, problems: [], model: config.model, status: 'failed' }
     try {
-      const answer = await complete(prompt, llm)
+      const answer = await complete(prompt, config)
       line.model = answer.model
-      line.proposal = parseAiText(answer.content)
-      line.problems = validateRewrite(c.text, line.proposal)
-      line.status = line.problems.length ? 'rejected' : 'accepted'
+      const parsed = opts.v2 ? parseAiAnswer(answer.content) : { text: parseAiText(answer.content), skip: false }
+      if (parsed.skip) {
+        if (action !== 'universal') throw new Error('a translation cannot be skipped')
+        line.status = 'dropped'
+      } else {
+        line.proposal = parsed.text
+        line.problems = validateRewrite(source, line.proposal)
+        line.status = line.problems.length ? 'rejected' : 'accepted'
+      }
     } catch (e) {
       line.problems = [e.message]
     }
     if (opts.dryRun) line.dryRun = true
     appendFileSync(reviewPath, JSON.stringify(line) + '\n')
+    if (line.status === 'dropped') {
+      summary.dropped++
+      if (!opts.dryRun) { insert.run(c.id, lang, ''); summary.written++ }
+      return { dropped: true }
+    }
     summary[line.status === 'accepted' ? 'accepted' : line.status]++
     if (line.status !== 'accepted') return null
     if (!opts.dryRun) { insert.run(c.id, lang, line.proposal); summary.written++ }
     return line.proposal
   }
 
-  try {
-    for (const c of comments) {
-      const own = existing.get(c.id, c.lang)?.text
-      const todo = langs.filter((l) => l !== c.lang && !existing.get(c.id, l))
-      const universalDue = opts.universal && !own
-      if (!todo.length && !universalDue) { summary.skipped++; continue }
-      if (opts.limit && summary.comments >= opts.limit) break
-      summary.comments++
-      const input = { text: c.text, lang: c.lang, fen: `${c.position} 0 1`, move: moveLabel(c) }
-      let source = opts.universal ? own ?? null : null
-      if (universalDue) source = await propose(c, 'universal', c.lang, universalPrompt(input))
-      const from = source ? { ...input, text: source } : input
-      for (const lang of todo) await propose(c, 'translate', lang, translatePrompt(from, lang))
-      log(`#${c.id}: ${summary.accepted} accepted, ${summary.rejected} rejected, ${summary.failed} failed so far`)
+  const handle = async (c) => {
+    const own = existing.get(c.id, c.lang)?.text
+    const todo = langs.filter((l) => l !== c.lang && existing.get(c.id, l) === undefined)
+    const universalDue = opts.universal && own === undefined
+    // An empty own-language row marks a comment dropped as not universal: nothing more is done with it.
+    if (own === '' || (!todo.length && !universalDue)) { summary.skipped++; return }
+    summary.comments++
+    const text = opts.v2 ? toFigurines(c.text, 'en') : c.text
+    const input = { text, lang: c.lang, fen: `${c.position} 0 1`, move: moveLabel(c) }
+    let source = opts.universal ? own ?? null : null
+    if (universalDue) {
+      const made = await propose(c, 'universal', c.lang, (opts.v2 ? universalPromptV2 : universalPrompt)(input), text, llm)
+      if (made?.dropped) return
+      source = made
+      // The original still carries names and references: it is never translated in place of the rewrite.
+      if (!source) return
     }
+    const from = source ? { ...input, text: source } : input
+    for (const lang of todo) await propose(c, 'translate', lang, (opts.v2 ? translatePromptV2 : translatePrompt)(from, lang), from.text, translateLlm)
+    log(`#${c.id}: ${summary.accepted} accepted, ${summary.rejected} rejected, ${summary.failed} failed, ${summary.dropped} dropped so far`)
+  }
+
+  try {
+    // Several comments in flight at once (the model server batches them); each worker takes the next one.
+    let next = 0
+    const worker = async () => {
+      while (next < comments.length) {
+        if (opts.limit && summary.comments >= opts.limit) return
+        await handle(comments[next++])
+      }
+    }
+    await Promise.all(Array.from({ length: Math.max(1, opts.concurrency ?? 1) }, worker))
   } finally {
     db.close()
   }
-  log(`${summary.comments} comments: ${summary.accepted} accepted (${summary.written} written${opts.dryRun ? ', dry run' : ''}), ${summary.rejected} rejected, ${summary.failed} failed, ${summary.skipped} already done; review: ${reviewPath}`)
+  log(`${summary.comments} comments: ${summary.accepted} accepted (${summary.written} written${opts.dryRun ? ', dry run' : ''}), ${summary.rejected} rejected, ${summary.failed} failed, ${summary.dropped} dropped, ${summary.skipped} already done; review: ${reviewPath}`)
   return summary
 }
 
@@ -212,6 +323,10 @@ function parseArgs(argv) {
     else if (a === '--delay-ms') flags.delayMs = Number(value())
     else if (a === '--review') flags.review = value()
     else if (a === '--dry-run') flags.dryRun = true
+    else if (a === '--ollama') flags.ollama = true
+    else if (a === '--v2') flags.v2 = true
+    else if (a === '--translate-model') flags.translateModel = value()
+    else if (a === '--concurrency') flags.concurrency = Number(value())
     else if (a.startsWith('--')) throw new Error(`unknown flag ${a}`)
     else flags.db = a
   }

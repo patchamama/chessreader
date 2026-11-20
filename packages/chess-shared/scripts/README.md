@@ -103,6 +103,42 @@ Reads the manifest and writes the database and its static files.
 - `--base-url`, `--model`, `--key` or `LLM_BASE_URL`, `LLM_MODEL`,
   `LLM_API_KEY`. A local Ollama needs no key.
 
+#### v2: the pipeline chosen after measuring local models
+
+```sh
+node scripts/translate-comments.mjs <comments.sqlite> --ollama --v2 --universal \
+  --model gpt-oss:20b --translate-model translategemma:27b --langs es,en,de \
+  --source-kind lichess --concurrency 3 --review <run.review.jsonl>
+```
+
+- `--ollama` uses Ollama's own API: each model is preloaded and kept in GPU
+  memory (`keep_alive: -1`), thinking is turned off, and a model without JSON
+  mode still answers.
+- `--v2` stores the moves of a comment as figurines (`♘f3`), a notation that
+  needs no translation (the app writes them in the reader's notation), uses
+  the v2 prompts, and lets the model drop a comment with no chess content
+  left (results, greetings): it gets an empty row in its own language and is
+  never borrowed again. The original text always stays in `position_comments.text`;
+  the standardised text is the row in the comment's own language.
+- `--translate-model` translates with another model than the one that rewrites.
+- A rewrite that fails the checks is not translated (the original names players).
+- `--concurrency` comments in flight at once.
+
+Measured on 14 comments (8 Lichess, 6 books), Apple GPU, models kept loaded
+(seconds per call, share of answers that kept every move):
+
+| Model | Standardise | Translate | Notes |
+|---|---|---|---|
+| gpt-oss:20b | 3.0 s, 93 % | 2.2 s, 100 % | fast; weak German/Spanish terminology ("clavado", "Schlage") |
+| qwen3.6:35b-a3b | 1.4 s, 93 % | 1.8 s, 85 % | fastest, but loses moves |
+| qwen3.8:27b | 4.0 s, 100 % | 4.9 s, 100 % | translates "pin" as "clavo" |
+| gemma4:31b | 5.3 s, 93 % | 4.8 s, 100 % | good, slower |
+| translategemma:27b | – | 5–6.5 s, 100 % | best terminology ("clavada", "Fesselung"); chosen to translate |
+| translategemma:12b | – | 4.6 s | rejected: gender and terminology errors |
+
+Standardising uses gpt-oss with the v2 prompt (the v3 prompt with examples
+lost moves with it). Throughput is bound by the GPU: about 450 comments an hour.
+
 ### Publishing to the sample repository
 
 Copy `comments.sqlite`, `p/`, `g/`, `comments-index/` and `index.json` from the

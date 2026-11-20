@@ -135,3 +135,59 @@ describe('translateComments', () => {
     expect(review().find((r) => r.id === 2)).toMatchObject({ status: 'failed', problems: ['The model did not answer with JSON.'] })
   })
 })
+
+/** Ollama's native /api/chat answering from a function of the request body. */
+function ollama(answer) {
+  const calls = []
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body)
+    calls.push({ url: String(url), body })
+    if (String(url).endsWith('/api/generate')) return { ok: true, status: 200, json: async () => ({}) }
+    return { ok: true, status: 200, json: async () => ({ model: body.model, message: { content: answer(body) } }) }
+  }
+  return { calls, fetchImpl }
+}
+const v2 = (opts, fetchImpl) => translateComments({ db: dbPath, model: 'gpt-oss:20b', translateModel: 'translategemma:27b', ollama: true, v2: true, universal: true, langs: ['es'], delayMs: 0, review: join(dir, 'review.jsonl'), ...opts }, { fetchImpl, sleep: async () => {}, log: () => {} })
+
+describe('v2: Ollama native, figurines, skipped comments, two models', () => {
+  it('keeps the models loaded, sends moves as figurines and uses one model to universalise and another to translate', async () => {
+    const { calls, fetchImpl } = ollama((b) => JSON.stringify({ text: b.model === 'gpt-oss:20b' ? 'After 12...♘b6 the knight eyes c4 and d5.' : 'Tras 12...♘b6 el caballo apunta a c4 y d5.' }))
+    await v2({ sourceKind: 'lichess' }, fetchImpl)
+    const chats = calls.filter((c) => c.url.endsWith('/api/chat'))
+    expect(calls.filter((c) => c.url.endsWith('/api/generate')).map((c) => [c.body.model, c.body.keep_alive])).toEqual([['gpt-oss:20b', -1], ['translategemma:27b', -1]])
+    expect(chats.map((c) => c.body.model)).toEqual(['gpt-oss:20b', 'translategemma:27b'])
+    expect(chats.every((c) => c.body.keep_alive === -1)).toBe(true)
+    expect(chats[0].body.messages[1].content).toContain('12...♘b6')
+    expect(rows()).toEqual([
+      { comment_id: 2, lang: 'en', text: 'After 12...♘b6 the knight eyes c4 and d5.' },
+      { comment_id: 2, lang: 'es', text: 'Tras 12...♘b6 el caballo apunta a c4 y d5.' },
+    ])
+  })
+
+  it('a comment with no chess content left is dropped: an empty row in its own language, no translations, never asked again', async () => {
+    const { calls, fetchImpl } = ollama(() => JSON.stringify({ text: '', skip: true }))
+    const summary = await v2({ sourceKind: 'lichess' }, fetchImpl)
+    expect(calls.filter((c) => c.url.endsWith('/api/chat'))).toHaveLength(1)
+    expect(rows()).toEqual([{ comment_id: 2, lang: 'en', text: '' }])
+    expect(summary).toMatchObject({ dropped: 1, written: 1 })
+    const again = ollama(() => JSON.stringify({ text: 'x' }))
+    await v2({ sourceKind: 'lichess' }, again.fetchImpl)
+    expect(again.calls.filter((c) => c.url.endsWith('/api/chat'))).toHaveLength(0)
+  })
+
+  it('a universal rewrite that is rejected is not translated: the original names its players', async () => {
+    const { calls, fetchImpl } = ollama(() => JSON.stringify({ text: 'Nothing like the original.' }))
+    const summary = await v2({ sourceKind: 'lichess' }, fetchImpl)
+    expect(calls.filter((c) => c.url.endsWith('/api/chat'))).toHaveLength(1)
+    expect(summary).toMatchObject({ rejected: 1, written: 0 })
+    expect(rows()).toEqual([])
+  })
+
+  it('works on several comments at once and gets through all of them', async () => {
+    const { calls, fetchImpl } = ollama((b) => JSON.stringify({ text: b.messages[1].content.includes('♘b6') ? 'After 12...♘b6 the knight eyes c4 and d5.' : 'The ♗g5 and ...b5 are strong.' }))
+    const summary = await v2({ concurrency: 2 }, fetchImpl)
+    expect(summary.comments).toBe(2)
+    expect(calls.filter((c) => c.url.endsWith('/api/chat'))).toHaveLength(4)
+    expect(rows().map((r) => `${r.comment_id}:${r.lang}`)).toEqual(['1:en', '1:es', '2:en', '2:es'])
+  })
+})
