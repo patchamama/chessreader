@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Chess } from 'chess.js'
 import ChessBoard from '../../shared/chess/ChessBoard'
 import { legalTargets } from '../training/captured'
 import { numberMoves } from './pgnNormalize'
+import { replayLine } from './positionInput'
 import { accumulatedView, analyseMoves, legalMoves, perMoveView, type MapResult, type SquareCount } from './commentMap'
 
 const START = new Chess().fen()
 /** No pieces at all: the starting point to set up a configuration. */
 export const EMPTY_FEN = '8/8/8/8/8/8/8/8 w - - 0 1'
 
-interface Step { fen: string; san: string | null; from?: string; to?: string }
 type MapView = 'move' | 'sum'
 
 const FILES = 'abcdefgh'
@@ -25,18 +25,20 @@ const heat = (count: number, max: number) => {
   return count > 0 ? `hsla(${Math.round(45 - 45 * t)}, 95%, 50%, ${(0.25 + 0.5 * t).toFixed(2)})` : 'transparent'
 }
 
+/** The shared line of Find by position: where it starts, its moves and the one shown (ply = moves played on the board). */
+export interface FinderLine { start: string; sans: string[]; ply: number }
+
 /**
- * An interactive board for Find by position (S4): the user plays moves (click or drag) and
- * `onFen` hears the position after each one, after Back, Reset and Clear. A suggested line
- * (opening or trap) can be replayed move by move with Next while the played moves follow it.
- * With `count` (comments of a position, under the filters): selecting a piece writes on each
- * square it can go to the comments the move would find (S19: a faint 0 when none; clicks work
- * on the badge; dragging does not show them), and the comment map button analyses every move
- * of the position (S20), per move or accumulated, as a colour gradient.
+ * The interactive board of Find by position (S4, S22), driven by the one line the text box,
+ * the move list and the suggestions share: the position shown is the one after `ply` moves,
+ * First/Back/Forward/Last and an auto-play (1 s per move) walk the line, and a move played
+ * on the board replaces the rest of the line from that ply and goes back through `onLine`.
+ * `onFen` hears the position shown. With `count` (comments of a position, under the filters):
+ * selecting a piece writes on each square it can go to the comments the move would find
+ * (S19: a faint 0 when none; dragging does not show them), and the comment map button
+ * analyses every move of the position (S20), per move or accumulated, as a colour gradient.
  */
-export default function FinderBoard({ line, onFen, count }: { line: { sans: string[] } | null; onFen: (fen: string) => void; count?: (fen: string) => Promise<number> }) {
-  const [steps, setSteps] = useState<Step[]>([{ fen: START, san: null }])
-  const [onLine, setOnLine] = useState<number | null>(line ? 0 : null)
+export default function FinderBoard({ line, onLine, onFen, count }: { line: FinderLine; onLine: (line: FinderLine) => void; onFen: (fen: string) => void; count?: (fen: string) => Promise<number> }) {
   const [flipped, setFlipped] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [badges, setBadges] = useState<Record<string, number | null>>({})
@@ -44,16 +46,31 @@ export default function FinderBoard({ line, onFen, count }: { line: { sans: stri
   const [view, setView] = useState<MapView>('move')
   const [results, setResults] = useState<MapResult[]>([])
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
-  const current = steps[steps.length - 1]
-  const countRef = useRef(count)
-  countRef.current = count
+  const [playing, setPlaying] = useState(false)
 
-  useEffect(() => {
-    setSteps([{ fen: START, san: null }])
-    setOnLine(line ? 0 : null)
-    setSelected(null)
-  }, [line])
+  const positions = useMemo(() => replayLine(line.start, line.sans), [line.start, line.sans])
+  const ply = Math.min(line.ply, positions.length)
+  const current = { fen: ply === 0 ? line.start : positions[ply - 1].fen }
+  const lastMove = useMemo(() => {
+    if (ply === 0) return null
+    try {
+      const c = new Chess(ply === 1 ? line.start : positions[ply - 2].fen)
+      const m = c.move(positions[ply - 1].san as string)
+      return { from: m.from, to: m.to }
+    } catch { return null }
+  }, [line.start, positions, ply])
+
   useEffect(() => { onFen(current.fen) }, [current.fen, onFen])
+  useEffect(() => { setSelected(null) }, [current.fen])
+  const atEnd = ply >= positions.length
+  const goTo = (p: number) => onLine({ ...line, sans: line.sans, ply: Math.max(0, Math.min(positions.length, p)) })
+  // Auto-play: one move a second until the end of the line.
+  useEffect(() => {
+    if (!playing) return
+    if (atEnd) { setPlaying(false); return }
+    const t = setTimeout(() => onLine({ ...line, ply: ply + 1 }), 1000)
+    return () => clearTimeout(t)
+  }, [playing, atEnd, ply, line, onLine])
 
   const targets = useMemo(() => (selected ? legalTargets(current.fen, selected) : []), [current.fen, selected])
 
@@ -85,12 +102,13 @@ export default function FinderBoard({ line, onFen, count }: { line: { sans: stri
     return () => ctl.abort()
   }, [mapOn, current.fen, count])
 
-  const play = (move: string | { from: string; to: string; promotion?: string }): boolean => {
+  const play = (move: { from: string; to: string; promotion?: string }): boolean => {
     try {
       const chess = new Chess(current.fen)
       const m = chess.move(move, { strict: false })
-      setSteps((s) => [...s, { fen: chess.fen(), san: m.san, from: m.from, to: m.to }])
-      setOnLine((i) => (i !== null && line?.sans[i] === m.san ? i + 1 : null))
+      // Playing the next move of the line only walks it; any other move replaces the rest of the line.
+      const sans = line.sans[ply] === m.san ? line.sans : [...line.sans.slice(0, ply), m.san]
+      onLine({ start: line.start, sans, ply: ply + 1 })
       setSelected(null)
       return true
     } catch {
@@ -101,28 +119,20 @@ export default function FinderBoard({ line, onFen, count }: { line: { sans: stri
     if (selected && targets.includes(square)) { play({ from: selected, to: square, promotion: 'q' }); return }
     setSelected(legalTargets(current.fen, square).length ? square : null)
   }
-  const back = () => {
-    if (steps.length < 2) return
-    setSteps((s) => s.slice(0, -1))
-    setOnLine((i) => (i !== null && i > 0 ? i - 1 : i))
-    setSelected(null)
-  }
-  const restart = (fen: string) => { setSteps([{ fen, san: null }]); setOnLine(fen === START && line ? 0 : null); setSelected(null) }
-  const next = line && onLine !== null ? line.sans[onLine] : undefined
+  const restart = (fen: string) => { setPlaying(false); onLine({ start: fen, sans: [], ply: 0 }) }
 
   const mapView: Map<string, SquareCount> = useMemo(() => (view === 'move' ? perMoveView(results) : accumulatedView(results)), [view, results])
   const max = Math.max(0, ...[...mapView.values()].map((v) => v.count))
 
   const tool = 'rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-40'
-  const last = current.from && current.to ? { from: current.from, to: current.to } : null
   const showMap = mapOn && !!count
   const cells = displayOrder(flipped)
-  const played = steps.slice(1).map((s) => s.san as string)
+  const played = positions.slice(0, ply).map((m) => m.san as string)
 
   return (
     <div className="w-full max-w-[360px]">
       <div className="relative aspect-square">
-        <ChessBoard fen={current.fen} orientation={flipped ? 'black' : 'white'} lastMove={last} allowDragging
+        <ChessBoard fen={current.fen} orientation={flipped ? 'black' : 'white'} lastMove={lastMove} allowDragging
           onPieceDrop={(from, to) => play({ from, to, promotion: 'q' })} onSquareClick={click} selectedSquare={selected} legalTargets={targets} />
         <div className="pointer-events-none absolute inset-0 grid grid-cols-8 grid-rows-8" data-testid="board-overlay">
           {cells.map((sq) => {
@@ -151,8 +161,11 @@ export default function FinderBoard({ line, onFen, count }: { line: { sans: stri
         </div>
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-1">
-        <button type="button" className={tool} disabled={steps.length < 2} onClick={back}>Back</button>
-        {line && <button type="button" className={tool} disabled={next === undefined} onClick={() => next && play(next)}>Next move of the line</button>}
+        <button type="button" className={tool} aria-label="First move" disabled={ply === 0} onClick={() => { setPlaying(false); goTo(0) }}>⏮</button>
+        <button type="button" className={tool} aria-label="Back" disabled={ply === 0} onClick={() => { setPlaying(false); goTo(ply - 1) }}>◀</button>
+        <button type="button" className={tool} aria-label={playing ? 'Pause' : 'Play'} aria-pressed={playing} disabled={positions.length === 0 || (atEnd && !playing)} onClick={() => setPlaying((p) => !p)}>{playing ? '⏸' : '▶'}</button>
+        <button type="button" className={tool} aria-label="Forward" disabled={atEnd} onClick={() => { setPlaying(false); goTo(ply + 1) }}>▶▶</button>
+        <button type="button" className={tool} aria-label="Last move" disabled={atEnd} onClick={() => { setPlaying(false); goTo(positions.length) }}>⏭</button>
         <button type="button" className={tool} onClick={() => restart(START)}>Reset</button>
         <button type="button" className={tool} onClick={() => restart(EMPTY_FEN)}>Clear</button>
         <button type="button" className={tool} onClick={() => setFlipped((f) => !f)}>Flip</button>
@@ -176,7 +189,7 @@ export default function FinderBoard({ line, onFen, count }: { line: { sans: stri
           </p>
         </div>
       )}
-      <p className="mt-1 font-mono text-xs text-slate-600">{played.length ? numberMoves(steps[0].fen, played) : 'Play a move on the board.'}</p>
+      <p className="mt-1 font-mono text-xs text-slate-600">{played.length ? numberMoves(line.start, played) : 'Play a move on the board.'}</p>
     </div>
   )
 }

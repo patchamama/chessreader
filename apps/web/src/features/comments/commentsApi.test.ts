@@ -12,7 +12,7 @@ vi.mock('../library/commentdb/commentLookup', () => ({
   }),
 }))
 
-import { clearCommentListCache, deleteComment, loadCommentGame, loadCommentPage, loadCommentSources, moveLabel } from './commentsApi'
+import { clearCommentListCache, deleteComment, hideComment, restoreComment, loadCommentGame, loadCommentPage, loadCommentSources, moveLabel } from './commentsApi'
 
 const sources = { 1: { kind: 'book', title: 'Invented Book', author: 'A. Writer', lang: 'es', priority: 1, book: 'invented-book' }, 2: { kind: 'lichess', title: 'Lichess studies', author: null, lang: 'en', priority: 2, book: null } }
 const entry = (id: number, source: number, text: string, lang = 'en', chapter: number | null = null) => ({
@@ -107,5 +107,35 @@ describe('deleting a comment (S17)', () => {
   it('lets a server refusal reach the caller and keeps the cache', async () => {
     http.mockRejectedValue(new Error('read-only'))
     await expect(deleteComment(2)).rejects.toThrow('read-only')
+  })
+})
+
+describe('hiding and restoring a comment (S21)', () => {
+  it('hideComment sends DELETE, restoreComment sends POST, both forget the cached pages', async () => {
+    await loadCommentPage({}, 0, 50)
+    http.mockResolvedValue({ hidden: 2 })
+    await hideComment(2)
+    expect(http).toHaveBeenCalledWith('/api/comments/2', { method: 'DELETE' })
+    files.set('comments-index/meta.json', { version: 1, total: 1, pages: 1, pageSize: 2, sources })
+    files.set('comments-index/0.json', { page: 0, comments: [entry(1, 1, 'El caballo vuelve.', 'es', 3)] })
+    expect((await loadCommentPage({}, 0, 50)).total).toBe(1)
+    http.mockResolvedValue({ restored: 2 })
+    await restoreComment(2)
+    expect(http).toHaveBeenLastCalledWith('/api/comments/2/restore', { method: 'POST' })
+  })
+
+  it('deleteComment is the deprecated alias of hideComment', () => {
+    expect(deleteComment).toBe(hideComment)
+  })
+
+  it('sends hidden=1 to the server only when asked, and maps hidden_at to hiddenAt', async () => {
+    session.on = true
+    const row = { id: 2, hash: 'h', fen: 'f', text: 't', lang: 'en', ply: 1, move_number: 1, san: 'e4', game_id: 'g', chapter: null, hidden_at: '2026-11-21 10:00:00', source: { id: 1, title: 'x', author: null, kind: 'book', lang: 'en', book: null }, game: { white: null, black: null, label: null } }
+    http.mockResolvedValue({ total: 1, comments: [row] })
+    const page = await loadCommentPage({ hidden: true }, 0, 50)
+    expect(http.mock.calls[0][0]).toContain('hidden=1')
+    expect(page.comments[0].hiddenAt).toBe('2026-11-21 10:00:00')
+    await loadCommentPage({}, 0, 50)
+    expect(http.mock.calls[1][0]).not.toContain('hidden')
   })
 })

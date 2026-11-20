@@ -30,7 +30,7 @@ final class SqlitePositionCommentStore implements PositionCommentStore
         $st = $pdo->prepare(
             'SELECT p.id, p.text, p.lang, p.ply, p.san, g.id AS game_id, g.label, s.title, s.author, s.kind
              FROM position_comments p JOIN comment_games g ON g.id = p.game_id JOIN comment_sources s ON s.id = g.source_id
-             WHERE p.hash = :hash AND p.position = :key ORDER BY s.priority, p.id LIMIT :limit'
+             WHERE p.hash = :hash AND p.position = :key' . $this->visible('p', false) . ' ORDER BY s.priority, p.id LIMIT :limit'
         );
         $st->bindValue(':hash', $hash);
         $st->bindValue(':key', $key);
@@ -84,6 +84,11 @@ final class SqlitePositionCommentStore implements PositionCommentStore
         if (($filters['kind'] ?? '') !== '') {
             $where[] = 's.kind = :kind';
             $params[':kind'] = (string) $filters['kind'];
+        }
+        if ($this->hasColumn('position_comments', 'hidden_at')) {
+            $where[] = ($filters['hidden'] ?? false) ? 'p.hidden_at IS NOT NULL' : 'p.hidden_at IS NULL';
+        } elseif ($filters['hidden'] ?? false) {
+            $where[] = '0';
         }
         $from = 'FROM position_comments p JOIN comment_games g ON g.id = p.game_id JOIN comment_sources s ON s.id = g.source_id'
             . ($where ? ' WHERE ' . implode(' AND ', $where) : '');
@@ -147,7 +152,7 @@ final class SqlitePositionCommentStore implements PositionCommentStore
         $book = $this->hasColumn('comment_sources', 'book_id') ? 's.book_id' : 'NULL';
         $rows = $pdo->query(
             "SELECT s.id, s.title, s.author, s.kind, s.lang, {$book} AS book_id,
-                    (SELECT COUNT(*) FROM position_comments p JOIN comment_games g ON g.id = p.game_id WHERE g.source_id = s.id) AS comments
+                    (SELECT COUNT(*) FROM position_comments p JOIN comment_games g ON g.id = p.game_id WHERE g.source_id = s.id" . $this->visible('p', false) . ") AS comments
              FROM comment_sources s ORDER BY s.priority, s.id"
         )->fetchAll(\PDO::FETCH_ASSOC);
         return array_map(fn(array $r) => [
@@ -156,7 +161,27 @@ final class SqlitePositionCommentStore implements PositionCommentStore
         ], $rows);
     }
 
-    public function delete(int $id): bool
+    /** SQL to append to a WHERE: hides the hidden comments (nothing when the database has no hidden_at yet). */
+    private function visible(string $alias, bool $first): string
+    {
+        if (!$this->hasColumn('position_comments', 'hidden_at')) {
+            return '';
+        }
+        return ($first ? ' WHERE ' : ' AND ') . "{$alias}.hidden_at IS NULL";
+    }
+
+    public function hide(int $id): bool
+    {
+        return $this->setHidden($id, true);
+    }
+
+    public function restore(int $id): bool
+    {
+        return $this->setHidden($id, false);
+    }
+
+    /** Hides or restores one comment; its row and translations stay. The tombstone keeps "hidden" across rebuilds. */
+    private function setHidden(int $id, bool $hide): bool
     {
         $pdo = $this->pdo();
         if ($pdo === null) {
@@ -167,6 +192,10 @@ final class SqlitePositionCommentStore implements PositionCommentStore
                 'CREATE TABLE IF NOT EXISTS comment_tombstones (position_hash TEXT NOT NULL, text_hash TEXT NOT NULL,
                  deleted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (position_hash, text_hash))'
             );
+            if (!$this->hasColumn('position_comments', 'hidden_at')) {
+                $pdo->exec('ALTER TABLE position_comments ADD COLUMN hidden_at TEXT');
+                $this->columns = [];
+            }
             $pdo->beginTransaction();
             try {
                 $st = $pdo->prepare('SELECT hash, text FROM position_comments WHERE id = :id');
@@ -176,12 +205,14 @@ final class SqlitePositionCommentStore implements PositionCommentStore
                     $pdo->rollBack();
                     return false;
                 }
-                if ($this->hasColumn('comment_translations', 'text')) {
-                    $pdo->prepare('DELETE FROM comment_translations WHERE comment_id = :id')->execute([':id' => $id]);
+                $keys = [':h' => $row['hash'], ':t' => hash('sha256', (string) $row['text'])];
+                if ($hide) {
+                    $pdo->prepare('UPDATE position_comments SET hidden_at = COALESCE(hidden_at, CURRENT_TIMESTAMP) WHERE id = :id')->execute([':id' => $id]);
+                    $pdo->prepare('INSERT OR IGNORE INTO comment_tombstones (position_hash, text_hash) VALUES (:h, :t)')->execute($keys);
+                } else {
+                    $pdo->prepare('UPDATE position_comments SET hidden_at = NULL WHERE id = :id')->execute([':id' => $id]);
+                    $pdo->prepare('DELETE FROM comment_tombstones WHERE position_hash = :h AND text_hash = :t')->execute($keys);
                 }
-                $pdo->prepare('DELETE FROM position_comments WHERE id = :id')->execute([':id' => $id]);
-                $pdo->prepare('INSERT OR IGNORE INTO comment_tombstones (position_hash, text_hash) VALUES (:h, :t)')
-                    ->execute([':h' => $row['hash'], ':t' => hash('sha256', (string) $row['text'])]);
                 $pdo->commit();
                 return true;
             } catch (\Throwable $e) {
@@ -191,7 +222,8 @@ final class SqlitePositionCommentStore implements PositionCommentStore
                 throw $e;
             }
         } catch (\PDOException $e) {
-            if (stripos($e->getMessage(), 'readonly') !== false || stripos($e->getMessage(), 'read-only') !== false || stripos($e->getMessage(), 'unable to open') !== false) {
+            $m = strtolower($e->getMessage());
+            if (str_contains($m, 'readonly') || str_contains($m, 'read-only') || str_contains($m, 'unable to open')) {
                 throw new CommentsReadOnly('The comments database is read-only', 0, $e);
             }
             throw $e;

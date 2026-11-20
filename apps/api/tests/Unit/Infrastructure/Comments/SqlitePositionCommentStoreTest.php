@@ -123,53 +123,85 @@ final class SqlitePositionCommentStoreTest extends TestCase
         self::assertSame([], $store->sources());
     }
 
-    public function test_delete_removes_the_comment_and_all_its_translations_and_leaves_a_tombstone(): void
+    public function test_hide_keeps_the_rows_and_translations_but_readers_skip_the_comment(): void
     {
-        $pdo = self::database();
-        $pdo->exec("INSERT INTO comment_translations (comment_id, lang, text) VALUES (2, 'en', 'Pinning.'), (2, 'es', 'Clavar.'), (2, 'de', ''), (3, 'es', 'Enroque.')");
+        $pdo = self::database(); // an older database: no hidden_at column yet
+        $pdo->exec("INSERT INTO comment_translations (comment_id, lang, text) VALUES (2, 'en', 'Pinning.'), (2, 'es', 'Clavar.'), (2, 'de', '')");
         $store = new SqlitePositionCommentStore('', $pdo);
 
-        self::assertTrue($store->delete(2));
+        self::assertTrue($store->hide(2));
+        self::assertTrue($store->hide(2)); // idempotent
 
-        self::assertSame(0, (int) $pdo->query('SELECT COUNT(*) FROM position_comments WHERE id = 2')->fetchColumn());
-        self::assertSame(0, (int) $pdo->query('SELECT COUNT(*) FROM comment_translations WHERE comment_id = 2')->fetchColumn());
-        self::assertSame(1, (int) $pdo->query('SELECT COUNT(*) FROM comment_translations WHERE comment_id = 3')->fetchColumn());
+        self::assertSame(3, (int) $pdo->query('SELECT COUNT(*) FROM position_comments')->fetchColumn());
+        self::assertSame(3, (int) $pdo->query('SELECT COUNT(*) FROM comment_translations WHERE comment_id = 2')->fetchColumn());
+        self::assertSame([1, 3], array_column($store->list([], 0, 50)['comments'], 'id'));
         self::assertSame(2, $store->list([], 0, 50)['total']);
+        self::assertSame([], $store->forPosition('fedcba9876543210', self::KEY, 5));
+        self::assertSame([1, 3], array_column($store->list(['hidden' => false], 0, 50)['comments'], 'id'));
+        $hidden = $store->list(['hidden' => true], 0, 50);
+        self::assertSame([2], array_column($hidden['comments'], 'id'));
+        self::assertEquals(['de' => '', 'en' => 'Pinning.', 'es' => 'Clavar.'], $hidden['comments'][0]['translations']);
         $tomb = $pdo->query('SELECT position_hash, text_hash FROM comment_tombstones')->fetchAll(\PDO::FETCH_ASSOC);
         self::assertSame([['position_hash' => 'fedcba9876543210', 'text_hash' => hash('sha256', 'Pinning the knight is 100% thematic.')]], $tomb);
     }
 
-    public function test_delete_of_an_unknown_id_changes_nothing(): void
+    public function test_sources_count_only_visible_comments(): void
     {
-        $pdo = self::database();
-        $store = new SqlitePositionCommentStore('', $pdo);
-        self::assertFalse($store->delete(99));
+        $store = new SqlitePositionCommentStore('', self::database());
+        $store->hide(2);
+        self::assertSame([1, 1], array_column($store->sources(), 'comments')); // source 2 keeps comment 3
+        $store->hide(3);
+        self::assertSame([1, 0], array_column($store->sources(), 'comments'));
+    }
+
+    public function test_hidden_filter_on_a_database_without_the_column_finds_nothing(): void
+    {
+        $store = new SqlitePositionCommentStore('', self::database());
+        self::assertSame(0, $store->list(['hidden' => true], 0, 50)['total']);
         self::assertSame(3, $store->list([], 0, 50)['total']);
     }
 
-    public function test_delete_rolls_back_when_the_tombstone_cannot_be_written(): void
+    public function test_restore_shows_the_comment_again_and_clears_the_tombstone(): void
+    {
+        $pdo = self::database();
+        $store = new SqlitePositionCommentStore('', $pdo);
+        $store->hide(2);
+        self::assertTrue($store->restore(2));
+        self::assertSame([1, 2, 3], array_column($store->list([], 0, 50)['comments'], 'id'));
+        self::assertSame(0, (int) $pdo->query('SELECT COUNT(*) FROM comment_tombstones')->fetchColumn());
+        self::assertFalse($store->restore(99));
+    }
+
+    public function test_hide_of_an_unknown_id_changes_nothing(): void
+    {
+        $pdo = self::database();
+        $store = new SqlitePositionCommentStore('', $pdo);
+        self::assertFalse($store->hide(99));
+        self::assertSame(3, $store->list([], 0, 50)['total']);
+    }
+
+    public function test_hide_rolls_back_when_the_tombstone_cannot_be_written(): void
     {
         $pdo = self::database();
         $pdo->exec('CREATE TABLE comment_tombstones (position_hash TEXT NOT NULL)'); // wrong shape: the insert fails
         $store = new SqlitePositionCommentStore('', $pdo);
         try {
-            $store->delete(1);
+            $store->hide(1);
             self::fail('expected a failure');
         } catch (\Throwable) {
         }
-        self::assertSame(3, (int) $pdo->query('SELECT COUNT(*) FROM position_comments')->fetchColumn());
+        self::assertSame(3, $store->list([], 0, 50)['total']);
     }
 
-    public function test_delete_on_a_read_only_database_reports_it(): void
+    public function test_hide_on_a_read_only_database_reports_it(): void
     {
         $file = sys_get_temp_dir() . '/comments-ro-' . bin2hex(random_bytes(4)) . '.sqlite';
-        $db = self::database();
-        $db->exec("VACUUM INTO '" . $file . "'");
+        self::database()->exec("VACUUM INTO '" . $file . "'");
         chmod($file, 0444);
         try {
             $store = new SqlitePositionCommentStore($file);
             $this->expectException(\App\Application\Comments\Port\CommentsReadOnly::class);
-            $store->delete(1);
+            $store->hide(1);
         } finally {
             chmod($file, 0644);
             @unlink($file);

@@ -28,14 +28,16 @@ export interface CommentEntry {
   game: { white: string | null; black: string | null; label: string | null }
   /** The comment in other languages by language (the universal text is under the comment's own language); undefined when the list cannot tell. */
   translations?: Record<string, string>
+  /** When the comment was hidden (server only); null or undefined when visible. */
+  hiddenAt?: string | null
 }
 
-export interface CommentFilter { q?: string; source?: number; lang?: string; kind?: string }
+export interface CommentFilter { q?: string; source?: number; lang?: string; kind?: string; /** true: only the hidden comments (to restore them); default only the visible ones. Server only. */ hidden?: boolean }
 export interface CommentPage { total: number; comments: CommentEntry[] }
 
 interface IndexEntry { id: number; hash: string; fen: string; text: string; lang: string; ply: number; move: number; san: string; game: string; source: number; label: string | null; white: string | null; black: string | null; chapter: number | null; translations?: Record<string, string> }
 interface IndexMeta { total: number; pages: number; pageSize: number; sources: Record<string, Omit<CommentSource, 'id'> & { priority?: number }> }
-interface ServerComment { id: number; hash: string; fen: string; text: string; lang: string; ply: number; move_number: number; san: string; game_id: string; chapter: number | null; translations?: Record<string, string>; source: CommentSource; game: CommentEntry['game'] }
+interface ServerComment { id: number; hash: string; fen: string; text: string; lang: string; ply: number; move_number: number; san: string; game_id: string; chapter: number | null; translations?: Record<string, string>; hidden_at?: string | null; source: CommentSource; game: CommentEntry['game'] }
 
 /** "12...Nb6" or "8. Nc3": white moves are on odd plies. */
 export const moveLabel = (c: Pick<CommentEntry, 'ply' | 'move' | 'san'>) => `${c.move}${c.ply % 2 === 1 ? '. ' : '...'}${c.san}`
@@ -79,6 +81,7 @@ const fromIndex = (m: IndexMeta, e: IndexEntry): CommentEntry => ({
 const fromServer = (c: ServerComment): CommentEntry => ({
   id: c.id, hash: c.hash, fen: c.fen, text: c.text, lang: c.lang, ply: c.ply, move: c.move_number, san: c.san, gameId: c.game_id, chapter: c.chapter ?? null,
   source: c.source, game: c.game, ...(c.translations ? { translations: c.translations } : {}),
+  ...(c.hidden_at !== undefined ? { hiddenAt: c.hidden_at } : {}),
 })
 
 const filtered = (f: CommentFilter) => !!(f.q?.trim() || f.source || f.lang || f.kind)
@@ -99,6 +102,7 @@ export async function loadCommentPage(filter: CommentFilter, offset: number, lim
     if (filter.source) q.set('source', String(filter.source))
     if (filter.lang) q.set('lang', filter.lang)
     if (filter.kind) q.set('kind', filter.kind)
+    if (filter.hidden) q.set('hidden', '1')
     const r = await httpClient<{ total: number; comments: ServerComment[] }>(`/api/comments?${q}`, { method: 'GET' })
     return { total: r.total, comments: r.comments.map(fromServer) }
   }
@@ -132,8 +136,17 @@ export async function loadCommentGame(id: string): Promise<CommentGame> {
   return { id: g.id, white: g.white ?? null, black: g.black ?? null, pgn: g.pgn }
 }
 
-/** Deletes a comment (and its translations) from the server's commentary database for good. */
-export async function deleteComment(id: number): Promise<void> {
-  await httpClient<{ deleted: number }>(`/api/comments/${id}`, { method: 'DELETE' })
+/** Hides a comment: it stays in the server's database but is no longer listed or shown (admin). */
+export async function hideComment(id: number): Promise<void> {
+  await httpClient<{ hidden: number }>(`/api/comments/${id}`, { method: 'DELETE' })
   clearCommentListCache()
 }
+
+/** Shows a hidden comment again (admin). */
+export async function restoreComment(id: number): Promise<void> {
+  await httpClient<{ restored: number }>(`/api/comments/${id}/restore`, { method: 'POST' })
+  clearCommentListCache()
+}
+
+/** @deprecated Comments are hidden, not deleted: use hideComment. */
+export const deleteComment = hideComment

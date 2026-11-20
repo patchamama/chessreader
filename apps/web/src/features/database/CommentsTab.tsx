@@ -6,7 +6,7 @@ import { withBusy, withProgress } from '../../shared/layout/busyStore'
 import { saveProgress } from '../library/store/readingStore'
 import { boardSvgDataUrl } from '../library/utils/boardSvg'
 import { pgnToChapters } from '../gamesearch/pgnChapters'
-import { deleteComment, loadCommentGame, loadCommentPage, loadCommentSources, moveLabel, type CommentEntry, type CommentFilter, type CommentSource } from '../comments/commentsApi'
+import { hideComment, restoreComment, loadCommentGame, loadCommentPage, loadCommentSources, moveLabel, type CommentEntry, type CommentFilter, type CommentSource } from '../comments/commentsApi'
 import { langName, TARGET_LANGS, type TargetLang } from '../comments/commentPrompts'
 import {
   proposeComment, proposeGameTranslation, runPagedBatch, saveCommentProposal, saveGameProposal,
@@ -64,6 +64,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [batchAction, setBatchAction] = useState('universal')
   const [details, setDetails] = useState<CommentEntry | null>(null)
+  const [hiddenView, setHiddenView] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [allMatching, setAllMatching] = useState(false)
   const [overwrite, setOverwrite] = useState(false)
@@ -73,9 +74,9 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
 
   useEffect(() => { loadCommentSources().then(setSources, () => setSources([])) }, [])
   const cleanFilter = useCallback((): CommentFilter => {
-    const f: CommentFilter = { q: filter.q, ...(filter.source ? { source: filter.source } : {}), lang: filter.lang, kind: filter.kind }
+    const f: CommentFilter = { q: filter.q, ...(filter.source ? { source: filter.source } : {}), lang: filter.lang, kind: filter.kind, ...(hiddenView ? { hidden: true } : {}) }
     return Object.fromEntries(Object.entries(f).filter(([, v]) => v !== '' && v !== undefined)) as CommentFilter
-  }, [filter])
+  }, [filter, hiddenView])
   useEffect(() => {
     let live = true
     const clean = cleanFilter()
@@ -148,7 +149,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
   const dropDeleted = (id: number) => {
     setPage((p) => (p ? { total: Math.max(0, p.total - 1), comments: p.comments.filter((x) => x.id !== id) } : p))
     setSelected((s) => { const n = new Set(s); n.delete(id); return n })
-    setNotice(`Comment ${id} deleted from the comments database.`)
+    setNotice(hiddenView ? 'Comment restored' : 'Comment hidden')
   }
   const comments = page?.comments ?? []
   const allSelected = comments.length > 0 && comments.every((c) => selected.has(c.id))
@@ -205,6 +206,10 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
           <option value="book">Books</option>
           <option value="lichess">Lichess</option>
         </select>
+        <label className="flex items-center gap-1 text-xs">
+          <input type="checkbox" aria-label="Show hidden comments" checked={hiddenView} onChange={(e) => { setHiddenView(e.target.checked); setOffset(0); setSelected(new Set()); setAllMatching(false); setNotice(null) }} />
+          Show hidden comments
+        </label>
         {page && <span className="text-xs text-slate-500">{page.total ? `${offset + 1}–${offset + comments.length} of ${page.total}` : 'No comments'}</span>}
         <button className={button} aria-label="Previous page" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>←</button>
         <button className={button} aria-label="Next page" disabled={!page || offset + PAGE >= page.total} onClick={() => setOffset(offset + PAGE)}>→</button>
@@ -253,7 +258,9 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
                     <button className={button} aria-label={`Copy comment id ${c.id}`} title="Copy" onClick={() => copy(String(c.id))}>Comment #{c.id}</button>
                     <button className={button} aria-label={`Copy game id ${c.gameId}`} title="Copy" onClick={() => copy(c.gameId)}>Game {c.gameId}</button>
                     <button className={button} onClick={() => setDetails(c)}>Details</button>
-                    <DeleteControl onConfirm={async () => { await deleteComment(c.id); dropDeleted(c.id) }} />
+                    {hiddenView
+                      ? <button className={button} onClick={() => void restoreComment(c.id).then(() => dropDeleted(c.id), (e: Error) => setError(`Comment ${c.id}: ${e.message}`))}>Restore</button>
+                      : <DeleteControl onConfirm={async () => { await hideComment(c.id); dropDeleted(c.id) }} />}
                     <button className={button} onClick={() => void openGame(c)}>Open the game</button>
                     <button className={button} disabled={!inBook || !c.chapter} title={!inBook ? 'Not from a book' : !c.chapter ? 'The chapter is unknown' : undefined} onClick={() => void openBook(c)}>Open in the book</button>
                   </p>
@@ -298,7 +305,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
           )
         })}
       </ul>
-      {details && <CommentDetailsModal comment={details} onClose={() => setDetails(null)} onDeleted={() => dropDeleted(details.id)} />}
+      {details && <CommentDetailsModal comment={details} onClose={() => setDetails(null)} onHidden={() => dropDeleted(details.id)} />}
     </div>
   )
 }

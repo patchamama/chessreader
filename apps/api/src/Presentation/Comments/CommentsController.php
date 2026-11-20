@@ -37,7 +37,7 @@ final class CommentsController
         if (!in_array($kind, ['', 'book', 'lichess'], true) || !preg_match('/^[a-z]{0,3}$/', $lang)) {
             return $this->json($response, ['error' => 'kind is book or lichess; lang is a language code'], 400);
         }
-        $filters = ['q' => mb_substr(trim((string) ($q['q'] ?? '')), 0, 200), 'lang' => $lang, 'kind' => $kind];
+        $filters = ['q' => mb_substr(trim((string) ($q['q'] ?? '')), 0, 200), 'lang' => $lang, 'kind' => $kind, 'hidden' => ($q['hidden'] ?? '0') === '1'];
         if (isset($q['source']) && preg_match('/^\d{1,9}$/', (string) $q['source'])) {
             $filters['source'] = (int) $q['source'];
         }
@@ -59,15 +59,26 @@ final class CommentsController
         return $game === null ? $this->json($response, ['error' => 'not found'], 404) : $this->json($response, $game);
     }
 
-    /** DELETE /api/comments/{id}: removes a comment (and its translations) for good; 404 unknown, 409 read-only database. */
+    /** DELETE /api/comments/{id}: hides a comment (it stays in the database); 404 unknown, 409 read-only database. */
     public function delete(ServerRequestInterface $request, ResponseInterface $response, int $id): ResponseInterface
     {
+        return $this->toggle($response, $id, true);
+    }
+
+    /** POST /api/comments/{id}/restore: shows a hidden comment again. */
+    public function restore(ServerRequestInterface $request, ResponseInterface $response, int $id): ResponseInterface
+    {
+        return $this->toggle($response, $id, false);
+    }
+
+    private function toggle(ResponseInterface $response, int $id, bool $hide): ResponseInterface
+    {
         try {
-            $found = $this->store->delete($id);
+            $found = $hide ? $this->store->hide($id) : $this->store->restore($id);
         } catch (CommentsReadOnly) {
-            return $this->json($response, ['error' => 'The comments database is read-only on this server; delete the comment where it is built'], 409);
+            return $this->json($response, ['error' => 'The comments database is read-only on this server; change the comment where it is built'], 409);
         }
-        return $found ? $this->json($response, ['deleted' => $id]) : $this->json($response, ['error' => 'not found'], 404);
+        return $found ? $this->json($response, [$hide ? 'hidden' : 'restored' => $id]) : $this->json($response, ['error' => 'not found'], 404);
     }
 
     /** @param array<string, mixed> $data */

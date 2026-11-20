@@ -28,8 +28,9 @@
 // position and original text, stored again and written to the static outputs
 // as `translations: { es: "…", … }` (only on comments that have some).
 //
-// Deleted comments: the comment_tombstones (position hash, sha256 of the text) of that same
-// database make the rebuild skip those comments and are written to the new database too.
+// Hidden comments: the comment_tombstones (position hash, sha256 of the text) of that same
+// database mark those comments hidden: they stay in the new comments.sqlite (hidden_at set, with
+// their translations) but never reach p/, g/ or comments-index/. The tombstones are carried over.
 //
 // Writes, under <out-dir>:
 //   comments.sqlite       the database (schema: apps/api/migrations/005_position_comments.sql)
@@ -96,13 +97,13 @@ function loadTranslations(path) {
 const translations = loadTranslations(translationsDb ?? join(outDir, 'comments.sqlite'));
 
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
-/** Comments deleted on purpose in an earlier database: "positionHash\0sha256(text)" → [positionHash, textHash]. */
+/** Comments hidden on purpose in an earlier database: "positionHash\0sha256(text)" → [positionHash, textHash, hiddenAt]. */
 function loadTombstones(path) {
   const found = new Map();
   if (!path || !existsSync(path)) return found;
   const old = new DatabaseSync(path, { readOnly: true });
   try {
-    for (const r of old.prepare('SELECT position_hash, text_hash FROM comment_tombstones').all()) found.set(`${r.position_hash}\u0000${r.text_hash}`, [r.position_hash, r.text_hash]);
+    for (const r of old.prepare('SELECT position_hash, text_hash, deleted_at FROM comment_tombstones').all()) found.set(`${r.position_hash}\u0000${r.text_hash}`, [r.position_hash, r.text_hash, r.deleted_at]);
   } catch {
     // An older database without tombstones.
   } finally {
@@ -111,7 +112,10 @@ function loadTombstones(path) {
   return found;
 }
 const tombstones = loadTombstones(translationsDb ?? join(outDir, 'comments.sqlite'));
-let skipped = 0;
+let hiddenCount = 0;
+const hiddenBySource = {};
+const gameFiles = new Map(); // game id → its g/ file, written when one of its comments is visible
+const visibleGames = new Set();
 let translated = 0;
 
 rmSync(outDir, { recursive: true, force: true });
@@ -125,7 +129,7 @@ if (!db.prepare('PRAGMA table_info(position_comments)').all().some((c) => c.name
   db.exec('ALTER TABLE position_comments ADD COLUMN move_number INTEGER');
 }
 // The book chapter of each comment, and the resources id of each book (both optional for readers).
-for (const [table, column] of [['position_comments', 'chapter INTEGER'], ['comment_sources', 'book_id TEXT']]) {
+for (const [table, column] of [['position_comments', 'chapter INTEGER'], ['position_comments', 'hidden_at TEXT'], ['comment_sources', 'book_id TEXT']]) {
   if (!db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column.split(' ')[0])) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column}`);
 }
 
@@ -135,7 +139,7 @@ for (const [h, t] of tombstones.values()) insTombstone.run(h, t);
 
 const insSource = db.prepare('INSERT INTO comment_sources (id, kind, title, author, lang, priority, book_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
 const insGame = db.prepare('INSERT OR REPLACE INTO comment_games (id, source_id, white, black, label, pgn) VALUES (?, ?, ?, ?, ?, ?)');
-const insComment = db.prepare('INSERT INTO position_comments (hash, position, game_id, ply, move_number, san, lang, text, chapter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+const insComment = db.prepare('INSERT INTO position_comments (hash, position, game_id, ply, move_number, san, lang, text, chapter, hidden_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
 const insTranslation = db.prepare('INSERT INTO comment_translations (comment_id, lang, text) VALUES (?, ?, ?)');
 
 const shards = new Map();
@@ -149,19 +153,23 @@ let total = 0;
  * c: { key, hash, ply, move, san, lang, text }.
  */
 function addComment(c, { gameId, sourceId, label, players, chapter }) {
-  if (tombstones.has(`${c.hash}\u0000${sha256(c.text)}`)) {
-    skipped++;
-    return;
-  }
-  const info = insComment.run(c.hash, c.key, gameId, c.ply, c.move, c.san, c.lang, c.text, chapter);
+  const tomb = tombstones.get(`${c.hash}\u0000${sha256(c.text)}`);
+  const info = insComment.run(c.hash, c.key, gameId, c.ply, c.move, c.san, c.lang, c.text, chapter, tomb ? (tomb[2] ?? 'hidden') : null);
   const id = Number(info.lastInsertRowid);
   const kept = translations.get(`${c.key}\u0000${c.text}`);
   const extra = {};
   if (kept) {
     for (const [lang, text] of kept) insTranslation.run(id, lang, text);
     extra.translations = Object.fromEntries(kept);
-    translated += kept.length;
+    if (!tomb) translated += kept.length;
   }
+  if (tomb) {
+    // Hidden: stays in the sqlite (with its translations), never reaches the static outputs.
+    hiddenCount++;
+    hiddenBySource[sourceId] = (hiddenBySource[sourceId] ?? 0) + 1;
+    return;
+  }
+  visibleGames.add(gameId);
   listed.push({ id, hash: c.hash, fen: `${c.key} 0 1`, text: c.text, lang: c.lang, ply: c.ply, move: c.move, san: c.san, game: gameId, source: sourceId,
     label: label || null, white: players.white ?? null, black: players.black ?? null, chapter, ...extra });
   const prefix = c.hash.slice(0, 2);
@@ -184,7 +192,7 @@ function addPgnSource(entry, sourceId, raw) {
     const label = [players.white, players.black].filter(Boolean).join(' – ') || tags.ChapterName || tags.Event || '';
     const pgn = cleanGamePgn(game);
     insGame.run(gameId, sourceId, players.white ?? null, players.black ?? null, label || null, pgn);
-    writeFileSync(join(outDir, 'g', `${gameId}.json`), JSON.stringify({ id: gameId, source: sourceId, white: players.white, black: players.black, pgn }));
+    gameFiles.set(gameId, ({ id: gameId, source: sourceId, white: players.white, black: players.black, pgn }));
     for (const c of comments) {
       addComment({ key: positionKey(c.fen), hash: positionHash(c.fen), ply: c.ply, move: c.move, san: c.san, lang: entry.lang, text: c.text },
         { gameId, sourceId, label, players, chapter: null });
@@ -263,7 +271,7 @@ manifest.forEach((entry, sourceIndex) => {
       const label = [players.white, players.black].filter(Boolean).join(' – ') || heading || '';
       const pgn = treeToPgn(game.tree);
       insGame.run(gameId, sourceId, players.white ?? null, players.black ?? null, label || null, pgn);
-      writeFileSync(join(outDir, 'g', `${gameId}.json`), JSON.stringify({ id: gameId, source: sourceId, white: players.white, black: players.black, pgn }));
+      gameFiles.set(gameId, ({ id: gameId, source: sourceId, white: players.white, black: players.black, pgn }));
       for (const c of comments) {
         // The move as written in the game (a game set up from a FEN keeps its numbering), else from the ply.
         const move = c.moveNumber ?? Math.ceil(c.ply / 2);
@@ -278,12 +286,14 @@ manifest.forEach((entry, sourceIndex) => {
   console.log(`${entry.title}: ${gameNo} games, ${count} comments`);
 });
 
+for (const [gameId, file] of gameFiles) if (visibleGames.has(gameId)) writeFileSync(join(outDir, 'g', `${gameId}.json`), JSON.stringify(file));
+for (const [id, n] of Object.entries(hiddenBySource)) sources[id].comments -= n;
 const pageCount = Math.ceil(listed.length / PAGE_SIZE);
 for (let n = 0; n < pageCount; n++) {
   writeFileSync(join(outDir, 'comments-index', `${n}.json`), JSON.stringify({ page: n, comments: listed.slice(n * PAGE_SIZE, (n + 1) * PAGE_SIZE) }));
 }
 writeFileSync(join(outDir, 'comments-index', 'meta.json'), JSON.stringify({ version: 1, total: listed.length, pages: pageCount, pageSize: PAGE_SIZE, page: 'comments-index/<n>.json', sources }, null, 1));
 for (const [prefix, shard] of shards) writeFileSync(join(outDir, 'p', `${prefix}.json`), JSON.stringify(shard));
-writeFileSync(join(outDir, 'index.json'), JSON.stringify({ version: 1, built: new Date().toISOString(), hash: 'fnv1a64(fen without move counters)', shard: 'p/<first 2 hex>.json', games: 'g/<id>.json', minPly: MIN_PLY, total: total - skipped, errata: errataApplied, ...(translated ? { translations: translated } : {}), sources }, null, 1));
+writeFileSync(join(outDir, 'index.json'), JSON.stringify({ version: 1, built: new Date().toISOString(), hash: 'fnv1a64(fen without move counters)', shard: 'p/<first 2 hex>.json', games: 'g/<id>.json', minPly: MIN_PLY, total: total - hiddenCount, errata: errataApplied, ...(translated ? { translations: translated } : {}), sources }, null, 1));
 db.close();
-console.log(`total ${total - skipped} comments in ${shards.size} shards, ${errataApplied} errata corrections applied${translated ? `, ${translated} translations kept` : ''}${skipped ? `, ${skipped} deleted comments skipped` : ''}`);
+console.log(`total ${total - hiddenCount} comments in ${shards.size} shards, ${errataApplied} errata corrections applied${translated ? `, ${translated} translations kept` : ''}${hiddenCount ? `, ${hiddenCount} hidden comments kept out of the static files` : ''}`);

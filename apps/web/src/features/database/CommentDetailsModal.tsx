@@ -4,7 +4,7 @@ import { boardSvgDataUrl } from '../library/utils/boardSvg'
 import { langName, TARGET_LANGS } from '../comments/commentPrompts'
 import { proposeComment, saveCommentProposal, type CommentAction } from '../comments/commentAi'
 import DeleteControl from './DeleteControl'
-import { deleteComment, moveLabel, type CommentEntry } from '../comments/commentsApi'
+import { hideComment, moveLabel, type CommentEntry } from '../comments/commentsApi'
 
 /** One editable text of the comment: the universal text (own language) or a translation. */
 interface Field { key: string; lang: string; label: string; action: CommentAction }
@@ -18,7 +18,7 @@ const fieldsOf = (c: CommentEntry): Field[] => [
  * Comment details (S3): every field of a comment with its diagram; the missing
  * texts are typed or generated with the AI, and Save stores each changed one as a suggestion.
  */
-export default function CommentDetailsModal({ comment: c, onClose, onDeleted }: { comment: CommentEntry; onClose: () => void; onDeleted?: () => void }) {
+export default function CommentDetailsModal({ comment: c, onClose, onHidden }: { comment: CommentEntry; onClose: () => void; onHidden?: () => void }) {
   const llm = useLlm()
   const fields = fieldsOf(c)
   const initial = (f: Field) => c.translations?.[f.key] ?? ''
@@ -97,7 +97,7 @@ export default function CommentDetailsModal({ comment: c, onClose, onDeleted }: 
         ))}
         {error && <p role="alert" className="mt-2 text-red-700">{error}</p>}
         <p className="mt-3 flex flex-wrap items-center justify-end gap-2">
-          <DeleteControl className="mr-auto" onConfirm={async () => { await deleteComment(c.id); onDeleted?.(); onClose() }} />
+          <DeleteControl className="mr-auto" onConfirm={async () => { await hideComment(c.id); onHidden?.(); onClose() }} />
           <button className="rounded bg-violet-700 px-3 py-1 text-white disabled:opacity-40" disabled={busy !== null} onClick={() => void save()}>Save</button>
           <button className="rounded border border-slate-300 px-3 py-1" onClick={onClose}>Cancel</button>
         </p>

@@ -3,13 +3,13 @@ import { positionHash } from '@chess-ebook/chess-shared'
 import { lookupPositionComments, type HumanComment } from '../library/commentdb/commentLookup'
 import ChessBoard from '../../shared/chess/ChessBoard'
 import { loadTraps, type Trap } from '../training/traps'
-import { deleteComment, type CommentEntry, type CommentSource } from '../comments/commentsApi'
-import { filterFound, parsePositionInput, type FinderFilter, type PgnReading, type PositionMove } from './positionInput'
+import { hideComment, type CommentEntry, type CommentSource } from '../comments/commentsApi'
+import { filterFound, parsePositionInput, replayLine, type FinderFilter, type PgnReading, type PositionMove } from './positionInput'
 import { normalizePgn, numberMoves, type PgnLanguageChoice } from './pgnNormalize'
 import { COMMON_OPENINGS } from './commonOpenings'
 import CommentCard from './CommentCard'
 import CommentDetailsModal from './CommentDetailsModal'
-import FinderBoard from './FinderBoard'
+import FinderBoard, { type FinderLine } from './FinderBoard'
 import FinderHelp from './FinderHelp'
 
 /** The editor wants a database entry: what the finder knows of the comment, plus its position. */
@@ -57,13 +57,14 @@ export default function PositionFinder({ filter, sources = [] }: { filter?: Find
   const [text, setText] = useState('')
   const [language, setLanguage] = useState<PgnLanguageChoice>('auto')
   const [error, setError] = useState<string | null>(null)
-  const [moves, setMoves] = useState<PositionMove[]>([])
+  const [line, setLine] = useState<FinderLine>({ start: START_FEN, sans: [], ply: 0 })
+  // Moves read before the first unrecognised one (only when the text is wrong; the board keeps its line).
+  const [partial, setPartial] = useState<PositionMove[] | null>(null)
+  const lastWritten = useRef<string | null>(null)
   const [reading, setReading] = useState<PgnReading | null>(null)
   const [shown, setShown] = useState<Found | null>(null)
-  const [picked, setPicked] = useState<number | null>(null)
   const [boards, setBoards] = useState<Set<number>>(new Set())
   const [boardOpen, setBoardOpen] = useState(false)
-  const [line, setLine] = useState<{ sans: string[] } | null>(null)
   const [onBoard, setOnBoard] = useState<Found | null>(null)
   const [editing, setEditing] = useState<CommentEntry | null>(null)
   const [traps, setTraps] = useState<Trap[] | null>(null)
@@ -102,27 +103,53 @@ export default function PositionFinder({ filter, sources = [] }: { filter?: Find
       (e: Error) => { if (mine === seq.current) setError(`The comments could not be read: ${e.message}`) })
   }, [])
 
+  const moves = partial ?? replayLine(line.start, line.sans)
+  const picked = partial ? null : line.ply > 0 ? line.ply - 1 : null
+
+  /** What the text box says about a line: the moves as numbered PGN, a FEN when it starts elsewhere. */
+  const textOf = (l: FinderLine) => (l.sans.length ? (l.start === START_FEN ? numberMoves(l.start, l.sans) : `[FEN "${l.start}"]\n\n${numberMoves(l.start, l.sans)}`) : l.start === START_FEN ? '' : l.start)
+  const write = (value: string) => { lastWritten.current = value; setText(value) }
+
   const find = (input = text, lang = language) => {
     const r = parsePositionInput(input, lang)
     setShown(null)
-    setPicked(null)
     setBoards(new Set())
     setReading(null)
-    if (r.kind === 'error') { setMoves(r.moves ?? []); setReading(r.reading ?? null); setError(r.message); return }
+    setPartial(null)
+    if (r.kind === 'error') { setPartial(r.moves ?? null); setReading(r.reading ?? null); setError(r.message); return }
     setError(null)
-    if (r.kind === 'fen') { setMoves([]); void show(r.fen); return }
-    setMoves(r.moves)
+    if (r.kind === 'fen') { setLine({ start: r.fen, sans: [], ply: 0 }); void show(r.fen); return }
+    setLine({ start: r.start, sans: r.moves.map((m) => m.san as string), ply: r.moves.length })
     setReading(r)
-    if (r.text !== input.trim()) setText(r.text)
+    if (r.text !== input.trim()) write(r.text)
   }
-  const loadLine = (sans: string[], pgn: string) => {
-    setText(pgn)
+  /** The board changed the line (a move, Reset, Clear, a step): the text follows. */
+  const onLine = useCallback((l: FinderLine) => {
+    setLine((old) => {
+      if (old.start !== l.start || old.sans !== l.sans) { lastWritten.current = textOf(l); setText(lastWritten.current); setError(null); setReading(null); setPartial(null) }
+      return l
+    })
+  }, [])
+  // Typing or pasting reads the text after a short pause; what the board itself wrote is not read again.
+  useEffect(() => {
+    if (!text.trim() || text === lastWritten.current) return
+    const t = setTimeout(() => find(text, language), 500)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, language])
+  const loadLine = (sans: string[]) => {
+    const l = { start: START_FEN, sans, ply: 0 }
+    setLine(l)
+    write(textOf(l))
+    setPartial(null)
+    setError(null)
+    setReading(null)
+    setShown(null)
+    setBoards(new Set())
     setBoardOpen(true)
-    setLine({ sans })
-    find(pgn, 'en')
   }
-  const loadOpening = (pgn: string) => loadLine(normalizePgn(pgn, { language: 'en' }).moves.map((m) => m.san), pgn)
-  const loadTrap = (t: Trap) => loadLine(t.sans, t.sans.map((s, i) => (i % 2 === 0 ? `${i / 2 + 1}. ${s}` : s)).join(' '))
+  const loadOpening = (pgn: string) => loadLine(normalizePgn(pgn, { language: 'en' }).moves.map((m) => m.san))
+  const loadTrap = (t: Trap) => loadLine(t.sans)
   const changeLanguage = (l: PgnLanguageChoice) => { setLanguage(l); if (text.trim()) find(text, l) }
 
   const [suggestOpen, setSuggestOpen] = useState(false)
@@ -133,13 +160,13 @@ export default function PositionFinder({ filter, sources = [] }: { filter?: Find
 
   const toggleBoard = (i: number) => setBoards((s) => { const n = new Set(s); if (n.has(i)) n.delete(i); else n.add(i); return n })
   const remove = async (c: HumanComment) => {
-    if (c.id === undefined) throw new Error('This comment has no id in the database, so it cannot be deleted here.')
-    await deleteComment(c.id)
+    if (c.id === undefined) throw new Error('This comment has no id in the database, so it cannot be hidden here.')
+    await hideComment(c.id)
     cache.current.clear()
     const without = (f: Found | null) => (f ? { ...f, comments: f.comments.filter((x) => x.id !== c.id) } : f)
     setShown(without)
     setOnBoard(without)
-    setNotice(`Comment ${c.id} deleted from the comments database.`)
+    setNotice('Comment hidden')
   }
   const edit = (c: HumanComment, fen: string) => setEditing(entryOf(c, fen, sources))
   const chip = 'rounded border border-slate-300 px-1.5 py-0.5 text-xs hover:bg-slate-50'
@@ -180,7 +207,7 @@ export default function PositionFinder({ filter, sources = [] }: { filter?: Find
             {moves.map((m, i) => (
               <li key={i} className="flex flex-col gap-1">
                 <span className="flex items-center gap-1">
-                  <button className={`rounded border px-1.5 py-0.5 font-mono text-xs ${picked === i ? 'border-violet-700 bg-violet-100' : 'border-slate-300'}`} aria-pressed={picked === i} onClick={() => { setPicked(i); void show(m.fen) }}>{m.label}</button>
+                  <button className={`rounded border px-1.5 py-0.5 font-mono text-xs ${picked === i ? 'border-violet-700 bg-violet-100' : 'border-slate-300'}`} aria-pressed={picked === i} onClick={() => { if (!partial) setLine((l) => ({ ...l, ply: i + 1 })); if (!boardOpen || partial) void show(m.fen) }}>{m.label}</button>
                   <input type="checkbox" aria-label={`Show ${m.label} on a board`} title="Show on a board" checked={boards.has(i)} onChange={() => toggleBoard(i)} />
                 </span>
                 {boards.has(i) && <div className="h-28 w-28" data-testid={`move-board-${i}`}><ChessBoard fen={m.fen} orientation="white" hideLabels /></div>}
@@ -188,15 +215,15 @@ export default function PositionFinder({ filter, sources = [] }: { filter?: Find
             ))}
           </ul>
         )}
-        {shown && <Results found={shown} filter={filter} sources={sources} onEdit={edit} onDelete={remove} />}
+        {shown && (!boardOpen || partial) && <Results found={shown} filter={filter} sources={sources} onEdit={edit} onDelete={remove} />}
         {boardOpen && (
           <section aria-label="Position board" className="flex flex-col gap-2 rounded border border-slate-200 p-2 sm:flex-row">
-            <FinderBoard line={line} onFen={onFen} count={countFor} />
+            <FinderBoard line={line} onLine={onLine} onFen={onFen} count={countFor} />
             <div className="min-w-0 flex-1">{onBoard && <Results found={onBoard} filter={filter} sources={sources} onEdit={edit} onDelete={remove} />}</div>
           </section>
         )}
       </div>
-      {editing && <CommentDetailsModal comment={editing} onClose={() => { cache.current.clear(); setEditing(null) }} onDeleted={() => { cache.current.clear(); const id = editing.id; const without = (f: Found | null) => (f ? { ...f, comments: f.comments.filter((x) => x.id !== id) } : f); setShown(without); setOnBoard(without); setNotice(`Comment ${id} deleted from the comments database.`) }} />}
+      {editing && <CommentDetailsModal comment={editing} onClose={() => { cache.current.clear(); setEditing(null) }} onHidden={() => { cache.current.clear(); const id = editing.id; const without = (f: Found | null) => (f ? { ...f, comments: f.comments.filter((x) => x.id !== id) } : f); setShown(without); setOnBoard(without); setNotice('Comment hidden') }} />}
     </details>
   )
 }

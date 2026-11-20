@@ -31,6 +31,8 @@ export interface NormalizedPgn {
   language: PgnLanguage
   moves: NormalizedMove[]
   unrecognised: Unrecognised[]
+  /** The position the moves start from: the FEN header, else the initial position. */
+  start: string
 }
 
 interface Parsed { san: string; render: string }
@@ -112,11 +114,12 @@ function prepare(raw: string): Prepared {
   return { headers, fen, tokens, result }
 }
 
-interface Run { language: PgnLanguage; moves: NormalizedMove[]; rendered: string[]; failed: { token: string; index: number; ply: number; label: string } | null; startNumber: number; startWhite: boolean }
+interface Run { start: string; language: PgnLanguage; moves: NormalizedMove[]; rendered: string[]; failed: { token: string; index: number; ply: number; label: string } | null; startNumber: number; startWhite: boolean }
 
 function run(p: Prepared, language: PgnLanguage): Run {
   let chess: Chess
   try { chess = new Chess(p.fen) } catch { chess = new Chess() }
+  const start = chess.fen()
   const startNumber = chess.moveNumber()
   const startWhite = chess.turn() === 'w'
   const moves: NormalizedMove[] = []
@@ -130,7 +133,7 @@ function run(p: Prepared, language: PgnLanguage): Run {
     moves.push({ san: r.san, label: placed + r.san, fen: chess.fen() })
     rendered.push(r.render)
   }
-  return { language, moves, rendered, failed, startNumber, startWhite }
+  return { start, language, moves, rendered, failed, startNumber, startWhite }
 }
 
 /** The PGN movetext with a number before each white move (and before a black move that starts a line). */
@@ -169,7 +172,7 @@ export function normalizePgn(raw: string, options: { language?: PgnLanguageChoic
   const unrecognised: Unrecognised[] = best.failed
     ? [{ token: best.failed.token, ply: best.failed.ply, label: best.failed.label, chars: [...new Set(best.failed.token.match(UNKNOWN_RE) ?? [])] }]
     : []
-  return { text: buildText(p, best), language: best.language, moves: best.moves, unrecognised }
+  return { text: buildText(p, best), language: best.language, moves: best.moves, unrecognised, start: best.start }
 }
 
 /** Played moves as PGN: "1. e4 e5 2. Nc3", or "1... e5 2. Nf3" when Black moves first (S18). */

@@ -20,10 +20,10 @@ interface PositionCommentStore
 
     /**
      * A page of every comment, oldest first, with its source and game. Filters:
-     * `q` (text contains, literally), `source` (source id), `lang`, `kind` ('book' | 'lichess').
+     * `q` (text contains, literally), `source` (source id), `lang`, `kind` ('book' | 'lichess'), `hidden` (true: only the hidden comments; default only the visible).
      * `fen` is the stored position (FEN without move counters) completed with " 0 1".
      *
-     * @param array{q?: string, source?: int, lang?: string, kind?: string} $filters
+     * @param array{q?: string, source?: int, lang?: string, kind?: string, hidden?: bool} $filters
      * @return array{total: int, comments: list<array<string, mixed>>}
      */
     public function list(array $filters, int $offset, int $limit): array;
@@ -32,10 +32,13 @@ interface PositionCommentStore
     public function sources(): array;
 
     /**
-     * Deletes a comment and its translations (every language) in one transaction and records a
-     * tombstone so a rebuild does not bring it back. False when the id is unknown.
+     * Hides a comment (idempotent): the row and its translations stay, readers skip it and a
+     * tombstone keeps it hidden across rebuilds. False when the id is unknown.
      *
      * @throws CommentsReadOnly when the database cannot be written
      */
-    public function delete(int $id): bool;
+    public function hide(int $id): bool;
+
+    /** Shows a hidden comment again. False when the id is unknown. @throws CommentsReadOnly */
+    public function restore(int $id): bool;
 }

@@ -4,7 +4,7 @@ import type { CommentFilter, CommentSource } from '../comments/commentsApi'
 import { normalizePgn, type PgnLanguage, type PgnLanguageChoice, type Unrecognised } from './pgnNormalize'
 
 export interface PositionMove { label: string; fen: string; san?: string }
-export interface PgnReading { /** The PGN with the numbers and letter case fixed. */ text: string; language: PgnLanguage; unrecognised: Unrecognised[] }
+export interface PgnReading { /** The position the moves start from. */ start: string; /** The PGN with the numbers and letter case fixed. */ text: string; language: PgnLanguage; unrecognised: Unrecognised[] }
 export type PositionInput =
   | { kind: 'fen'; fen: string }
   | ({ kind: 'pgn'; moves: PositionMove[] } & PgnReading)
@@ -28,9 +28,9 @@ export function parsePositionInput(raw: string, language: PgnLanguageChoice = 'a
   const moves: PositionMove[] = n.moves.map((m) => ({ label: m.label, fen: m.fen, san: m.san }))
   if (n.unrecognised.length) {
     const message = `${NOT_VALID} ${describeUnrecognised(n.unrecognised)}`
-    return moves.length ? { kind: 'error', message, moves, reading: { text: n.text, language: n.language, unrecognised: n.unrecognised } } : { kind: 'error', message }
+    return moves.length ? { kind: 'error', message, moves, reading: { start: n.start, text: n.text, language: n.language, unrecognised: n.unrecognised } } : { kind: 'error', message }
   }
-  return moves.length ? { kind: 'pgn', moves, text: n.text, language: n.language, unrecognised: [] } : { kind: 'error', message: NOT_VALID }
+  return moves.length ? { kind: 'pgn', moves, start: n.start, text: n.text, language: n.language, unrecognised: [] } : { kind: 'error', message: NOT_VALID }
 }
 
 /** "Not recognised: "N@c6" at 2... N@c6 (unknown characters: @)". */
@@ -52,3 +52,16 @@ export function filterFound(comments: HumanComment[], filter: FinderFilter | und
     (!filter.kind || c.source.kind === filter.kind))
 }
 
+
+/** The moves of a line with their numbered labels and the FEN after each one. */
+export function replayLine(start: string, sans: string[]): PositionMove[] {
+  const out: PositionMove[] = []
+  let chess: Chess
+  try { chess = new Chess(start) } catch { return out }
+  for (const san of sans) {
+    const label = `${chess.moveNumber()}${chess.turn() === 'w' ? '. ' : '... '}${san}`
+    try { chess.move(san) } catch { break }
+    out.push({ label, fen: chess.fen(), san })
+  }
+  return out
+}

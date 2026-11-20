@@ -69,18 +69,30 @@ final class CommentsControllerTest extends TestCase
         self::assertSame(['Invented Book', 'Lichess studies'], array_column($body['sources'], 'title'));
     }
 
-    public function test_delete_removes_the_comment_and_answers_200(): void
+    private function mutate(string $action, string $method, int $id): ResponseInterface
     {
-        $res = $this->controller->delete((new ServerRequestFactory())->createServerRequest('DELETE', '/api/comments/2'), (new ResponseFactory())->createResponse(), 2);
-        self::assertSame(200, $res->getStatusCode());
-        self::assertSame(['deleted' => 2], json_decode((string) $res->getBody(), true));
-        [, $body] = $this->call('list', '/api/comments');
-        self::assertSame([1, 3], array_column($body['comments'], 'id'));
+        return $this->controller->{$action}((new ServerRequestFactory())->createServerRequest($method, "/api/comments/{$id}"), (new ResponseFactory())->createResponse(), $id);
     }
 
-    public function test_delete_of_an_unknown_comment_is_404(): void
+    public function test_delete_hides_the_comment_and_restore_shows_it_again(): void
     {
-        $res = $this->controller->delete((new ServerRequestFactory())->createServerRequest('DELETE', '/api/comments/99'), (new ResponseFactory())->createResponse(), 99);
-        self::assertSame(404, $res->getStatusCode());
+        $res = $this->mutate('delete', 'DELETE', 2);
+        self::assertSame(200, $res->getStatusCode());
+        self::assertSame(['hidden' => 2], json_decode((string) $res->getBody(), true));
+        [, $body] = $this->call('list', '/api/comments');
+        self::assertSame([1, 3], array_column($body['comments'], 'id'));
+        [, $hidden] = $this->call('list', '/api/comments?hidden=1');
+        self::assertSame([2], array_column($hidden['comments'], 'id'));
+
+        $res = $this->mutate('restore', 'POST', 2);
+        self::assertSame(['restored' => 2], json_decode((string) $res->getBody(), true));
+        [, $body] = $this->call('list', '/api/comments');
+        self::assertSame([1, 2, 3], array_column($body['comments'], 'id'));
+    }
+
+    public function test_hide_and_restore_of_an_unknown_comment_are_404(): void
+    {
+        self::assertSame(404, $this->mutate('delete', 'DELETE', 99)->getStatusCode());
+        self::assertSame(404, $this->mutate('restore', 'POST', 99)->getStatusCode());
     }
 }

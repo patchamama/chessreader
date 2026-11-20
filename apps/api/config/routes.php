@@ -97,8 +97,9 @@ return function (App $app): void {
         $group->get('/games/{id}', [CommentsController::class, 'game']);
     })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
 
-    // Deleting a comment is permanent and the database is shared: admin only.
+    // Hiding (and restoring) a comment changes the shared database: admin only.
     $app->delete('/api/comments/{id:[0-9]+}', [CommentsController::class, 'delete'])->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
+    $app->post('/api/comments/{id:[0-9]+}/restore', [CommentsController::class, 'restore'])->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
 
     // Diagram routes (require JWT + Approved)
     $app->group('/api/diagrams', function (RouteCollectorProxy $group) {

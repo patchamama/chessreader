@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
 const lookup = vi.hoisted(() => vi.fn())
 vi.mock('../library/commentdb/commentLookup', () => ({ lookupPositionComments: lookup }))
 
 const loadTraps = vi.hoisted(() => vi.fn())
 vi.mock('../training/traps', () => ({ loadTraps }))
-const deleteComment = vi.hoisted(() => vi.fn())
-vi.mock('../comments/commentsApi', async (orig) => ({ ...(await orig<typeof import('../comments/commentsApi')>()), deleteComment }))
+const hideComment = vi.hoisted(() => vi.fn())
+vi.mock('../comments/commentsApi', async (orig) => ({ ...(await orig<typeof import('../comments/commentsApi')>()), hideComment }))
 vi.mock('../../shared/llm', () => ({ useLlm: () => ({ available: false, vision: false, config: null, complete: vi.fn() }) }))
 vi.mock('../../shared/chess/ChessBoard', () => ({
   default: ({ fen, onPieceDrop, onSquareClick }: { fen: string; onPieceDrop?: (from: string, to: string) => boolean; onSquareClick?: (sq: string) => void }) => (
@@ -29,7 +29,7 @@ beforeEach(() => {
   lookup.mockReset()
   lookup.mockResolvedValue([found])
   loadTraps.mockReset()
-  deleteComment.mockReset()
+  hideComment.mockReset()
   loadTraps.mockResolvedValue([{ id: 'classic-scholar', title: "Scholar's mate", opening: 'Italian Game', sans: ['e4', 'e5', 'Bc4', 'Nc6'] }])
 })
 
@@ -162,7 +162,7 @@ describe('Find by position: count, tolerant PGN, boards, edit and suggestions (S
     fireEvent.click(screen.getByRole('button', { name: 'Ruy Lopez' }))
     expect((screen.getByRole('textbox', { name: 'FEN or PGN' }) as HTMLTextAreaElement).value).toBe('1. e4 e5 2. Nf3 Nc6 3. Bb5')
     await waitFor(() => expect(lookup).toHaveBeenCalledWith(START_FEN))
-    fireEvent.click(screen.getByRole('button', { name: 'Next move of the line' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Forward' }))
     await waitFor(() => expect(lookup).toHaveBeenLastCalledWith(AFTER_E4))
   })
 
@@ -171,18 +171,18 @@ describe('Find by position: count, tolerant PGN, boards, edit and suggestions (S
     fireEvent.click(screen.getByText('Suggestions: common openings and traps'))
     fireEvent.click(await screen.findByRole('button', { name: "Scholar's mate" }))
     expect((screen.getByRole('textbox', { name: 'FEN or PGN' }) as HTMLTextAreaElement).value).toBe('1. e4 e5 2. Bc4 Nc6')
-    expect(screen.getByRole('button', { name: 'Next move of the line' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Forward' })).toBeTruthy()
   })
 })
 
-describe('Find by position: numbering, move counts, comment map, delete (S17-S20)', () => {
+describe('Find by position: numbering, move counts, comment map, delete (S17-S21)', () => {
   const openBoard = () => { render(<PositionFinder />); fireEvent.click(screen.getByRole('button', { name: 'Board' })) }
 
   it('prints the played moves as numbered PGN (S18)', async () => {
     openBoard()
     fireEvent.click(screen.getByRole('button', { name: 'drop e2e4' }))
     fireEvent.click(screen.getByRole('button', { name: 'drop e7e5' }))
-    expect(await screen.findByText('1. e4 e5')).toBeTruthy()
+    await waitFor(() => expect(screen.getAllByText('1. e4 e5').length).toBeGreaterThan(0))
   })
 
   it('writes on the squares of a selected piece the comments each move would find (S19)', async () => {
@@ -218,29 +218,130 @@ describe('Find by position: numbering, move counts, comment map, delete (S17-S20
     expect(screen.queryByTestId('map-c3')).toBeNull()
   })
 
-  it('deletes a found comment after a confirmation and says so (S17)', async () => {
+  it('hides a found comment after a confirmation and says so (S17)', async () => {
     lookup.mockResolvedValue([{ ...found, id: 5 }])
-    deleteComment.mockResolvedValue(undefined)
+    hideComment.mockResolvedValue(undefined)
     render(<PositionFinder />)
     type(AFTER_E4)
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
-    expect(deleteComment).not.toHaveBeenCalled()
-    expect(screen.getByText(/Delete this comment\? This removes it and its translations from the comments database/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Yes, delete' }))
-    await waitFor(() => expect(deleteComment).toHaveBeenCalledWith(5))
-    expect(await screen.findByText(/Comment 5 deleted/)).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide' }))
+    expect(hideComment).not.toHaveBeenCalled()
+    expect(screen.getByText(/Hide this comment\? It stays in the database but is no longer shown\./)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, hide' }))
+    await waitFor(() => expect(hideComment).toHaveBeenCalledWith(5))
+    expect(await screen.findByText(/Comment hidden/)).toBeTruthy()
     expect(screen.queryByText('The king pawn opens lines.')).toBeNull()
     expect(screen.getByText(/0 comments found for this position/)).toBeTruthy()
   })
 
-  it('shows a failed delete inline and keeps the comment', async () => {
+  it('shows a failed hide inline and keeps the comment', async () => {
     lookup.mockResolvedValue([{ ...found, id: 5 }])
-    deleteComment.mockRejectedValue(new Error('The comments database is read-only here'))
+    hideComment.mockRejectedValue(new Error('The comments database is read-only here'))
     render(<PositionFinder />)
     type(AFTER_E4)
-    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Yes, delete' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, hide' }))
     expect((await screen.findByText('The comments database is read-only here')).getAttribute('role')).toBe('alert')
     expect(screen.getByText('The king pawn opens lines.')).toBeTruthy()
+  })
+})
+
+describe('Find by position: one line shared by text, moves, suggestions and board (S22)', () => {
+  const box = () => screen.getByRole('textbox', { name: 'FEN or PGN' }) as HTMLTextAreaElement
+
+  it('walks a suggestion with Forward, Back, Last and First, and the comments follow the ply', async () => {
+    render(<PositionFinder />)
+    fireEvent.click(screen.getByRole('button', { name: 'Ruy Lopez' }))
+    expect(box().value).toBe('1. e4 e5 2. Nf3 Nc6 3. Bb5')
+    const list = screen.getByRole('list', { name: 'Moves' })
+    fireEvent.click(screen.getByRole('button', { name: 'Last move' }))
+    await waitFor(() => expect(within(list).getByRole('button', { name: '3. Bb5' }).getAttribute('aria-pressed')).toBe('true'))
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(within(list).getByRole('button', { name: '2... Nc6' }).getAttribute('aria-pressed')).toBe('true'))
+    fireEvent.click(screen.getByRole('button', { name: 'First move' }))
+    await waitFor(() => expect(lookup).toHaveBeenLastCalledWith(START_FEN))
+    expect(box().value).toBe('1. e4 e5 2. Nf3 Nc6 3. Bb5')
+  })
+
+  it('auto-plays one move a second and can pause', async () => {
+    vi.useFakeTimers()
+    try {
+      render(<PositionFinder />)
+      fireEvent.click(screen.getByRole('button', { name: 'Ruy Lopez' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Play' }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(1100) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(1100) })
+      expect(screen.getByRole('button', { name: '2. Nf3' }).getAttribute('aria-pressed')).toBe('false')
+      expect(screen.getByRole('button', { name: '1... e5' }).getAttribute('aria-pressed')).toBe('true')
+      fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+      expect(screen.getByRole('button', { name: '1... e5' }).getAttribute('aria-pressed')).toBe('true')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('loads typed moves into the board and highlights the selected ply', async () => {
+    render(<PositionFinder />)
+    fireEvent.click(screen.getByRole('button', { name: 'Board' }))
+    type('1. e4 e5 2. Nf3')
+    const list = await screen.findByRole('list', { name: 'Moves' })
+    fireEvent.click(within(list).getByRole('button', { name: '1. e4' }))
+    await waitFor(() => expect(lookup).toHaveBeenLastCalledWith(AFTER_E4))
+    expect(within(list).getByRole('button', { name: '1. e4' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('reads the text after a short pause, without pressing Find', async () => {
+    render(<PositionFinder />)
+    fireEvent.change(box(), { target: { value: '1 e4 e5' } })
+    expect(await screen.findByRole('list', { name: 'Moves' }, { timeout: 2000 })).toBeTruthy()
+    await waitFor(() => expect(box().value).toBe('1. e4 e5'))
+  })
+
+  it('writes the moves played on the board back into the text, truncating from the middle', async () => {
+    render(<PositionFinder />)
+    fireEvent.click(screen.getByRole('button', { name: 'Ruy Lopez' }))
+    fireEvent.click(screen.getByRole('button', { name: 'First move' }))
+    fireEvent.click(screen.getByRole('button', { name: 'drop e2e4' }))
+    fireEvent.click(screen.getByRole('button', { name: 'drop e7e5' }))
+    expect(box().value).toBe('1. e4 e5 2. Nf3 Nc6 3. Bb5')
+    fireEvent.click(screen.getByRole('button', { name: 'First move' }))
+    fireEvent.click(screen.getByRole('button', { name: 'drop e2e4' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Forward' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    fireEvent.click(screen.getByRole('button', { name: 'drop e7e5' }))
+    expect(box().value).toBe('1. e4 e5 2. Nf3 Nc6 3. Bb5')
+  })
+
+  it('a different move from the middle replaces the rest of the line', async () => {
+    render(<PositionFinder />)
+    fireEvent.click(screen.getByRole('button', { name: 'Ruy Lopez' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Forward' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Forward' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    // From 1. e4 the mock board plays e7e5 only, which is the line itself: the text is unchanged.
+    expect(box().value).toBe('1. e4 e5 2. Nf3 Nc6 3. Bb5')
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
+    expect(box().value).toBe('')
+    fireEvent.click(screen.getByRole('button', { name: 'drop e2e4' }))
+    expect(box().value).toBe('1. e4')
+  })
+
+  it('keeps the board where it is when the text is wrong and shows the error', async () => {
+    render(<PositionFinder />)
+    fireEvent.click(screen.getByRole('button', { name: 'Ruy Lopez' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Last move' }))
+    type('1. e4 e5 2. Nf3 N@c6')
+    expect((await screen.findByRole('alert')).textContent).toMatch(/N@c6/)
+    expect(screen.getByTestId('board').getAttribute('data-fen')).toMatch(/1B2p3/)
+  })
+
+  it('a FEN in the text sets the start position of the board', async () => {
+    render(<PositionFinder />)
+    fireEvent.click(screen.getByRole('button', { name: 'Board' }))
+    type(AFTER_E4)
+    await waitFor(() => expect(screen.getByTestId('board').getAttribute('data-fen')).toBe(AFTER_E4))
+    fireEvent.click(screen.getByRole('button', { name: 'drop e7e5' }))
+    expect(box().value).toContain('1... e5')
+    expect(box().value).toContain('[FEN "' + AFTER_E4 + '"]')
   })
 })
