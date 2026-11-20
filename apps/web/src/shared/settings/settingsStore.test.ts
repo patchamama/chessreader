@@ -220,3 +220,22 @@ describe('settingsStore — AI assistant (S1)', () => {
     expect(mergeWithDefaults(useSettingsStore.getState(), { aiProvider: 'ollama' }).aiProvider).toBe('ollama')
   })
 })
+
+describe('settingsStore — comment source priority and missing translations', () => {
+  it('defaults: books first, no automatic translation', () => {
+    useSettingsStore.getState().reset()
+    const s = useSettingsStore.getState()
+    expect(s.commentSourcePriority).toBe('books')
+    expect(s.translateMissingComments).toBe(false)
+  })
+
+  it('a migration gives existing users books first and translation off', () => {
+    const migrated = migrateSettings({ fontSize: 18 }, 5)
+    expect(migrated.commentSourcePriority).toBe('books')
+    expect(migrated.translateMissingComments).toBe(false)
+  })
+
+  it('migration keeps a value that is already set', () => {
+    expect(migrateSettings({ commentSourcePriority: 'both' }, 5).commentSourcePriority).toBe('both')
+  })
+})

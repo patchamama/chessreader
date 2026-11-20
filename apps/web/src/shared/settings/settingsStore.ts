@@ -28,6 +28,8 @@ export type EvalBarDirection = 'horizontal' | 'vertical'
 /** Where engine lines come from: the local Stockfish, or the Lichess cloud first (local only when the cloud does not know the position). */
 export type EngineSource = 'local' | 'lichess-cloud'
 
+export type CommentSourcePriority = 'books' | 'lichess' | 'both'
+
 export type StockfishVersion = 'sf18-local' | 'sf10-jsdelivr' | 'sf16-jsdelivr' | 'sf10-cdnjs' | 'sf9-cdnjs'
 
 export const STOCKFISH_VERSIONS: Record<StockfishVersion, { url: string; label: string }> = {
@@ -199,6 +201,10 @@ export interface AppSettings {
   hiddenExamples: number[]
   /** Borrow book remarks on the same position when writing an annotated game. */
   humanComments: boolean
+  /** Which remarks to borrow first for an annotated game: those of books, of Lichess studies, or either (the reader's language first). */
+  commentSourcePriority: CommentSourcePriority
+  /** Translate (after standardising) a borrowed remark the database has no text for in the reader's language, with the AI assistant. */
+  translateMissingComments: boolean
   /** Book diagrams: show the engine's evaluation under each (when it has one). */
   diagramEvalShow: boolean
   /** Book diagrams: an evaluation bar above the evaluation. */
@@ -313,6 +319,8 @@ const DEFAULT: AppSettings = {
   resourcesWriteToken: '',
   hiddenExamples: [],
   humanComments: true,
+  commentSourcePriority: 'books',
+  translateMissingComments: false,
   diagramEvalShow: true,
   diagramEvalBar: false,
   diagramEvalThumbs: true,
@@ -388,6 +396,11 @@ export function migrateSettings(persisted: unknown, version: number): Partial<Se
     if (isLlmProvider(s.aiProvider) && !s.aiBaseUrl) s.aiBaseUrl = defaultBaseUrl(s.aiProvider)
     s.aiVision = null
   }
+  // Version 6: borrowed remarks come from books first; missing translations are not made unasked.
+  if (version < 6) {
+    s.commentSourcePriority ??= 'books'
+    s.translateMissingComments ??= false
+  }
   if (version < 1) Object.assign(s, { commentLayout: 'split', commentDiagrams: true, commentDiagramEval: true })
   if (version < 2) {
     // The legacy recogniser (3) is retired: read with variations instead.
@@ -414,7 +427,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'chessreader-settings',
-      version: 5,
+      version: 6,
       migrate: (persisted, version) => migrateSettings(persisted, version) as SettingsStore,
       merge: (persisted, current) => mergeWithDefaults(current as SettingsStore, persisted),
     },

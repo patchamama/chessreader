@@ -94,3 +94,110 @@ describe('the sample repository is the default (llm-assistant-round S12)', () =>
     expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe('https://example.org/db/index.json')
   })
 })
+
+describe('universal and dropped comments (llm-assistant-round S12)', () => {
+  const universalShard = (translations: Record<string, string>) => ({ [HASH]: [{ id: 2, text: 'Caruana grabs it, as Naka did earlier.', lang: 'en', game: '18-1', ply: 4, san: 'Nc6', source: 18, label: 'A – B', translations }] })
+  const serve = (shard: unknown) => vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('index.json') ? INDEX : shard), { status: 200 })))
+  const plies = Array.from({ length: 12 }, (_, i) => ({ fenAfter: i === 9 ? FEN : `8/8/8/8/8/8/8/K${i}k w - - 0 1` }))
+
+  it('shows the universal text, not the original, to a reader of the comment\'s own language', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve(universalShard({ en: 'Black grabs the pawn.' }))
+    expect((await humanCommentsForGame(plies, 'en'))[10].text).toBe('Black grabs the pawn.')
+  })
+
+  it('a reader of another language without a translation gets the universal text, not the original', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve(universalShard({ en: 'Black grabs the pawn.' }))
+    expect((await humanCommentsForGame(plies, 'de'))[10].text).toBe('Black grabs the pawn.')
+  })
+
+  it('a comment dropped as not universal (empty universal text) is never borrowed nor listed', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve(universalShard({ en: '' }))
+    expect(await humanCommentsForGame(plies, 'en')).toEqual({})
+    clearCommentCache()
+    expect(await lookupPositionComments(FEN)).toEqual([])
+  })
+})
+
+describe('comment source priority', () => {
+  const serve = () => vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('index.json') ? INDEX : SHARD), { status: 200 })))
+  const plies = Array.from({ length: 12 }, (_, i) => ({ fenAfter: i === 9 ? FEN : `8/8/8/8/8/8/8/K${i}k w - - 0 1` }))
+  // SHARD: a Spanish book remark and an English Lichess one.
+
+  it('books: the book remark wins even when the reader\'s language is that of the study', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve()
+    expect((await humanCommentsForGame(plies, 'en', 15, { priority: 'books' }))[10].text).toBe('El caballo defiende el peón de e5.')
+  })
+
+  it('books: Lichess is used where no book remark exists', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('index.json') ? INDEX : { [HASH]: [SHARD[HASH][0]] }), { status: 200 })))
+    expect((await humanCommentsForGame(plies, 'es', 15, { priority: 'books' }))[10].text).toBe('A study remark.')
+  })
+
+  it('lichess: the study remark wins, even over a book remark in the reader\'s language', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve()
+    expect((await humanCommentsForGame(plies, 'es', 15, { priority: 'lichess' }))[10].text).toBe('A study remark.')
+  })
+
+  it('both: the remark in the reader\'s language first (previous behaviour)', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve()
+    expect((await humanCommentsForGame(plies, 'en', 15, { priority: 'both' }))[10].text).toBe('A study remark.')
+  })
+
+  it('defaults to the setting of the store (books)', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve()
+    expect((await humanCommentsForGame(plies, 'en'))[10].text).toBe('El caballo defiende el peón de e5.')
+  })
+
+  it('the Database-tab lookup stays unfiltered: every remark, books first', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db', commentSourcePriority: 'lichess' })
+    serve()
+    expect((await lookupPositionComments(FEN)).map((c) => c.source.kind)).toEqual(['book', 'lichess'])
+  })
+})
+
+describe('translating missing comments while borrowing', () => {
+  const plies = Array.from({ length: 12 }, (_, i) => ({ fenAfter: i === 9 ? FEN : `8/8/8/8/8/8/8/K${i}k w - - 0 1` }))
+  const serve = (entries: unknown[]) => vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('index.json') ? INDEX : { [HASH]: entries }), { status: 200 })))
+  const en = { id: 2, text: 'A study remark.', lang: 'en', game: '18-1', ply: 4, san: 'Nc6', source: 18, label: 'A – B' }
+
+  it('uses the translation of the comment in the game right away', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve([en])
+    const translate = vi.fn(async () => 'Eine Studienbemerkung.')
+    const human = await humanCommentsForGame(plies, 'de', 15, { priority: 'books', translate })
+    expect(human[10].text).toBe('Eine Studienbemerkung.')
+    expect(translate).toHaveBeenCalledTimes(1)
+    expect(translate.mock.calls[0]).toEqual([expect.objectContaining({ id: 2, text: 'A study remark.', fen: FEN }), 'de'])
+  })
+
+  it('does not ask when the comment already has a text in the reader\'s language', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve([{ ...en, translations: { en: 'Std.', de: 'Schon da.' } }])
+    const translate = vi.fn(async () => 'x')
+    expect((await humanCommentsForGame(plies, 'de', 15, { priority: 'books', translate }))[10].text).toBe('Schon da.')
+    expect(translate).not.toHaveBeenCalled()
+  })
+
+  it('asks to standardise a comment in the reader\'s own language that has no universal text yet', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve([en])
+    const translate = vi.fn(async () => 'Black attacks.')
+    expect((await humanCommentsForGame(plies, 'en', 15, { priority: 'books', translate }))[10].text).toBe('Black attacks.')
+  })
+
+  it('falls back to the untranslated text when the translation fails or throws', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    serve([en])
+    expect((await humanCommentsForGame(plies, 'de', 15, { priority: 'books', translate: async () => null }))[10].text).toBe('A study remark.')
+    clearCommentCache()
+    expect((await humanCommentsForGame(plies, 'de', 15, { priority: 'books', translate: async () => { throw new Error('boom') } }))[10].text).toBe('A study remark.')
+  })
+})

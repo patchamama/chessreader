@@ -1,5 +1,9 @@
 import type { Lang } from '@chess-ebook/chess-shared'
 import { commentSource, humanCommentsForGame, lookupPositionComments, type HumanComment } from '../commentdb/commentLookup'
+import { translateBorrowedComment } from '../../comments/commentAi'
+import { configuredLlm } from '../../../shared/llm'
+import { complete } from '../../../shared/llm/llmClient'
+import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { commentAlternativesAttr, type CommentAlternative } from '../utils/diagramMark'
 
 /** A book remark for annotateGame's `human` option, with the commentary database game and ply it comes from. */
@@ -28,7 +32,10 @@ function alternativesOf(all: HumanComment[], lang: Lang): CommentAlternative[] {
  * origin cannot be found again keeps no link.
  */
 export async function humanCommentsWithLinks(plies: Array<{ fenAfter: string }>, lang: Lang): Promise<Record<number, LinkedHumanComment>> {
-  const found = await humanCommentsForGame(plies, lang)
+  const { commentSourcePriority, translateMissingComments } = useSettingsStore.getState()
+  const config = translateMissingComments ? configuredLlm() : null
+  const translate = config ? (c: HumanComment & { fen: string }, to: string) => translateBorrowedComment((request) => complete(config, request), c, to) : undefined
+  const found = await humanCommentsForGame(plies, lang, undefined, { priority: commentSourcePriority, translate })
   const out: Record<number, LinkedHumanComment> = {}
   for (const [key, comment] of Object.entries(found)) {
     const ply = Number(key)

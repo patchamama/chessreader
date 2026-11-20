@@ -19,7 +19,9 @@ import { formatSan } from '../../shared/chess/notation'
 import { LinePlayer } from '../../shared/chess/LinePlayer'
 import { InfoSection } from '../../shared/info/InfoSection'
 import { OpenInStudy } from '../gamesearch/OpenInStudy'
-import { commentSource, lookupPositionComments, type HumanComment } from '../library/commentdb/commentLookup'
+import { commentSource, commentTextFor, lookupPositionComments, type HumanComment } from '../library/commentdb/commentLookup'
+import { commentInNotation } from '../library/commentdb/commentNotation'
+import { figurinesOn } from '../training/trapNotation'
 import type { CueBoard } from '../library/narration/cueStyles'
 import type { MoveHint } from '../library/review/reviewEngine'
 import { playAnalyse } from './playStore'
@@ -572,7 +574,7 @@ export default function PlayPage() {
           <section data-testid="live-comments" aria-label={t.commentsTitle} className="flex flex-col gap-1 rounded border border-sky-200 bg-sky-50 p-2 text-sm text-sky-950">
             <h2 className="text-sm font-semibold">📚 {t.commentsTitle}</h2>
             {liveComments.map((c, i) => (
-              <p key={i}>{c.text} <span className="text-xs text-sky-700">— {commentSource(c)}</span></p>
+              <p key={i}>{commentInNotation(commentTextFor(c, lang), lang, figurinesOn(settings))} <span className="text-xs text-sky-700">— {commentSource(c)}</span></p>
             ))}
           </section>
         )}

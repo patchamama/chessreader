@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { VoiceSettings } from './VoiceSettings'
 import { LICHESS_TOKEN_URL } from '../lichess/tokenUrl'
 import { lichessAccount } from '../../features/gamesearch/myGames'
-import { APP_LANGUAGES, DEFAULT_RESOURCES_URL, NOTATION_STYLES, type AppLanguage, type NotationStyle } from './settingsStore'
+import { APP_LANGUAGES, DEFAULT_RESOURCES_URL, NOTATION_STYLES, type AppLanguage, type NotationStyle, type CommentSourcePriority } from './settingsStore'
 import { checkResources, resourcesApiUrl, resourcesTokenUrl } from '../../features/library/commentdb/commentLookup'
 import { LlmSettings } from '../llm/LlmSettings'
+import { useLlm } from '../llm/useLlm'
 import { useSettingsStore, BOARD_THEMES, FONT_FAMILIES, STOCKFISH_VERSIONS, APP_THEME_PRESETS, PIECE_THEMES, type BoardTheme, type FontFamily, type EvalBarDirection, type StockfishVersion, type EngineSource,
   type ImageAlign, type HeadingStyle, type EngineVariations, type AppTheme, type PieceTheme } from './settingsStore'
 
@@ -126,6 +127,7 @@ function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; labe
 
 export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const s = useSettingsStore()
+  const llm = useLlm()
   const [maximised, setMaximised] = useState(false)
   const choice = (active: boolean) =>
     `flex-1 rounded py-1 text-xs border transition-colors ${
@@ -435,6 +437,23 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               onClick={() => s.set({ humanComments: !s.humanComments })}
               label="Borrow book remarks on the same position"
             />
+            <select
+              aria-label="Preferred comment source"
+              value={s.commentSourcePriority}
+              onChange={(e) => s.set({ commentSourcePriority: e.target.value as CommentSourcePriority })}
+              className={inputClass}
+            >
+              <option value="books">Prefer book comments (Lichess only where a book has none)</option>
+              <option value="lichess">Prefer Lichess studies (books as fallback)</option>
+              <option value="both">Both (the one in my language first)</option>
+            </select>
+            {llm.available && (
+              <Toggle
+                on={s.translateMissingComments}
+                onClick={() => s.set({ translateMissingComments: !s.translateMissingComments })}
+                label="Translate borrowed comments the database lacks (needs the AI assistant)"
+              />
+            )}
             <input
               aria-label="Commentary database URL"
               placeholder={DEFAULT_RESOURCES_URL}

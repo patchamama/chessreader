@@ -1,10 +1,12 @@
 import { positionHash, type Lang } from '@chess-ebook/chess-shared'
 import { hasServerSession } from '../../../shared/api/serverSession'
 import { httpClient } from '../../../shared/api/httpClient'
-import { useSettingsStore } from '../../../shared/settings/settingsStore'
+import { useSettingsStore, type CommentSourcePriority } from '../../../shared/settings/settingsStore'
 
 /** What an author said about a position, and where it comes from. */
 export interface HumanComment {
+  /** The id of the comment in the database, when known (to save a suggestion for it). */
+  id?: number
   text: string
   lang: string
   ply: number
@@ -109,6 +111,10 @@ function getResource(path: string): Promise<Response> {
  * JSON by position hash). Books come before Lichess studies.
  */
 export async function lookupPositionComments(fen: string): Promise<HumanComment[]> {
+  return (await lookupAll(fen)).filter((c) => !dropped(c))
+}
+
+async function lookupAll(fen: string): Promise<HumanComment[]> {
   const hash = positionHash(fen)
   if (hasServerSession()) {
     try {
@@ -130,7 +136,7 @@ export async function lookupPositionComments(fen: string): Promise<HumanComment[
       .filter(({ s }) => s)
       .sort((a, b) => a.s.priority - b.s.priority || a.e.id - b.e.id)
       .map(({ e, s }) => ({
-        text: e.text, lang: e.lang, ply: e.ply, san: e.san, gameId: e.game, label: e.label,
+        id: e.id, text: e.text, lang: e.lang, ply: e.ply, san: e.san, gameId: e.game, label: e.label,
         source: { kind: s.kind, title: s.title, author: s.author },
         ...(e.translations ? { translations: e.translations } : {}),
       }))
@@ -151,22 +157,58 @@ export function commentSource(c: HumanComment): string {
   return [author, c.source.title, c.label].filter(Boolean).join(', ')
 }
 
+/** A comment the batch dropped as not universal: its universal text (the one in its own language) is empty. */
+const dropped = (c: Pick<HumanComment, 'lang' | 'translations'>) => c.translations?.[c.lang] === ''
+
+/** What to show of a comment: its text in the reader's language, else the universal text, else the original. */
+export function commentTextFor(c: Pick<HumanComment, 'text' | 'lang' | 'translations'>, lang: string): string {
+  return c.translations?.[lang] || c.translations?.[c.lang] || c.text
+}
+
 /** Positions of the opening are commented everywhere with generic words: borrowing starts after them. */
 const FIRST_PLY = 9
 
+export interface BorrowOptions {
+  /** Which source to prefer; the setting of Settings when absent. */
+  priority?: CommentSourcePriority
+  /** Gives the text of a comment in the reader's language (standardised and translated), or null; absent: no translation. */
+  translate?: (comment: HumanComment & { fen: string }, lang: string) => Promise<string | null>
+}
+
+/** The remarks of a position to choose from: those of the preferred source, or all of them when it has none ("both": all). */
+function candidates(found: HumanComment[], priority: CommentSourcePriority): HumanComment[] {
+  if (priority === 'both') return found
+  const preferred = found.filter((c) => (c.source.kind === 'lichess') === (priority === 'lichess'))
+  return preferred.length ? preferred : found
+}
+
+/** Whether the reader has no text of the comment: none in their language, or a comment without universal text yet. */
+const lacksText = (c: HumanComment, lang: string) => !c.translations?.[lang] && (c.lang !== lang || !c.translations?.[c.lang])
+
 /**
  * For each position of a reviewed game that an author commented (after the
- * opening), the best remark: in the reader's language first, books before
- * studies. Keyed by ply (1-based), ready for annotateGame's `human` option.
+ * opening), the best remark: the preferred source first (books by default),
+ * then in the reader's language. Keyed by ply (1-based), ready for
+ * annotateGame's `human` option. With `translate`, a chosen remark without a
+ * text in the reader's language is asked for, falling back to its own text.
  */
-export async function humanCommentsForGame(plies: Array<{ fenAfter: string }>, lang: Lang, max = 15): Promise<Record<number, { text: string; source: string }>> {
+export async function humanCommentsForGame(plies: Array<{ fenAfter: string }>, lang: Lang, max = 15, options: BorrowOptions = {}): Promise<Record<number, { text: string; source: string }>> {
+  const priority = options.priority ?? useSettingsStore.getState().commentSourcePriority ?? 'books'
   const out: Record<number, { text: string; source: string }> = {}
   for (let i = FIRST_PLY; i < plies.length && Object.keys(out).length < max; i++) {
     const found = await lookupPositionComments(plies[i].fenAfter)
     if (!found.length) continue
-    // Written in the reader's language, or translated into it, before any other.
-    const best = found.find((c) => c.lang === lang) ?? found.find((c) => c.translations?.[lang]) ?? found[0]
-    const text = best.lang === lang ? best.text : best.translations?.[lang] ?? best.text
+    const pool = candidates(found, priority)
+    // Written in the reader's language, or translated into it, before any other (inside the preferred source).
+    const best = pool.find((c) => c.lang === lang) ?? pool.find((c) => c.translations?.[lang]) ?? pool[0]
+    let text = commentTextFor(best, lang)
+    if (options.translate && lacksText(best, lang)) {
+      try {
+        text = (await options.translate({ ...best, fen: plies[i].fenAfter }, lang)) || text
+      } catch {
+        // the untranslated text stands
+      }
+    }
     out[i + 1] = { text, source: commentSource(best) }
   }
   return out

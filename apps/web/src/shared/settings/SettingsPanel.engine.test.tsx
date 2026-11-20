@@ -68,3 +68,28 @@ describe('SettingsPanel — Engine section', () => {
     expect(useSettingsStore.getState().showEngineArrow).toBe(false)
   })
 })
+
+describe('SettingsPanel — comment source and translation', () => {
+  beforeEach(() => {
+    useSettingsStore.getState().reset()
+  })
+
+  it('chooses which comments to prefer: books, Lichess or both (default books)', () => {
+    render(<SettingsPanel onClose={vi.fn()} />)
+    const select = screen.getByLabelText('Preferred comment source') as HTMLSelectElement
+    expect(select.value).toBe('books')
+    expect([...select.options].map((o) => o.value)).toEqual(['books', 'lichess', 'both'])
+    fireEvent.change(select, { target: { value: 'lichess' } })
+    expect(useSettingsStore.getState().commentSourcePriority).toBe('lichess')
+  })
+
+  it('offers translating missing comments only when the AI assistant is set up', () => {
+    const { unmount } = render(<SettingsPanel onClose={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /translate borrowed comments/i })).toBeNull()
+    unmount()
+    useSettingsStore.setState({ aiProvider: 'ollama', aiBaseUrl: 'http://localhost:11434/v1', aiModel: 'm' })
+    render(<SettingsPanel onClose={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /translate borrowed comments/i }))
+    expect(useSettingsStore.getState().translateMissingComments).toBe(true)
+  })
+})
