@@ -7,7 +7,7 @@ import RequireAdmin from '../features/auth/guards/RequireAdmin'
 import AdminPage from '../features/admin/components/AdminPage'
 import LibraryGrid from '../features/library/components/LibraryGrid'
 import ResetPasswordPage from '../features/auth/components/ResetPasswordPage'
-import BookReader from '../features/library/components/BookReader'
+import ReadRoute from './ReadRoute'
 import WebparserView from '../features/webparser/components/WebparserView'
 import GameSearchPage from '../features/gamesearch/GameSearchPage'
 import PlayPage from '../features/play/PlayPage'
@@ -48,7 +48,7 @@ const routes = [
         path: '/read/:bookId',
         element: (
           <RequireApproved>
-            <BookReader />
+            <ReadRoute />
           </RequireApproved>
         ),
       },

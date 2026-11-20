@@ -12,12 +12,16 @@ Objective: footer GPU check, analysis-board tabs for opened games/books, quote-p
 - S8 "Si se pone algo así: 1. e4 e5 2. Nf3 NC6 por ejemplo, debe de reconcerse como 1. e4 e5 2. Nf3 Nc6."
 - S9 "Al filtrarse los comentarios para una posición debe de mostrarse cuántos comentarios se encontraron."
 
+- S10 "vuelvo a abrir un libro y no se abre en un tab del analysis board con las mismas cosas que se abre normal, deseo que se abra con todo como se hace hasta ahora pero que aparezca en un tab dentro de Analysis board ya sí desde ahí se puede acceder a varios libros abiertos o jugadas"
+
 ## Tasks
 - [x] T1 S1 footer GPU in browser — parent
 - [x] T2 S3 universal prompt keeps quotes and authors — parent (scripts/translate-comments.mjs)
 - [x] T3 S4 S6 S7 S8 S9 Find by position + editable filtered comments — writer W1 (features/database/*)
 - [x] T4 S5 comments per FEN in Analysis board and Play — writer W2
 - [x] T5 S2 analysis tab per opened game/book — writer W3
+- [x] T6 S10 full reader inside an Analysis board tab (book tabs) — writer W4
 
 ## Log
 - L1 2026-11-20 user: S1-S9 (quoted above), one message.
+- L2 2026-11-20 user (verbatim): vuelvo a abrir un libro y no se abre en un tab del analysis board con las mismas cosas que se abre normal, deseo que se abra con todo como se hace hasta ahora pero que aparezca en un tab dentro de Analysis board ya sí desde ahí se puede acceder a varios libros abiertos o jugadas

@@ -10,6 +10,7 @@ import { FOOTER_HEIGHT, StatusFooter } from '../shared/layout/StatusFooter'
 import { AnalysisBoardsPanel } from '../features/library/analysis/AnalysisBoardsPanel'
 import { pageWidthClass } from '../shared/layout/pageWidth'
 import { NotesPanel } from '../shared/notes/NotesPanel'
+import { selectedBookId, useReaderTabs } from '../features/library/analysis/readerTabs'
 import { countPending, useNotesStore } from '../shared/notes/notesStore'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -33,9 +34,12 @@ export default function AppLayout() {
   // The reader fits the window: its panes scroll inside, the page itself never
   // grows past the window, so the status footer always stays at the bottom (S4).
   const { pathname } = useLocation()
-  const fit = pathname.startsWith('/read/')
-  // The analysis board tab shows the analysis boards itself: no floating copy over it (S11).
+  const readingBook = useReaderTabs((st) => selectedBookId(st) !== null)
+  // The analysis board tab shows the analysis boards itself: no floating copy over it (S11),
+  // except over an open book, whose own boards open on top of it.
   const onAnalysis = pathname === '/analysis' || pathname.startsWith('/analysis/')
+  // A book open in the Analysis board page is the full reader: same fit layout.
+  const fit = pathname.startsWith('/read/') || (onAnalysis && readingBook)
 
   const handleLogout = () => {
     clear()
@@ -148,14 +152,14 @@ export default function AppLayout() {
 
       <main
         className={fit
-          ? `mx-auto flex min-h-0 w-full flex-1 flex-col ${pageWidthClass(settings.pageWidth)}`
+          ? `mx-auto flex min-h-0 w-full flex-1 flex-col ${pageWidthClass(settings.pageWidth)} [&>[data-keep-alive]:not([hidden])]:flex [&>[data-keep-alive]:not([hidden])]:min-h-0 [&>[data-keep-alive]:not([hidden])]:flex-1 [&>[data-keep-alive]:not([hidden])]:flex-col`
           : `mx-auto ${pageWidthClass(settings.pageWidth)} py-8 ${settings.statusFooter ? 'pb-12' : ''}`}
         style={{ paddingLeft: `${settings.marginH}rem`, paddingRight: `${settings.marginH}rem` }}
       >
         <KeepAliveOutlet />
       </main>
 
-      {!onAnalysis && <AnalysisBoardsPanel />}
+      {(!onAnalysis || readingBook) && <AnalysisBoardsPanel />}
       <StatusFooter />
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
       {showNotes && <NotesPanel onClose={() => setShowNotes(false)} />}

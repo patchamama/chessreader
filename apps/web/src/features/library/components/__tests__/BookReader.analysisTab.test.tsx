@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import React from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import BookReader from '../BookReader'
+import ReadRoute from '../../../../app/ReadRoute'
+import AnalysisPage from '../../analysis/AnalysisPage'
 import { useStudyBoardStore } from '../../store/studyBoardStore'
-import { useAnalysisBoards, openAnalysisBoard } from '../../analysis/analysisBoards'
+import { useAnalysisBoards } from '../../analysis/analysisBoards'
+import { useReaderTabs } from '../../analysis/readerTabs'
 
-// finder-board-comments-round S2: a game opened in the reader gets a tab in the Analysis board page.
+// finder-board-comments-round S10: /read/:bookId opens the whole reader inside a tab of the Analysis board page.
 
 vi.mock('../../api/libraryApi', () => ({
   useChapter: (_id: number, n: number) => ({
@@ -22,34 +23,30 @@ vi.mock('../../../../shared/stockfish/useStockfishEval', () => ({
   useStockfishEval: () => ({ loading: false, scoreCp: 0, depth: 10 }),
 }))
 
-function wrapper({ children }: { children: React.ReactNode }) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return (
-    <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/read/7']}>
-        <Routes><Route path="/read/:bookId" element={children} /></Routes>
-      </MemoryRouter>
-    </QueryClientProvider>
-  )
-}
-
 beforeEach(() => {
   localStorage.clear()
   useStudyBoardStore.getState().reset()
   useAnalysisBoards.setState({ boards: [], active: null, scratch: null })
+  useReaderTabs.setState({ books: [], selected: { type: 'current' } })
   Element.prototype.scrollIntoView = () => {}
 })
 
-describe('opening a game registers an analysis tab (S2)', () => {
-  it('adds one tab with the book as source and the game line, without changing the selected tab', async () => {
-    const own = openAnalysisBoard({ title: 'Mine' })
-    render(<BookReader />, { wrapper })
-    await waitFor(() => expect(useAnalysisBoards.getState().boards.some((b) => b.key?.startsWith('book:7:1:'))).toBe(true))
-    const s = useAnalysisBoards.getState()
-    const tab = s.boards.find((b) => b.key === 'book:7:1:0')!
-    expect(tab.source).toBe('My System')
-    expect(tab.moves).toEqual(['e4', 'e5', 'Nf3', 'Nc6'])
-    expect(s.active).toBe(own)
-    expect(s.boards.filter((b) => b.key === 'book:7:1:0')).toHaveLength(1)
+describe('/read/:bookId lands on the Analysis board (S10)', () => {
+  it('redirects to /analysis with the book tab selected and the full reader rendered', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/read/7']}>
+          <Routes>
+            <Route path="/read/:bookId" element={<ReadRoute />} />
+            <Route path="/analysis" element={<AnalysisPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('book-reader')).toBeInTheDocument())
+    expect(screen.getByRole('tab', { name: 'My System' })).toHaveAttribute('aria-selected', 'true')
+    expect(useReaderTabs.getState().books).toEqual([{ bookId: 7 }])
+    expect(screen.getAllByTestId('book-reader')).toHaveLength(1)
   })
 })

@@ -7,6 +7,7 @@ import { useAuthStore } from '../../features/auth/store/authStore'
 import { isLocalhostHost } from '../../shared/env/devMode'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { FOOTER_HEIGHT } from '../../shared/layout/StatusFooter'
+import { openBookTab, useReaderTabs } from '../../features/library/analysis/readerTabs'
 import { openAnalysisBoard, useAnalysisBoards } from '../../features/library/analysis/analysisBoards'
 
 vi.mock('../../shared/env/devMode', () => ({
@@ -69,6 +70,7 @@ describe('AppLayout fits the reader to the window (S4)', () => {
         <Route element={<AppLayout />}>
           <Route path="/read/:bookId" element={<div data-testid="reader">reader</div>} />
           <Route path="/library" element={<div>Page Content</div>} />
+          <Route path="/analysis" element={<div data-testid="analysis">analysis</div>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -77,6 +79,20 @@ describe('AppLayout fits the reader to the window (S4)', () => {
   beforeEach(() => {
     useAuthStore.setState({ token: null, user: null })
     useSettingsStore.setState({ statusFooter: true })
+    useReaderTabs.setState({ books: [], selected: { type: 'current' } })
+  })
+
+  it('the Analysis board page fits the window too while a book is open in it (S10)', () => {
+    openBookTab(7)
+    renderAt('/analysis')
+    const root = screen.getByTestId('app-root')
+    expect(root.dataset.layout).toBe('fit')
+    expect(root.style.height).toBe('100dvh')
+  })
+
+  it('the Analysis board page keeps the page layout without a book shown', () => {
+    renderAt('/analysis')
+    expect(screen.getByTestId('app-root').dataset.layout).toBe('page')
   })
 
   it('the reader page takes exactly the window height, above the status footer, and scrolls inside', () => {
