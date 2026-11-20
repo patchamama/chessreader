@@ -74,3 +74,23 @@ describe('translated comments reach the reader (llm-assistant-round S3/S12)', ()
     expect(await humanCommentsForGame(plies, 'es')).toEqual({ 10: { text: 'A study remark.', source: 'Lichess studies, A – B' } })
   })
 })
+
+describe('the sample repository is the default (llm-assistant-round S12)', () => {
+  it('with no resources URL set, the public sample repository is read, without any token', async () => {
+    useSettingsStore.setState({ commentDbUrl: '', commentDbToken: 'ghp_x' })
+    const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('index.json') ? INDEX : SHARD), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const found = await lookupPositionComments(FEN)
+    expect(found.map((c) => c.text)).toContain('A study remark.')
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit | undefined]
+    expect(url).toBe('https://raw.githubusercontent.com/patchamama/chessreader-resources-sample/main/index.json')
+    expect(init?.headers).toBeUndefined()
+  })
+  it('a URL set in Settings wins over the default', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('index.json') ? INDEX : SHARD), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await lookupPositionComments(FEN)
+    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe('https://example.org/db/index.json')
+  })
+})

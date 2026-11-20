@@ -63,10 +63,18 @@ export function resourcesTokenUrl(url: string): string | null {
   return `https://github.com/settings/personal-access-tokens/new?${q}`
 }
 
+/** What a deploy reads when Settings names no resources repository: the public sample (no token). */
+export const DEFAULT_RESOURCES_URL = 'https://raw.githubusercontent.com/patchamama/chessreader-resources-sample/main'
+
+/** The repository to read and its token: the one of Settings, else the public sample without any token. */
+function resourcesSource(): { url: string; token: string } {
+  const { commentDbUrl, commentDbToken } = useSettingsStore.getState()
+  return commentDbUrl.trim() ? { url: commentDbUrl, token: commentDbToken } : { url: DEFAULT_RESOURCES_URL, token: '' }
+}
+
 /** Whether the static database can be read: a URL, and a token when it is on GitHub (the repository is private). */
 export function resourcesConfigured(): boolean {
-  const { commentDbUrl, commentDbToken } = useSettingsStore.getState()
-  if (!commentDbUrl.trim()) return false
+  const { url: commentDbUrl, token: commentDbToken } = resourcesSource()
   return !/^https:\/\/(?:api\.|www\.)?github\.com\//.test(resourcesApiUrl(commentDbUrl)) || !!commentDbToken
 }
 
@@ -84,7 +92,7 @@ export async function checkResources(): Promise<{ ok: boolean; message: string }
 }
 
 function getResource(path: string): Promise<Response> {
-  const { commentDbUrl, commentDbToken } = useSettingsStore.getState()
+  const { url: commentDbUrl, token: commentDbToken } = resourcesSource()
   const url = `${resourcesApiUrl(commentDbUrl)}/${path}`
   const headers: Record<string, string> = {}
   let host = ''
