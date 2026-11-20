@@ -37,3 +37,44 @@ export function inferDiagramFen(games: GameLike[], imageOffset: number): string 
 
   return bestFen ?? INITIAL_FEN
 }
+
+/** A move written in the text before a diagram: the position after it and how to name it. */
+export interface MoveBefore {
+  fen: string
+  san: string
+  moveNumber: number
+  color: 'white' | 'black'
+}
+
+/**
+ * The moves a diagram can show (S14 of llm-assistant-round), read from the move
+ * spans of the page in reading order: the last main-line move before the image,
+ * and — when the last move before the image belongs to a variation — that
+ * variation move too. Marks without a game (gameIndex < 0) are not moves of a game.
+ */
+export function movesBeforeImage(
+  img: Element,
+  container: ParentNode,
+  isMainline: (gameIndex: number, nodeId: string) => boolean,
+): { main: MoveBefore | null; variation: MoveBefore | null } {
+  let main: MoveBefore | null = null
+  let last: { move: MoveBefore; mainline: boolean } | null = null
+  for (const el of Array.from(container.querySelectorAll<HTMLElement>('span[data-node-id]'))) {
+    if (!(el.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING)) break
+    const key = el.dataset.nodeId ?? ''
+    const sep = key.indexOf(':')
+    const gameIndex = Number(key.slice(0, sep))
+    const fen = el.dataset.fen
+    if (sep < 0 || !Number.isInteger(gameIndex) || gameIndex < 0 || !fen) continue
+    const move: MoveBefore = {
+      fen,
+      san: el.dataset.san ?? el.textContent ?? '',
+      moveNumber: Number(el.dataset.moveNumber) || 0,
+      color: el.dataset.color === 'black' ? 'black' : 'white',
+    }
+    const mainline = isMainline(gameIndex, key.slice(sep + 1))
+    if (mainline) main = move
+    last = { move, mainline }
+  }
+  return { main, variation: last && !last.mainline ? last.move : null }
+}

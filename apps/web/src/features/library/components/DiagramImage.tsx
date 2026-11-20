@@ -10,6 +10,7 @@ import { regenerateDiagram } from '../../../shared/chess/diagramApi'
 import { formatDiagramEvalFooter, type DiagramEval } from '../../../shared/chess/diagramEvalFooter'
 import { useDiagramEvalStore } from '../diagramEval/diagramEvalStore'
 import { DiagramEvalFooter, RefreshIcon } from '../diagramEval/DiagramEvalFooter'
+import type { MoveBefore } from '../utils/inferDiagramFen'
 import { BOOK_STYLE_LABEL, generatedDiagramSvg, useDiagramStyleStore, type DiagramStyle } from '../utils/boardSvg'
 import { FenHint } from './FenHint'
 
@@ -31,6 +32,9 @@ interface Props {
    * loaded, a regenerated diagram is shown instead (S8).
    */
   fenKnown?: boolean
+  /** The last main-line move before the diagram, and a variation move just before it (S14). */
+  mainBefore?: MoveBefore | null
+  variationBefore?: MoveBefore | null
 }
 
 /**
@@ -41,7 +45,7 @@ interface Props {
  * generated board opens a config menu (style / piece set / coordinates) and a
  * FEN editor. A missing image whose position is known is regenerated at once.
  */
-export function DiagramImage({ src, alt, fen, withEval = false, textFen, fenKnown = false }: Props) {
+export function DiagramImage({ src, alt, fen, withEval = false, textFen, fenKnown = false, mainBefore = null, variationBefore = null }: Props) {
   const boardTheme = useSettingsStore((s) => s.diagramBoardTheme)
   const pieceTheme = useSettingsStore((s) => s.diagramPieceTheme)
   const coordinates = useSettingsStore((s) => s.diagramCoordinates)
@@ -213,7 +217,7 @@ export function DiagramImage({ src, alt, fen, withEval = false, textFen, fenKnow
           )}
         </span>
       )}
-      {evalShown && <DiagramEvalFooter fen={activeFen} />}
+      {evalShown && <DiagramEvalFooter key={activeFen} fen={activeFen} main={mainBefore} variation={variationBefore} />}
     </span>
   )
 }

@@ -40,7 +40,7 @@ import { RecognitionDebugPanel } from './RecognitionDebugPanel'
 import { isDevMode } from '../../../shared/env/devMode'
 import { createRoot, type Root } from 'react-dom/client'
 import { DiagramImage } from './DiagramImage'
-import { inferDiagramFen } from '../utils/inferDiagramFen'
+import { INITIAL_FEN, movesBeforeImage } from '../utils/inferDiagramFen'
 import { followActiveMove } from '../utils/autoscroll'
 import { NarrationPanel } from '../narration/NarrationPanel'
 import { GameReviewPanel } from '../review/GameReviewPanel'
@@ -739,14 +739,14 @@ export default function BookReader() {
     const bookDiagrams: string[] = []
     for (const img of images) {
       // Character offset of this image = length of all text before it in the DOM.
-      const range = document.createRange()
-      range.setStart(container, 0)
-      range.setEndBefore(img)
-      const offset = range.toString().length
+      // The moves written before the image, in reading order (S14): the text's
+      // character offsets and the page's are not the same text, so the move
+      // spans of the page are read instead.
+      const before = movesBeforeImage(img, container, (gameIndex, nodeId) => games[gameIndex]?.tree.mainline.includes(nodeId) ?? false)
 
       // A diagram written by the commentary carries its position.
-      // The book's FEN (or the hidden FEN next to it) first, else the position at that point of the game.
-      const { fen, known } = diagramFenOf(img, inferDiagramFen(games, offset))
+      // The book's FEN (or the hidden FEN next to it) first, else the position after the last main-line move.
+      const { fen, known } = diagramFenOf(img, before.main?.fen ?? INITIAL_FEN)
       const src = img.getAttribute('src') ?? ''
       const alt = img.getAttribute('alt') ?? 'diagram'
 
@@ -757,7 +757,7 @@ export default function BookReader() {
       img.replaceWith(mount)
 
       const root = createRoot(mount)
-      root.render(<DiagramImage src={src} alt={alt} fen={fen} fenKnown={known} textFen={img.getAttribute('data-text-fen') ?? undefined} withEval={!img.classList.contains('diagram')} />)
+      root.render(<DiagramImage src={src} alt={alt} fen={fen} fenKnown={known} textFen={img.getAttribute('data-text-fen') ?? undefined} withEval={!img.classList.contains('diagram')} mainBefore={before.main} variationBefore={before.variation} />)
       if (!img.classList.contains('diagram')) bookDiagrams.push(fen)
       diagramRoots.current.push(root)
     }

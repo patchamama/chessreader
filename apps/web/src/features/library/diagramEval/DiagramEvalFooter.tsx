@@ -6,12 +6,22 @@ import EvalBar from '../../viewer/components/EvalBar'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { evaluateDiagram, useDiagramEvalStore, type DiagramLine } from './diagramEvalStore'
 import { bookLine, evalWords, fromWhite } from './diagramEvalText'
+import type { MoveBefore } from '../utils/inferDiagramFen'
+import { formatSan } from '../../../shared/chess/notation'
+import type { AppLanguage, NotationStyle } from '../../../shared/settings/settingsStore'
 
-const T: Record<Lang, { again: string; first: string; busy: string }> = {
-  es: { again: 'Volver a evaluar este diagrama', first: 'Evaluar este diagrama', busy: 'Evaluando…' },
-  en: { again: 'Evaluate this diagram again', first: 'Evaluate this diagram', busy: 'Evaluating…' },
-  de: { again: 'Dieses Diagramm neu bewerten', first: 'Dieses Diagramm bewerten', busy: 'Bewerte…' },
+const T: Record<Lang, { again: string; first: string; busy: string; after: string; book: string; which: string; main: string; variation: string }> = {
+  es: { again: 'Volver a evaluar este diagrama', first: 'Evaluar este diagrama', busy: 'Evaluando…', after: 'Evaluando tras', book: 'Evaluando la posición del FEN del libro', which: '¿Evaluar hasta qué jugada?', main: 'Línea principal', variation: 'Variante' },
+  en: { again: 'Evaluate this diagram again', first: 'Evaluate this diagram', busy: 'Evaluating…', after: 'Evaluating after', book: 'Evaluating the position of the book\'s FEN', which: 'Evaluate up to which move?', main: 'Main line', variation: 'Variation' },
+  de: { again: 'Dieses Diagramm neu bewerten', first: 'Dieses Diagramm bewerten', busy: 'Bewerte…', after: 'Bewerte nach', book: 'Bewerte die Stellung der FEN des Buches', which: 'Bis zu welchem Zug bewerten?', main: 'Hauptvariante', variation: 'Nebenvariante' },
 }
+
+/** "12...Nb6" in the reader's notation. */
+function moveLabel(m: MoveBefore, lang: Lang, style: NotationStyle): string {
+  return `${m.moveNumber}${m.color === 'black' ? '...' : '.'}${formatSan(m.san, lang as AppLanguage, style)}`
+}
+
+const samePosition = (a: string, b: string) => a.split(' ').slice(0, 2).join(' ') === b.split(' ').slice(0, 2).join(' ')
 
 /** A minimalist refresh icon (spins while working). */
 export function RefreshIcon({ spinning = false, className = 'h-3 w-3' }: { spinning?: boolean; className?: string }) {
@@ -33,16 +43,36 @@ function EngineLine({ fen, line, lang, max, className, testId, suffix }: { fen: 
  * engine and depth, the engine's line, and other moves worth playing with their
  * score; an evaluation bar if chosen, and a button to evaluate it (again).
  */
-export function DiagramEvalFooter({ fen }: { fen: string }) {
+export function DiagramEvalFooter({ fen: diagramFen, main = null, variation = null }: {
+  fen: string
+  /** The last main-line move written before the diagram (S14). */
+  main?: MoveBefore | null
+  /** A variation move written after it, just before the diagram: the reader picks which one to evaluate. */
+  variation?: MoveBefore | null
+}) {
   const lang = useSettingsStore((s) => s.language) as Lang
+  const style = useSettingsStore((s) => s.notationStyle) as NotationStyle
   const showBar = useSettingsStore((s) => s.diagramEvalBar)
+  const [fen, setFen] = useState(diagramFen)
   const e = useDiagramEvalStore((s) => s.get(fen))
   const [busy, setBusy] = useState(false)
+  const [target, setTarget] = useState<string | null>(null)
+  const [choosing, setChoosing] = useState(false)
   const t = T[lang] ?? T.en
-  const refresh = async () => {
+  // The diagram's own position is the book's FEN when it differs from the main line's.
+  const bookFen = !main || !samePosition(main.fen, diagramFen)
+  const run = async (position: string, label: string) => {
+    setChoosing(false)
+    setFen(position)
+    setTarget(label)
     setBusy(true)
     // The engine chosen in Settings evaluates it again (S2).
-    try { await evaluateDiagram(fen, { engine: 'settings' }) } catch { /* no engine: nothing to show */ } finally { setBusy(false) }
+    try { await evaluateDiagram(position, { engine: 'settings' }) } catch { /* no engine: nothing to show */ } finally { setBusy(false); setTarget(null) }
+  }
+  const evaluateMain = () => void run(diagramFen, bookFen || !main ? t.book : `${t.after} ${moveLabel(main, lang, style)}`)
+  const refresh = () => {
+    if (variation && !bookFen) setChoosing(true)
+    else evaluateMain()
   }
   const best = e?.lines[0]
   const whiteBest = best ? fromWhite(best, fen) : null
@@ -62,9 +92,21 @@ export function DiagramEvalFooter({ fen }: { fen: string }) {
           ))}
         </>
       )}
+      {busy && target && <span data-testid="diagram-eval-target" className="block text-[0.9em] italic text-amber-700">{target}…</span>}
+      {choosing && main && variation && (
+        <span role="group" aria-label={t.which} className="my-1 flex flex-wrap items-center justify-center gap-1">
+          <span>{t.which}</span>
+          <button type="button" onClick={evaluateMain} className="rounded border border-slate-300 px-1.5 hover:bg-slate-100">
+            {t.main} ({moveLabel(main, lang, style)})
+          </button>
+          <button type="button" onClick={() => void run(variation.fen, `${t.after} ${moveLabel(variation, lang, style)}`)} className="rounded border border-slate-300 px-1.5 hover:bg-slate-100">
+            {t.variation} ({moveLabel(variation, lang, style)})
+          </button>
+        </span>
+      )}
       <button
         type="button"
-        onClick={() => void refresh()}
+        onClick={refresh}
         disabled={busy}
         aria-label={e ? t.again : t.first}
         aria-busy={busy || undefined}
