@@ -13,6 +13,8 @@ export const TUTOR_HEIGHT = { min: 120, max: 1200, initial: 360, step: 40 }
 interface PlayPrefs {
   /** Live human comments from the comments database (S14.2). */
   liveComments: LiveCommentSide
+  /** The database comments of each position, editable, listed under the board. */
+  positionComments: boolean
   /** The moves the books' games played from the position (S14.1, heavy: off by default). */
   gmMoves: boolean
   /** Touching a piece makes the tutor explain what moving it implies (S14.8). */
@@ -30,6 +32,7 @@ interface PlayPrefs {
 const DEFAULTS = {
   liveComments: 'both' as LiveCommentSide,
   gmMoves: false,
+  positionComments: false,
   explainTouch: true,
   evalBarPosition: 'left' as EvalBarPosition,
   tutorHeight: TUTOR_HEIGHT.initial,
@@ -46,6 +49,6 @@ export const usePlayPrefs = create<PlayPrefs>()(persist((set) => ({
   reset: () => set(DEFAULTS),
 }), {
   name: 'play-prefs',
-  partialize: ({ liveComments, gmMoves, explainTouch, evalBarPosition, tutorHeight, configCollapsed }) =>
-    ({ liveComments, gmMoves, explainTouch, evalBarPosition, tutorHeight, configCollapsed }),
+  partialize: ({ liveComments, positionComments, gmMoves, explainTouch, evalBarPosition, tutorHeight, configCollapsed }) =>
+    ({ liveComments, positionComments, gmMoves, explainTouch, evalBarPosition, tutorHeight, configCollapsed }),
 }))

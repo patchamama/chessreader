@@ -66,6 +66,6 @@ describe('BookReader names the analysis boards it opens after the book (S11)', (
     const { container } = render(<BookReader />, { wrapper })
     await waitFor(() => expect(container.querySelector('button.line-to-board')).toBeTruthy())
     fireEvent.click(container.querySelector('button.line-to-board') as HTMLElement)
-    expect(useAnalysisBoards.getState().boards[0]).toMatchObject({ moves: ['d4', 'd5'], source: 'My Book' })
+    expect(useAnalysisBoards.getState().boards.filter((b) => !b.key)[0]).toMatchObject({ moves: ['d4', 'd5'], source: 'My Book' })
   })
 })

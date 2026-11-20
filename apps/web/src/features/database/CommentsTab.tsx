@@ -182,7 +182,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
   const button = 'rounded border border-slate-300 px-2 py-0.5 disabled:opacity-40'
   return (
     <div className="text-sm">
-      <PositionFinder />
+      <PositionFinder filter={filter} sources={sources} />
       <div className="flex flex-wrap items-center gap-2">
         <input type="search" aria-label="Search comments" placeholder="Search comments" className={input} value={filter.q} onChange={(e) => change({ q: e.target.value })} />
         <select aria-label="Source" className={input} value={filter.source} onChange={(e) => change({ source: Number(e.target.value) })}>

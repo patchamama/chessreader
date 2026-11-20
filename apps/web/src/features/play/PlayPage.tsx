@@ -25,6 +25,7 @@ import { figurinesOn } from '../training/trapNotation'
 import type { CueBoard } from '../library/narration/cueStyles'
 import type { MoveHint } from '../library/review/reviewEngine'
 import { playAnalyse } from './playStore'
+import PositionComments from '../comments/PositionComments'
 import { usePlayPrefs, type EvalBarPosition, type LiveCommentSide } from './playPrefs'
 import { TutorResizeHandle } from './TutorResizeHandle'
 import { thinkingNow } from './thinkTime'
@@ -51,7 +52,7 @@ const TEXT = {
     tb: { win: 'winning (tablebase)', draw: 'drawn (tablebase)', loss: 'losing (tablebase)' },
     thinkTime: 'Thinking time', liveComments: 'Book comments', lcOff: 'Off', lcBoth: 'Both sides', lcMine: 'After my moves', lcOpp: "After the opponent's moves",
     gm: 'Play like a human grandmaster', gmTitle: 'What the grandmasters of the books played here', games: (n: number) => `${n} ${n === 1 ? 'game' : 'games'}`,
-    explainTouch: 'Explain the piece I touch', commentsTitle: 'What the books say about this position',
+    explainTouch: 'Explain the piece I touch', positionComments: 'Show the comments of each position', commentsTitle: 'What the books say about this position',
     barPosition: 'Evaluation bar position', barPositions: { left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' }, config: 'Settings', resizeTutor: 'Resize the tutor',
   },
   es: {
@@ -64,7 +65,7 @@ const TEXT = {
     tb: { win: 'ganada (tablas de finales)', draw: 'tablas (tablas de finales)', loss: 'perdida (tablas de finales)' },
     thinkTime: 'Tiempo de reflexión', liveComments: 'Comentarios de los libros', lcOff: 'No', lcBoth: 'Ambos bandos', lcMine: 'Tras mis jugadas', lcOpp: 'Tras las del rival',
     gm: 'Jugar como un gran maestro humano', gmTitle: 'Lo que jugaron aquí los grandes maestros de los libros', games: (n: number) => `${n} ${n === 1 ? 'partida' : 'partidas'}`,
-    explainTouch: 'Explicar la pieza que toco', commentsTitle: 'Lo que dicen los libros de esta posición',
+    explainTouch: 'Explicar la pieza que toco', positionComments: 'Mostrar los comentarios de cada posición', commentsTitle: 'Lo que dicen los libros de esta posición',
     barPosition: 'Posición de la barra de evaluación', barPositions: { left: 'Izquierda', right: 'Derecha', top: 'Arriba', bottom: 'Abajo' }, config: 'Configuración', resizeTutor: 'Cambiar el tamaño del tutor',
   },
   de: {
@@ -77,7 +78,7 @@ const TEXT = {
     tb: { win: 'gewonnen (Tablebase)', draw: 'remis (Tablebase)', loss: 'verloren (Tablebase)' },
     thinkTime: 'Bedenkzeit', liveComments: 'Kommentare der Bücher', lcOff: 'Aus', lcBoth: 'Beide Seiten', lcMine: 'Nach meinen Zügen', lcOpp: 'Nach den Zügen des Gegners',
     gm: 'Spielen wie ein menschlicher Großmeister', gmTitle: 'Was die Großmeister der Bücher hier spielten', games: (n: number) => `${n} ${n === 1 ? 'Partie' : 'Partien'}`,
-    explainTouch: 'Die berührte Figur erklären', commentsTitle: 'Was die Bücher zu dieser Stellung sagen',
+    explainTouch: 'Die berührte Figur erklären', positionComments: 'Kommentare zu jeder Stellung anzeigen', commentsTitle: 'Was die Bücher zu dieser Stellung sagen',
     barPosition: 'Position des Bewertungsbalkens', barPositions: { left: 'Links', right: 'Rechts', top: 'Oben', bottom: 'Unten' }, config: 'Einstellungen', resizeTutor: 'Größe des Trainers ändern',
   },
 }
@@ -533,6 +534,7 @@ export default function PlayPage() {
                 </select>
               </label>
               <label className={check}><input type="checkbox" checked={prefs.explainTouch} onChange={(e) => prefs.set({ explainTouch: e.target.checked })} />{t.explainTouch}</label>
+              <label className={check}><input type="checkbox" checked={prefs.positionComments} onChange={(e) => prefs.set({ positionComments: e.target.checked })} />{t.positionComments}</label>
               <label className={check}><input type="checkbox" checked={prefs.gmMoves} onChange={(e) => prefs.set({ gmMoves: e.target.checked })} />{t.gm}</label>
               <label className={check}>{t.liveComments}
                 <select aria-label={t.liveComments} className="rounded border border-slate-300 bg-white px-1 py-0.5" value={prefs.liveComments} onChange={(e) => prefs.set({ liveComments: e.target.value as LiveCommentSide })}>
@@ -570,7 +572,8 @@ export default function PlayPage() {
           )}
         </div>
         {p.error && <p role="alert" className="rounded border border-red-300 bg-red-50 px-2 py-1 text-sm text-red-800">{p.error}</p>}
-        {liveComments.length > 0 && (
+        {prefs.positionComments && p.status !== 'idle' && <PositionComments fen={p.fen} />}
+        {!prefs.positionComments && liveComments.length > 0 && (
           <section data-testid="live-comments" aria-label={t.commentsTitle} className="flex flex-col gap-1 rounded border border-sky-200 bg-sky-50 p-2 text-sm text-sky-950">
             <h2 className="text-sm font-semibold">📚 {t.commentsTitle}</h2>
             {liveComments.map((c, i) => (

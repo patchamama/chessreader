@@ -29,6 +29,7 @@ vi.mock('../library/commentdb/commentLookup', async (orig) => ({
   ...(await orig<typeof import('../library/commentdb/commentLookup')>()),
   lookupPositionComments: vi.fn(async () => []),
 }))
+vi.mock('../database/CommentDetailsModal', () => ({ default: () => <div role="dialog" aria-label="editor" /> }))
 vi.mock('./bookPositions', async (orig) => {
   const real = await orig<typeof import('./bookPositions')>()
   const g = (id: string, pgn: string, result: string, white: string, black: string) => ({ id, white, black, year: 1960, opening: '', result, moves: 30, first: 'e4', pgn, termination: 'resignation' })
@@ -248,6 +249,20 @@ describe('PlayPage', () => {
       fireEvent.change(screen.getByLabelText('Book comments'), { target: { value: 'opponent' } })
       await flush()
       expect(screen.queryByTestId('live-comments')).toBeNull()
+      vi.mocked(lookupPositionComments).mockResolvedValue([])
+    })
+    it('lists the editable comments of each position after every move when asked, in either side', async () => {
+      vi.mocked(lookupPositionComments).mockResolvedValue([{ id: 7, text: 'Per-position remark.', lang: 'en', ply: 1, san: 'e4', gameId: 'x', label: null, source: { kind: 'book', title: 'Book', author: null } }])
+      render(<PlayPage />)
+      act(() => usePlayStore.setState({ status: 'playing', mode: 'engine', color: 'white', sans: ['e4'], fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1' }))
+      await flush()
+      expect(screen.queryByTestId('position-comments')).toBeNull()
+      fireEvent.click(screen.getByLabelText('Show the comments of each position'))
+      await flush()
+      expect(screen.getByTestId('position-comments')).toHaveTextContent('Per-position remark.')
+      expect(usePlayPrefs.getState().positionComments).toBe(true)
+      fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+      expect(screen.getByRole('dialog', { name: 'editor' })).toBeInTheDocument()
       vi.mocked(lookupPositionComments).mockResolvedValue([])
     })
     it('suggests the moves the grandmasters of the books played here, with results and players (S14.1)', async () => {

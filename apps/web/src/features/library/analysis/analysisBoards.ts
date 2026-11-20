@@ -39,7 +39,12 @@ export interface AnalysisWork {
   layout: 'paragraphs' | 'braces'
 }
 
-export interface AnalysisBoard extends AnalysisBoardInput { id: number; work?: AnalysisWork }
+export interface AnalysisBoard extends AnalysisBoardInput {
+  id: number
+  work?: AnalysisWork
+  /** Stable key of a board registered from an opened book or game (no duplicates). */
+  key?: string
+}
 
 interface State {
   boards: AnalysisBoard[]
@@ -55,6 +60,34 @@ let next = 1
 export function openAnalysisBoard(input: AnalysisBoardInput): number {
   const id = next++
   useAnalysisBoards.setState((s) => ({ boards: [...s.boards, { ...input, id }], active: id }))
+  return id
+}
+
+/** Most boards registered from opened books and games kept at once. */
+export const MAX_REGISTERED_BOARDS = 20
+
+/**
+ * Add (or refresh) the board of a book or game that was opened, without
+ * selecting it: the user finds it later in the Analysis board page. The same
+ * key never makes a second tab; what the user did on the tab is kept. Over the
+ * cap, the oldest registered tab without work (and not selected) is dropped.
+ */
+export function registerAnalysisBoard(input: AnalysisBoardInput, key: string): number {
+  const existing = useAnalysisBoards.getState().boards.find((b) => b.key === key)
+  if (existing) {
+    if (!existing.work) useAnalysisBoards.setState((s) => ({ boards: s.boards.map((b) => (b.id === existing.id ? { ...b, ...input } : b)) }))
+    return existing.id
+  }
+  const id = next++
+  useAnalysisBoards.setState((s) => {
+    let boards = [...s.boards, { ...input, id, key }]
+    while (boards.filter((b) => b.key).length > MAX_REGISTERED_BOARDS) {
+      const drop = boards.find((b) => b.key && !b.work && b.id !== s.active && b.id !== id)
+      if (!drop) break
+      boards = boards.filter((b) => b !== drop)
+    }
+    return { boards }
+  })
   return id
 }
 

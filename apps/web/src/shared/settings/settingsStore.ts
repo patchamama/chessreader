@@ -140,6 +140,8 @@ export interface AppSettings {
   narrationRepeatSeconds: number
   /** Selecting a piece colours its destinations by how good each move is. */
   moveHints: boolean
+  /** The analysis board lists the database comments of the position shown, each one editable. */
+  analysisComments: boolean
   /** Engine depth used to review a whole game. */
   reviewDepth: number
   /** Who speaks: the browser (live only) or a server voice (can be saved as MP3). */
@@ -287,6 +289,7 @@ const DEFAULT: AppSettings = {
   narrationSayNumber: 'white',
   narrationRepeatSeconds: 5,
   moveHints: true,
+  analysisComments: false,
   reviewDepth: 14,
   voiceProvider: 'browser',
   voiceName: '',

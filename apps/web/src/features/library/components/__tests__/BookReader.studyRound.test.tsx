@@ -126,7 +126,7 @@ describe('lines in comments (S5)', () => {
     const before = useStudyBoardStore.getState()
     const node = before.currentNodeId
     fireEvent.click(container.querySelector('span.line-move[data-ply="2"]') as HTMLElement)
-    const { boards } = useAnalysisBoards.getState()
+    const boards = useAnalysisBoards.getState().boards.filter((b) => !b.key)
     expect(boards).toHaveLength(1)
     expect(boards[0]).toMatchObject({ startFen: START, moves: ['e4', 'e5', 'Nf3'], ply: 2 })
     expect(useStudyBoardStore.getState().currentNodeId).toBe(node)
@@ -137,7 +137,7 @@ describe('lines in comments (S5)', () => {
     const { container } = await renderReader(COMMENTED, 'Bc5')
     fireEvent.click(container.querySelector('span.line-move[data-ply="1"]') as HTMLElement)
     fireEvent.click(container.querySelector('button.line-to-board') as HTMLElement)
-    const { boards } = useAnalysisBoards.getState()
+    const boards = useAnalysisBoards.getState().boards.filter((b) => !b.key)
     expect(boards).toHaveLength(2)
     expect(boards[1]).toMatchObject({ startFen: START, moves: ['e4', 'e5', 'Nf3'], ply: 0 })
   })
@@ -153,9 +153,9 @@ describe('lines in comments (S5)', () => {
 
     fireEvent.click(container.querySelector('a.comment-source') as HTMLElement)
     await act(async () => { fireEvent.click(screen.getByRole('menuitem', { name: 'Open in a new analysis board' })) })
-    await waitFor(() => expect(useAnalysisBoards.getState().boards).toHaveLength(1))
+    await waitFor(() => expect(useAnalysisBoards.getState().boards.filter((b) => !b.key)).toHaveLength(1))
     expect(loadCommentGame).toHaveBeenCalledWith('3-12')
-    expect(useAnalysisBoards.getState().boards[0]).toMatchObject({
+    expect(useAnalysisBoards.getState().boards.filter((b) => !b.key)[0]).toMatchObject({
       title: 'T. Petrosian – V. Smyslov', pgn: '1. e4 e5 2. Nf3 Nc6 3. Bc4 *', ply: 5,
       text: 'Better is 1. e4 e5 2. Nf3 with play. Board', source: 'Kasparov III',
     })

@@ -215,3 +215,13 @@ describe('v2: Ollama native, figurines, skipped comments, two models', () => {
     expect(rows().map((r) => `${r.comment_id}:${r.lang}`)).toEqual(['1:en', '1:es', '2:en', '2:es'])
   })
 })
+
+describe('the universal prompt keeps quotations and who said them', () => {
+  it('does not ask to remove quoted authors and tells to keep the quote with its author', async () => {
+    const { universalPromptV2 } = await import('./translate-comments.mjs')
+    const { system } = universalPromptV2({ fen: 'x', move: 'e4', text: 't', lang: 'en' })
+    expect(system).not.toMatch(/quoted author/i)
+    expect(system).toMatch(/keep every quotation/i)
+    expect(system).toMatch(/who said it/i)
+  })
+})

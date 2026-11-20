@@ -19,3 +19,26 @@ describe('parsePositionInput (S2)', () => {
     expect(parsePositionInput('   ')).toMatchObject({ kind: 'error' })
   })
 })
+
+describe('parsePositionInput with tolerant PGN (S7, S8)', () => {
+  it('fixes numbers and case, in any language', () => {
+    const r = parsePositionInput('1 e4 e5 2 Cf3 CC6')
+    expect(r.kind).toBe('pgn')
+    if (r.kind !== 'pgn') return
+    expect(r.text).toBe('1. e4 e5 2. Cf3 Cc6')
+    expect(r.language).toBe('es')
+    expect(r.moves.map((m) => m.label)).toEqual(['1. e4', '1... e5', '2. Nf3', '2... Nc6'])
+  })
+  it('reports the unrecognised token with the moves read before it', () => {
+    const r = parsePositionInput('1. e4 e5 2. Nf3 N@c6')
+    expect(r.kind).toBe('error')
+    if (r.kind !== 'error') return
+    expect(r.message).toMatch(/"N@c6"/)
+    expect(r.message).toMatch(/@/)
+    expect(r.moves).toHaveLength(3)
+  })
+  it('honours the chosen language', () => {
+    expect(parsePositionInput('1. e4 e5 2. Sf3', 'en').kind).toBe('error')
+    expect(parsePositionInput('1. e4 e5 2. Sf3', 'de').kind).toBe('pgn')
+  })
+})

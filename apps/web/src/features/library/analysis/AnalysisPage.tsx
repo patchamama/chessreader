@@ -9,7 +9,8 @@ import {
 } from './analysisBoards'
 import { lineOfBoard } from './analysisGame'
 import { AnalysisMoveList } from './AnalysisMoveList'
-import { AnalysisWorkspace, EMPTY_WORK } from './AnalysisWorkspace'
+import { AnalysisCommentsOption, AnalysisWorkspace, EMPTY_WORK } from './AnalysisWorkspace'
+import { useStudyNavigation } from '../hooks/useStudyNavigation'
 
 const T: Record<AppLanguage, { title: string; current: string; close: string; moves: string; add: string; analysis: string }> = {
   en: { title: 'Analysis boards', current: 'Current board', close: 'Close', moves: 'Moves', add: 'New analysis board', analysis: 'Analysis' },
@@ -48,6 +49,13 @@ function CurrentGameMoves({ label, tree }: { label: string; tree: GameTree }) {
       onSelect={(id) => setCurrentNode(id, !tree.mainline.includes(id))}
     />
   )
+}
+
+/** The comments of the position of the study board (the game's move shown, or the one played freely on it). */
+function CurrentBoardComments() {
+  const nav = useStudyNavigation()
+  const playFen = useStudyBoardStore((s) => s.playFen)
+  return <AnalysisCommentsOption fen={playFen ?? nav.fen} />
 }
 
 /**
@@ -131,7 +139,10 @@ export default function AnalysisPage() {
         ) : studyGame ? (
           <div className="grid items-start gap-4 md:grid-cols-[minmax(0,480px)_1fr]">
             <StudyBoard />
-            <CurrentGameMoves label={t.moves} tree={studyGame} />
+            <div className="flex min-w-0 flex-col gap-3">
+              <CurrentGameMoves label={t.moves} tree={studyGame} />
+              <CurrentBoardComments />
+            </div>
           </div>
         ) : (
           <AnalysisWorkspace title={t.current} work={scratch ?? EMPTY_WORK} onChange={updateScratchWork} />

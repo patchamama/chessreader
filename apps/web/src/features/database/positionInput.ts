@@ -1,15 +1,19 @@
 import { Chess } from 'chess.js'
+import type { HumanComment } from '../library/commentdb/commentLookup'
+import type { CommentFilter, CommentSource } from '../comments/commentsApi'
+import { normalizePgn, type PgnLanguage, type PgnLanguageChoice, type Unrecognised } from './pgnNormalize'
 
-export interface PositionMove { label: string; fen: string }
+export interface PositionMove { label: string; fen: string; san?: string }
+export interface PgnReading { /** The PGN with the numbers and letter case fixed. */ text: string; language: PgnLanguage; unrecognised: Unrecognised[] }
 export type PositionInput =
   | { kind: 'fen'; fen: string }
-  | { kind: 'pgn'; moves: PositionMove[] }
-  | { kind: 'error'; message: string }
+  | ({ kind: 'pgn'; moves: PositionMove[] } & PgnReading)
+  | { kind: 'error'; message: string; /** Moves read before the first one that was not recognised. */ moves?: PositionMove[]; reading?: PgnReading }
 
 const NOT_VALID = 'This is not a valid FEN or PGN.'
 
 /** A pasted FEN (one position) or PGN (the FEN after each of its moves). */
-export function parsePositionInput(raw: string): PositionInput {
+export function parsePositionInput(raw: string, language: PgnLanguageChoice = 'auto'): PositionInput {
   const text = raw.trim()
   if (!text) return { kind: 'error', message: 'Paste a FEN or a PGN.' }
   if (!text.includes('[') && text.split('/').length === 8) {
@@ -20,15 +24,31 @@ export function parsePositionInput(raw: string): PositionInput {
       return { kind: 'error', message: NOT_VALID }
     }
   }
-  try {
-    const chess = new Chess()
-    chess.loadPgn(text)
-    const moves = chess.history({ verbose: true }).map((m, i) => ({
-      label: `${Math.floor(i / 2) + 1}${i % 2 === 0 ? '. ' : '... '}${m.san}`,
-      fen: m.after,
-    }))
-    return moves.length ? { kind: 'pgn', moves } : { kind: 'error', message: NOT_VALID }
-  } catch {
-    return { kind: 'error', message: NOT_VALID }
+  const n = normalizePgn(text, { language })
+  const moves: PositionMove[] = n.moves.map((m) => ({ label: m.label, fen: m.fen, san: m.san }))
+  if (n.unrecognised.length) {
+    const message = `${NOT_VALID} ${describeUnrecognised(n.unrecognised)}`
+    return moves.length ? { kind: 'error', message, moves, reading: { text: n.text, language: n.language, unrecognised: n.unrecognised } } : { kind: 'error', message }
   }
+  return moves.length ? { kind: 'pgn', moves, text: n.text, language: n.language, unrecognised: [] } : { kind: 'error', message: NOT_VALID }
 }
+
+/** "Not recognised: "N@c6" at 2... N@c6 (unknown characters: @)". */
+export function describeUnrecognised(list: Unrecognised[]): string {
+  return `Not recognised: ${list.map((u) => `"${u.token}" at ${u.label}${u.chars.length ? ` (unknown characters: ${u.chars.join(' ')})` : ' (not a legal move there)'}`).join('; ')}.`
+}
+
+export type FinderFilter = Pick<CommentFilter, 'q' | 'lang' | 'kind'> & { source?: number }
+
+/** The comments of a position that pass the filters of the Comments list (search, source, language, origin). */
+export function filterFound(comments: HumanComment[], filter: FinderFilter | undefined, sources: CommentSource[] = []): HumanComment[] {
+  if (!filter) return comments
+  const q = filter.q?.trim().toLocaleLowerCase()
+  const source = filter.source ? sources.find((s) => s.id === filter.source) : undefined
+  return comments.filter((c) =>
+    (!q || [c.text, ...Object.values(c.translations ?? {})].some((t) => t.toLocaleLowerCase().includes(q))) &&
+    (!filter.source || (source ? c.source.title === source.title : true)) &&
+    (!filter.lang || c.lang === filter.lang) &&
+    (!filter.kind || c.source.kind === filter.kind))
+}
+

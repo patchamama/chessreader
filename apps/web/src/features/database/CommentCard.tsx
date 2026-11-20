@@ -3,7 +3,7 @@ import { langName } from '../comments/commentPrompts'
 import type { HumanComment } from '../library/commentdb/commentLookup'
 
 /** A comment found for a position: diagram, text, source and its translations. */
-export default function CommentCard({ comment, fen }: { comment: HumanComment; fen: string }) {
+export default function CommentCard({ comment, fen, onEdit }: { comment: HumanComment; fen: string; onEdit?: (c: HumanComment) => void }) {
   const who = [comment.source.title, comment.source.author, comment.label].filter(Boolean).join(' · ')
   return (
     <li className="flex gap-3 rounded border border-slate-200 bg-white p-2">
@@ -14,6 +14,7 @@ export default function CommentCard({ comment, fen }: { comment: HumanComment; f
         {Object.entries(comment.translations ?? {}).map(([lang, text]) => (
           <p key={lang} className="mt-1 text-xs"><span className="font-semibold">{langName(lang)}:</span> {text}</p>
         ))}
+        {onEdit && <p className="mt-1"><button className="rounded border border-slate-300 px-2 py-0.5 text-xs" aria-label={`Edit comment ${comment.id ?? comment.gameId}`} onClick={() => onEdit(comment)}>Edit</button></p>}
       </div>
     </li>
   )

@@ -19,6 +19,7 @@ import { gameFromText, lineAfterMove, lineToPgn, lineTree, type AnalysisLine } f
 import { AnalysisMoveList } from './AnalysisMoveList'
 import { START_FEN } from './analysisLine'
 import { useCommentNarration } from './useCommentNarration'
+import PositionComments from '../../comments/PositionComments'
 
 const T: Record<AppLanguage, Record<string, string>> = {
   en: {
@@ -45,6 +46,25 @@ const T: Record<AppLanguage, Record<string, string>> = {
     placeholder: 'Partie eingeben oder einfügen: PGN oder Buchtext. Ein FEN in einer eigenen Zeile legt die Ausgangsstellung fest.',
     free: 'Ziehe die Figuren, um zu spielen: die Züge erscheinen hier, gefärbt nach ihrer Qualität.',
   },
+}
+
+const OPTION_LABEL: Record<AppLanguage, string> = {
+  en: 'Show the comments of each position', es: 'Mostrar los comentarios de cada posición', de: 'Kommentare zu jeder Stellung anzeigen',
+}
+
+/** The option (kept in Settings) to list the database comments of `fen` as the board changes, and, when on, the list. */
+export function AnalysisCommentsOption({ fen }: { fen: string }) {
+  const lang = useSettingsStore((s) => s.language)
+  const on = useSettingsStore((s) => s.analysisComments)
+  const label = OPTION_LABEL[lang] ?? OPTION_LABEL.en
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="flex items-center gap-1.5 text-xs text-slate-700">
+        <input type="checkbox" checked={on} onChange={(e) => useSettingsStore.getState().set({ analysisComments: e.target.checked })} />{label}
+      </label>
+      {on && <PositionComments fen={fen} />}
+    </div>
+  )
 }
 
 /** An empty board: the start position, nothing played or typed. */
@@ -257,6 +277,7 @@ export function AnalysisWorkspace({ title, work, onChange, comment, source }: {
               {work.text && <p data-testid="analysis-text" className="whitespace-pre-line rounded border border-slate-200 bg-slate-50 p-2 text-sm text-slate-800">{work.text}</p>}
             </>
           )}
+          <AnalysisCommentsOption fen={fen} />
           {comment && (
             <div className="rounded border border-slate-200 bg-slate-50 p-2 text-sm text-slate-800">
               <p className="whitespace-pre-line">{comment}</p>

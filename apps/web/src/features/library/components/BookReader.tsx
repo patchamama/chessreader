@@ -58,7 +58,7 @@ import { CorrectionWorkbench } from '../correction/CorrectionWorkbench'
 import { extractProseText, htmlToProseText, planMoveTargets, piecesByTextNode, nodeBeforeOffset } from '../utils/proseText'
 import { playLine } from '../../../shared/chess/playLine'
 import { formatMoveSpans } from '../../../shared/chess/notation'
-import { openAnalysisBoard } from '../analysis/analysisBoards'
+import { openAnalysisBoard, registerAnalysisBoard } from '../analysis/analysisBoards'
 import { CommentSourceMenu, type CommentSourceTarget } from './CommentSourceMenu'
 import { EvalColoringButtons } from './EvalColoringButtons'
 import { qualitiesOf, useEvalColoringStore } from '../store/evalColoringStore'
@@ -546,6 +546,22 @@ export default function BookReader() {
     : null
 
   const activeSummary = activeGameIndex >= 0 ? gameSummaries[activeGameIndex] : undefined
+
+  // Every game opened in the reader gets a tab in the Analysis board page (S2),
+  // without selecting it: one per book and game, refreshed when reopened.
+  useEffect(() => {
+    if (activeGameIndex < 0 || !activeGame) return
+    const sans = activeGame.mainline.map((nid) => activeGame.nodes.get(nid)?.san ?? '').filter(Boolean)
+    const at = activeGame.mainline.indexOf(useStudyBoardStore.getState().currentNodeId ?? '')
+    registerAnalysisBoard({
+      title: activeSummary?.title || `Game ${activeGameIndex + 1}`,
+      startFen: activeGame.startFen,
+      moves: sans,
+      ply: at + 1,
+      source: bookTitle || undefined,
+    }, `book:${id}:${currentChapter}:${activeGameIndex}`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeGame, activeGameIndex])
 
   // Registry mapping a span key → its resolved game move, rebuilt on every wrap.
   // Event handlers (delegated, mounted once) look up rich objects here by the
