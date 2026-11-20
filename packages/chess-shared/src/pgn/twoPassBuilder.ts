@@ -190,7 +190,22 @@ export function buildGameTreeTwoPass(
       // A line break INSIDE an open bracket (a multi-line comment or variation)
       // is not a paragraph of the game text: the mainline resumes right after
       // the bracket closes, on the same footing as before it opened.
-      if (parenDepth > 0) continue;
+      if (parenDepth > 0) {
+        // Unless the next paragraph goes on with the very next main-line ply, legal
+        // from the main line: then the "(" was never closed by the book (a typo)
+        // and must not swallow the rest of the game.
+        let j = i + 1;
+        while (j < tokens.length && tokens[j].type !== 'move') {
+          if (tokens[j].type === 'paragraph-break' && j > i + 1) break;
+          j++;
+        }
+        const next = tokens[j];
+        const continues = next?.type === 'move' && !next.isolated && next.atParagraphStart
+          && next.moveNumber === expNumber && next.color === expColor && !!next.san
+          && isLegalFrom(chess.fen(), next.san);
+        if (!continues) continue;
+        parenDepth = 0;
+      }
       // New paragraph: re-decide on its first move.
       paragraphDecided = false;
       inMainlineParagraph = false;
