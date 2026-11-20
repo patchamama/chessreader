@@ -15,8 +15,9 @@ import { openGameInBook } from './openInBook'
 import { gameName, withGameReference } from './gameReference'
 import { markVisited, useVisitedCheck } from '../../shared/visited/visitedStore'
 import { VisitedMark } from '../../shared/visited/VisitedMark'
+import CommentsTab from './CommentsTab'
 
-type Tab = 'books' | 'search' | 'openings' | 'players' | 'stats'
+type Tab = 'books' | 'search' | 'openings' | 'players' | 'stats' | 'comments'
 
 /** Horizontal bars, drawn by hand (no chart library). */
 export function BarChart({ data, label }: { data: { label: string; value: number; note?: string }[]; label: string }) {
@@ -308,7 +309,7 @@ export default function DatabasePage() {
     )
   }
 
-  const tabs: [Tab, string][] = [['books', 'Books'], ['search', 'Search'], ['openings', 'Openings'], ['players', 'Players'], ['stats', 'Statistics']]
+  const tabs: [Tab, string][] = [['books', 'Books'], ['search', 'Search'], ['openings', 'Openings'], ['players', 'Players'], ['stats', 'Statistics'], ['comments', 'Comments']]
   return (
     <div className={`mx-auto ${width} px-4 py-6`}>
       <h1 className="text-xl font-bold text-slate-800">Database</h1>
@@ -418,6 +419,7 @@ export default function DatabasePage() {
             )}
           </div>
         )}
+        {tab === 'comments' && <CommentsTab books={books ?? []} />}
         {tab === 'stats' && (
           <div className="grid gap-6 md:grid-cols-2">
             <div>

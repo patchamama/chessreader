@@ -8,6 +8,7 @@ import * as busy from '../../shared/layout/busyStore'
 import { useExternalBookStore } from '../../shared/externalBook/externalBookStore'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { isVisited, resetVisited } from '../../shared/visited/visitedStore'
+import * as commentsApi from '../comments/commentsApi'
 
 beforeEach(() => {
   useSettingsStore.setState({ language: 'en', commentDbUrl: 'https://api.github.com/repos/me/chessreader-resources/contents', commentDbToken: 'ghp_test' })
@@ -339,5 +340,18 @@ describe('Database: reference, source and opened marks of the games (reader-anal
     page()
     const card = (await screen.findByText('Mis geniales predecesores III')).closest('li')!
     expect(card).toHaveAttribute('data-visited')
+  })
+})
+
+describe('Database → Comments tab (S2)', () => {
+  it('lists the comments of the commentary database in its own tab', async () => {
+    vi.spyOn(commentsApi, 'loadCommentSources').mockResolvedValue([])
+    vi.spyOn(commentsApi, 'loadCommentPage').mockResolvedValue({ total: 1, comments: [{
+      id: 5, hash: '0123456789abcdef', fen: '8/8/8/8/8/8/8/K6k w - - 0 1', text: 'An invented remark.', lang: 'en', ply: 3, move: 2, san: 'e5', gameId: '1-1', chapter: null,
+      source: { id: 1, title: 'Invented Book', author: null, kind: 'book', lang: 'en', book: null }, game: { white: null, black: null, label: null },
+    }] })
+    render(<MemoryRouter><DatabasePage /></MemoryRouter>)
+    fireEvent.click(screen.getByRole('tab', { name: 'Comments' }))
+    expect(await screen.findByText('An invented remark.')).toBeTruthy()
   })
 })

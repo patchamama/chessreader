@@ -120,3 +120,68 @@ describe.skipIf(!built)('build-comment-db with errata', () => {
     expect(log).toMatch(/1 errata/)
   })
 })
+
+// The browser's list of every comment (comments-index/): pages of comments with
+// their FEN, source and the book chapter they were read from.
+describe.skipIf(!built)('build-comment-db comments index', () => {
+  let repo
+  let out
+  beforeAll(() => {
+    if (!built) return
+    repo = mkdtempSync(join(tmpdir(), 'comment-db-index-'))
+    out = join(repo, 'out')
+    mkdirSync(join(repo, 'books', 'text'), { recursive: true })
+    // A title page, an empty form-feed part (not counted), then the game: chapter 2, as the game database counts.
+    writeFileSync(join(repo, 'books', 'text', 'opera-games.txt'), `Opera Games\nA title page\f\f${BOOK}`)
+    writeFileSync(join(repo, 'books', 'manifest.json'), JSON.stringify([{ id: 'opera-games', title: 'Opera Games', author: 'P. Morphy', lang: 'en' }]))
+    writeFileSync(join(repo, 'games.pgn'), PGN)
+    writeFileSync(join(repo, 'books', 'all.json'), JSON.stringify([
+      { id: 'opera-games', title: 'Opera Games', author: 'P. Morphy', lang: 'en' },
+      { file: '../games.pgn', title: 'Test studies', lang: 'en', kind: 'lichess' },
+    ]))
+    const run = spawnSync(process.execPath, [SCRIPT, join(repo, 'books', 'all.json'), out], { encoding: 'utf8' })
+    if (run.status !== 0) throw new Error(run.stderr || run.stdout)
+  })
+  afterAll(() => {
+    if (repo) rmSync(repo, { recursive: true, force: true })
+  })
+
+  const pages = () => readdirSync(join(out, 'comments-index')).filter((f) => /^\d+\.json$/.test(f)).sort()
+  const entries = () => pages().flatMap((f) => JSON.parse(readFileSync(join(out, 'comments-index', f), 'utf8')).comments)
+
+  it('writes meta.json with the total, the pages and the sources', () => {
+    const meta = JSON.parse(readFileSync(join(out, 'comments-index', 'meta.json'), 'utf8'))
+    const db = new DatabaseSync(join(out, 'comments.sqlite'))
+    const total = db.prepare('SELECT COUNT(*) AS n FROM position_comments').get().n
+    db.close()
+    expect(total).toBeGreaterThan(1)
+    expect(meta).toMatchObject({ version: 1, total, pages: pages().length, pageSize: 2000 })
+    expect(meta.sources['1']).toMatchObject({ kind: 'book', title: 'Opera Games', author: 'P. Morphy', lang: 'en', book: 'opera-games' })
+    expect(meta.sources['2']).toMatchObject({ kind: 'lichess', title: 'Test studies', book: null })
+    expect(pages()).toEqual(['0.json'])
+  })
+
+  it('lists every comment with its full FEN, move, game and the chapter it was read from', () => {
+    const list = entries()
+    const db = new DatabaseSync(join(out, 'comments.sqlite'))
+    const rows = db.prepare('SELECT id, hash, position, chapter, game_id FROM position_comments ORDER BY id').all()
+    db.close()
+    expect(list.map((e) => e.id)).toEqual(rows.map((r) => r.id))
+    const book = list.find((e) => e.source === 1 && e.san === 'Bf4')
+    expect(book).toMatchObject({ ply: 17, move: 9, chapter: 2, lang: 'en', white: expect.anything() })
+    expect(book.fen.split(' ')).toHaveLength(6)
+    expect(book.fen.startsWith(rows.find((r) => r.id === book.id).position)).toBe(true)
+    expect(book.hash).toMatch(/^[0-9a-f]{16}$/)
+    const study = list.find((e) => e.source === 2)
+    expect(study.chapter).toBeNull()
+    expect(rows.find((r) => r.id === book.id).chapter).toBe(2)
+    expect(rows.find((r) => r.id === study.id).chapter).toBeNull()
+  })
+
+  it('keeps the book id of a source in comment_sources', () => {
+    const db = new DatabaseSync(join(out, 'comments.sqlite'))
+    const rows = db.prepare('SELECT id, book_id FROM comment_sources ORDER BY id').all()
+    db.close()
+    expect(rows).toEqual([{ id: 1, book_id: 'opera-games' }, { id: 2, book_id: null }])
+  })
+})

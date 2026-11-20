@@ -91,6 +91,8 @@ return function (App $app): void {
 
     // Human commentary by position (require JWT + Approved)
     $app->group('/api/comments', function (RouteCollectorProxy $group) {
+        $group->get('', [CommentsController::class, 'list']);
+        $group->get('/sources', [CommentsController::class, 'sources']);
         $group->get('/position', [CommentsController::class, 'position']);
         $group->get('/games/{id}', [CommentsController::class, 'game']);
     })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);

@@ -24,6 +24,12 @@
 //   p/<xx>.json           comments of the positions whose hash starts with xx
 //                         (each with its ply and full move number, `move`)
 //   g/<game id>.json      the whole game (PGN) a comment comes from
+//   comments-index/meta.json  { total, pages, pageSize, sources } of the list below
+//   comments-index/<n>.json   every comment, PAGE_SIZE per page from 0, with its full
+//                         FEN, move, game, players and `chapter` (the book chapter it
+//                         was read from, counted as the game database does: only
+//                         form-feed parts with text; null for PGN sources) — the
+//                         browser's Database → Comments list when there is no server
 //
 // Book texts and comments are third-party works: never commit the output.
 // Publish it only to a private place (see README).
@@ -45,24 +51,31 @@ const errata = errataDir ? loadErrata(errataDir) : new Map();
 let errataApplied = 0;
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 const base = manifestPath.replace(/[^/]*$/, '') || '.';
+const PAGE_SIZE = 2000; // comments per comments-index page
 const MIN_PLY = 8; // opening moves get generic remarks: kept, but the lookup may skip them
 
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(join(outDir, 'p'), { recursive: true });
 mkdirSync(join(outDir, 'g'), { recursive: true });
+mkdirSync(join(outDir, 'comments-index'), { recursive: true });
 const db = new DatabaseSync(join(outDir, 'comments.sqlite'));
 db.exec(readFileSync(new URL('../../../apps/api/migrations/005_position_comments.sql', import.meta.url), 'utf8'));
 // Full move number of each comment (ply 15 → move 8). Optional for readers: older databases lack it.
 if (!db.prepare('PRAGMA table_info(position_comments)').all().some((c) => c.name === 'move_number')) {
   db.exec('ALTER TABLE position_comments ADD COLUMN move_number INTEGER');
 }
+// The book chapter of each comment, and the resources id of each book (both optional for readers).
+for (const [table, column] of [['position_comments', 'chapter INTEGER'], ['comment_sources', 'book_id TEXT']]) {
+  if (!db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column.split(' ')[0])) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column}`);
+}
 
-const insSource = db.prepare('INSERT INTO comment_sources (id, kind, title, author, lang, priority) VALUES (?, ?, ?, ?, ?, ?)');
+const insSource = db.prepare('INSERT INTO comment_sources (id, kind, title, author, lang, priority, book_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
 const insGame = db.prepare('INSERT OR REPLACE INTO comment_games (id, source_id, white, black, label, pgn) VALUES (?, ?, ?, ?, ?, ?)');
-const insComment = db.prepare('INSERT INTO position_comments (hash, position, game_id, ply, move_number, san, lang, text) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+const insComment = db.prepare('INSERT INTO position_comments (hash, position, game_id, ply, move_number, san, lang, text, chapter) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
 
 const shards = new Map();
 const sources = {};
+const listed = []; // the comments-index entries, in id order
 let total = 0;
 
 /** Chunks of a book or a PGN file that each hold games and their prose. */
@@ -79,23 +92,24 @@ function chunksOf(entry, text) {
 }
 
 /**
- * The chapters of a book text with its errata applied, in English letters. A
- * chapter is a non-empty form-feed part, numbered from 1 as the reader does.
+ * The chapters of a book text with its errata applied, in English letters, each
+ * with its number: a chapter is a non-empty form-feed part, numbered from 1 as
+ * the reader does (an empty part has none).
  */
 function correctedChapters(entry, text) {
   let chapter = 0;
   return text.replace(/\r/g, '').split('\f').map((part) => {
     const body = entry.lang === 'es' ? spanishToEnglish(part) : part;
-    if (!part.trim()) return body;
+    if (!part.trim()) return { body, chapter: null };
     chapter++;
     const entries = errataFor(errata, { title: entry.title, id: entry.id }, chapter);
-    if (!entries.length) return body;
+    if (!entries.length) return { body, chapter };
     try {
       const out = applyErrata(body, entries, { lang: entry.lang });
       errataApplied += out.applied;
-      return out.text;
+      return { body: out.text, chapter };
     } catch {
-      return body;
+      return { body, chapter };
     }
   });
 }
@@ -105,13 +119,14 @@ manifest.forEach((entry, sourceIndex) => {
   const kind = entry.kind ?? 'book';
   const file = entry.file ?? `text/${entry.id}.txt`;
   const priority = kind === 'book' ? 1 : 2;
-  insSource.run(sourceId, kind, entry.title, entry.author ?? null, entry.lang, priority);
-  sources[sourceId] = { kind, title: entry.title, author: entry.author ?? null, lang: entry.lang, priority };
+  const bookId = kind === 'book' && entry.id ? entry.id : null;
+  insSource.run(sourceId, kind, entry.title, entry.author ?? null, entry.lang, priority, bookId);
+  sources[sourceId] = { kind, title: entry.title, author: entry.author ?? null, lang: entry.lang, priority, book: bookId };
   const raw = readFileSync(resolve(base, file), 'utf8');
   // Books: chapters in English letters with their errata applied, then cut as before.
   const chunks = file.endsWith('.pgn')
-    ? chunksOf({ file }, raw).map((c) => ({ ...c, body: entry.lang === 'es' ? spanishToEnglish(c.body) : c.body }))
-    : correctedChapters(entry, raw).flatMap((chapter) => chunksOf({ file }, chapter));
+    ? chunksOf({ file }, raw).map((c) => ({ ...c, body: entry.lang === 'es' ? spanishToEnglish(c.body) : c.body, chapter: null }))
+    : correctedChapters(entry, raw).flatMap(({ body, chapter }) => chunksOf({ file }, body).map((c) => ({ ...c, chapter })));
   let gameNo = 0;
   let count = 0;
   for (const chunk of chunks) {
@@ -139,8 +154,10 @@ manifest.forEach((entry, sourceIndex) => {
       for (const c of comments) {
         // The move as written in the game (a game set up from a FEN keeps its numbering), else from the ply.
         const move = c.moveNumber ?? Math.ceil(c.ply / 2);
-        const info = insComment.run(c.hash, c.key, gameId, c.ply, move, c.san, c.lang, c.text);
+        const info = insComment.run(c.hash, c.key, gameId, c.ply, move, c.san, c.lang, c.text, chunk.chapter);
         const id = Number(info.lastInsertRowid);
+        listed.push({ id, hash: c.hash, fen: `${c.key} 0 1`, text: c.text, lang: c.lang, ply: c.ply, move, san: c.san, game: gameId, source: sourceId,
+          label: label || null, white: players.white ?? null, black: players.black ?? null, chapter: chunk.chapter });
         const prefix = c.hash.slice(0, 2);
         const shard = shards.get(prefix) ?? shards.set(prefix, {}).get(prefix);
         (shard[c.hash] ??= []).push({ id, text: c.text, lang: c.lang, game: gameId, ply: c.ply, move, san: c.san, source: sourceId, label: label || null });
@@ -153,6 +170,11 @@ manifest.forEach((entry, sourceIndex) => {
   console.log(`${entry.title}: ${gameNo} games, ${count} comments`);
 });
 
+const pageCount = Math.ceil(listed.length / PAGE_SIZE);
+for (let n = 0; n < pageCount; n++) {
+  writeFileSync(join(outDir, 'comments-index', `${n}.json`), JSON.stringify({ page: n, comments: listed.slice(n * PAGE_SIZE, (n + 1) * PAGE_SIZE) }));
+}
+writeFileSync(join(outDir, 'comments-index', 'meta.json'), JSON.stringify({ version: 1, total: listed.length, pages: pageCount, pageSize: PAGE_SIZE, page: 'comments-index/<n>.json', sources }, null, 1));
 for (const [prefix, shard] of shards) writeFileSync(join(outDir, 'p', `${prefix}.json`), JSON.stringify(shard));
 writeFileSync(join(outDir, 'index.json'), JSON.stringify({ version: 1, built: new Date().toISOString(), hash: 'fnv1a64(fen without move counters)', shard: 'p/<first 2 hex>.json', games: 'g/<id>.json', minPly: MIN_PLY, total, errata: errataApplied, sources }, null, 1));
 db.close();

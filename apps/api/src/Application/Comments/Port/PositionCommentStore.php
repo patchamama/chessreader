@@ -17,4 +17,17 @@ interface PositionCommentStore
 
     /** @return array{id: string, label: ?string, white: ?string, black: ?string, pgn: string, source: array{title: string, author: ?string, kind: string}}|null */
     public function game(string $id): ?array;
+
+    /**
+     * A page of every comment, oldest first, with its source and game. Filters:
+     * `q` (text contains, literally), `source` (source id), `lang`, `kind` ('book' | 'lichess').
+     * `fen` is the stored position (FEN without move counters) completed with " 0 1".
+     *
+     * @param array{q?: string, source?: int, lang?: string, kind?: string} $filters
+     * @return array{total: int, comments: list<array<string, mixed>>}
+     */
+    public function list(array $filters, int $offset, int $limit): array;
+
+    /** @return list<array{id: int, title: string, author: ?string, kind: string, lang: string, book: ?string, comments: int}> */
+    public function sources(): array;
 }

@@ -27,6 +27,31 @@ final class CommentsController
         return $this->json($response, ['comments' => $this->store->forPosition($hash, $key, (int) ($q['limit'] ?? 5))]);
     }
 
+    /** GET /api/comments?offset&limit(≤200)&q&source&lang&kind: a page of every comment and the total. */
+    public function list(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        $q = $request->getQueryParams();
+        $kind = (string) ($q['kind'] ?? '');
+        $lang = (string) ($q['lang'] ?? '');
+        if (!in_array($kind, ['', 'book', 'lichess'], true) || !preg_match('/^[a-z]{0,3}$/', $lang)) {
+            return $this->json($response, ['error' => 'kind is book or lichess; lang is a language code'], 400);
+        }
+        $filters = ['q' => mb_substr(trim((string) ($q['q'] ?? '')), 0, 200), 'lang' => $lang, 'kind' => $kind];
+        if (isset($q['source']) && preg_match('/^\d{1,9}$/', (string) $q['source'])) {
+            $filters['source'] = (int) $q['source'];
+        }
+        $offset = max(0, (int) ($q['offset'] ?? 0));
+        $limit = max(1, min(200, (int) ($q['limit'] ?? 50)));
+        $page = $this->store->list($filters, $offset, $limit);
+        return $this->json($response, ['total' => $page['total'], 'offset' => $offset, 'limit' => $limit, 'comments' => $page['comments']]);
+    }
+
+    /** GET /api/comments/sources: the books and studies the comments come from. */
+    public function sources(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        return $this->json($response, ['sources' => $this->store->sources()]);
+    }
+
     public function game(ServerRequestInterface $request, ResponseInterface $response, string $id): ResponseInterface
     {
         $game = $this->store->game($id);
