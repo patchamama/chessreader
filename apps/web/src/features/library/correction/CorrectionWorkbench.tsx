@@ -10,9 +10,10 @@ import { textToChapters } from '../utils/textToChapters'
 import { applyToText, checkMoves, correctionList, exportPgn, initialMoves, normaliseSan, type CheckResult, type EditableMove } from './workbench'
 import { APP_VERSION } from '../../../version'
 import { useErrataContext } from '../errata/errataContext'
-import { buildErrataEntry, coreMove, type ErrataEntry } from '../errata/errataFormat'
+import { buildErrataEntry, coreMove, type BuildErrataInput, type ErrataEntry } from '../errata/errataFormat'
 import { saveErrata, type SaveErrataResult } from '../errata/errataSource'
 import { findOnlineReference, type OnlineLookupResult } from '../errata/onlineLookup'
+import { WrongMoveFinder } from '../wrongMove/WrongMoveFinder'
 
 const T: Record<Lang, Record<string, string>> = {
   en: {
@@ -101,8 +102,8 @@ export function CorrectionWorkbench({ games, text }: { games: RecognizedGame[]; 
   const year = Number([...header.slice(-300).matchAll(/\b(1[5-9]\d\d|20\d\d)\b/g)].pop()?.[1]) || null
 
   // An errata entry needs the book and chapter, and substituted moves only.
-  const errataEntry = (): ErrataEntry | null => {
-    if (!errataCtx.bookTitle || errataCtx.chapter === null || changes.length === 0 || changes.some((c) => c.kind !== 'replaced')) return null
+  const errataFor = (corrected: BuildErrataInput['corrected']): ErrataEntry | null => {
+    if (!errataCtx.bookTitle || errataCtx.chapter === null || corrected.length !== original.length) return null
     const last = original[original.length - 1]?.source?.charEnd ?? game.charEnd
     return buildErrataEntry({
       book: { title: errataCtx.bookTitle, ...(errataCtx.bookId !== null ? { id: errataCtx.bookId } : {}) },
@@ -110,12 +111,13 @@ export function CorrectionWorkbench({ games, text }: { games: RecognizedGame[]; 
       gameIndex,
       game: { label: players.white && players.black ? `${players.white} – ${players.black}` : `Game ${gameIndex + 1}`, white: players.white ?? null, black: players.black ?? null },
       original: original.map((m) => ({ written: m.source?.written ?? m.san, san: m.san })),
-      corrected: moves.map((m) => ({ san: normaliseSan(coreMove(m.san)), origin: m.origin, evidence: m.evidence })),
+      corrected,
       text: text.slice(original[0]?.source?.charStart ?? game.charStart, last),
       appVersion: APP_VERSION,
     })
   }
-  const entry = errataEntry()
+  const entry = changes.length === 0 || changes.some((c) => c.kind !== 'replaced') ? null
+    : errataFor(moves.map((m) => ({ san: normaliseSan(coreMove(m.san)), origin: m.origin, evidence: m.evidence })))
   const saveAsErrata = async (e: ErrataEntry | null) => {
     if (e) setSaveResult(await saveErrata(e))
   }
@@ -205,6 +207,8 @@ export function CorrectionWorkbench({ games, text }: { games: RecognizedGame[]; 
                 )}
               </div>
             )}
+
+            <WrongMoveFinder moves={original} startFen={game.tree.startFen} text={text} gameIndex={gameIndex} errataFor={errataFor} />
 
             <div className="flex flex-col gap-3 md:flex-row">
               <ol className="grid flex-1 grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-1.5">
