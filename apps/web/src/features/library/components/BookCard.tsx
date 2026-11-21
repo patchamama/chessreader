@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import type { Book } from '../api/libraryApi'
 import BookEditModal from './BookEditModal'
 import { getProgress } from '../store/readingStore'
+import BookStatsPanel from '../stats/BookStatsPanel'
+import { hasServerSession } from '../../../shared/api/serverSession'
 
 interface Props {
   book: Book
@@ -83,6 +85,8 @@ export default function BookCard({ book, totalChapters, onHide }: Props) {
           </span>
         </div>
       )}
+
+      {hasServerSession() && <BookStatsPanel bookId={book.id} title={book.title} />}
 
       <Link
         to={`/read/${book.id}`}

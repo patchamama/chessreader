@@ -256,6 +256,11 @@ return [
         return new \App\Presentation\Library\BookConfigController($storageDir);
     },
 
+    \App\Presentation\Library\BookStatsController::class => function (ContainerInterface $c) {
+        $settings = $c->get('settings');
+        return new \App\Presentation\Library\BookStatsController($settings['storage_dir'] ?? dirname(__DIR__) . '/storage');
+    },
+
     // Position Trainer
     \App\Application\Clock::class => fn() => new \App\Infrastructure\SystemClock(),
 

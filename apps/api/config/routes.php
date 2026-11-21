@@ -135,6 +135,8 @@ return function (App $app): void {
         $group->post('/books/{id:[0-9]+}/touch', [LibraryController::class, 'touch']);
         // Per-book custom render config — READ is open to any approved user.
         $group->get('/books/{id:[0-9]+}/config', [BookConfigController::class, 'get']);
+        $group->get('/books/{id:[0-9]+}/stats', [\App\Presentation\Library\BookStatsController::class, 'get']);
+        $group->put('/books/{id:[0-9]+}/stats', [\App\Presentation\Library\BookStatsController::class, 'save']);
         $group->get('/books/{id:[0-9]+}/epub', [\App\Presentation\Suggestions\BookEpubController::class, 'download']);
         $group->get('/books/{id:[0-9]+}/images', [\App\Presentation\Suggestions\BookEpubController::class, 'images']);
         $group->post('/upload', [IngestionController::class, 'upload']);
