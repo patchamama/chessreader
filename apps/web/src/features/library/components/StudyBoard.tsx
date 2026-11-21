@@ -136,7 +136,7 @@ export function StudyBoard() {
   // An isolated move only overlays a PIECE when the notation names one (Nb5, Bf3).
   // A bare pawn move (e4, d5) specifies no piece, so we only highlight the square
   // — no pawn is placed on the board.
-  const overlayPiece = !!isolatedHighlight && isolatedHighlight.piece !== 'p'
+  const overlayPiece = !!isolatedHighlight && isolatedHighlight.piece !== 'p' && !isolatedHighlight.from?.length
 
   // Alternating colour (white/black) for the isolated-move overlay piece.
   const [isoWhite, setIsoWhite] = useState(true)
@@ -296,6 +296,10 @@ export function StudyBoard() {
   // A line named in the text ("la diagonal a2-g8") lights every square on it.
   for (const sq of isolatedHighlight?.line ?? []) {
     highlightStyles[sq] = { ...highlightStyles[sq], backgroundColor: 'rgba(250, 204, 21, 0.4)' }
+  }
+  // The piece the text means (the bishop that reaches b5): its square in another colour.
+  for (const sq of isolatedHighlight?.from ?? []) {
+    highlightStyles[sq] = { ...highlightStyles[sq], backgroundColor: 'rgba(59, 130, 246, 0.45)', boxShadow: 'inset 0 0 0 3px rgba(37, 99, 235, 0.9)' }
   }
   if (isolatedHighlight && !isolatedHighlight.line) {
     highlightStyles[isolatedHighlight.square] = {

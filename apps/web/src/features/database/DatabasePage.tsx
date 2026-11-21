@@ -140,7 +140,8 @@ export default function DatabasePage() {
   const lang = useSettingsStore((s) => s.language)
   const width = usePageWidth('max-w-6xl')
   const navigate = useNavigate()
-  const [tab, setTab] = useState<Tab>('books')
+  const [params, setParams] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(() => (params.get('tab') === 'comments' ? 'comments' : 'books'))
   const [books, setBooks] = useState<DbBook[] | null>(null)
   const [games, setGames] = useState<DbGame[]>([])
   const [ratings, setRatings] = useState<PlayerRating[] | null>(null)
@@ -155,7 +156,6 @@ export default function DatabasePage() {
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'rank', dir: 'asc' })
   const available = hasResources()
   const visited = useVisitedCheck()
-  const [params, setParams] = useSearchParams()
 
   useEffect(() => {
     if (!available) return
@@ -419,7 +419,7 @@ export default function DatabasePage() {
             )}
           </div>
         )}
-        {tab === 'comments' && <CommentsTab books={books ?? []} />}
+        {tab === 'comments' && <CommentsTab books={books ?? []} initialBook={params.get('book') ?? undefined} />}
         {tab === 'stats' && (
           <div className="grid gap-6 md:grid-cols-2">
             <div>

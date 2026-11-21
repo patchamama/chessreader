@@ -2,6 +2,10 @@ import { APP_VERSION } from '../../../version'
 import { hasServerSession } from '../../../shared/api/serverSession'
 import { httpClient } from '../../../shared/api/httpClient'
 import { chapterGames, fetchBookChapter } from '../../errors/bookErrors'
+import { getJson } from '../commentdb/commentLookup'
+import { bookSlug } from '../errata/errataFormat'
+import { loadCommentPage, loadCommentSources } from '../../comments/commentsApi'
+import { canWriteResources, writeResourceFile } from '../../suggestions/suggestionsApi'
 
 /** The numbers of a book (or of a chapter). */
 export interface StatsCounts {
@@ -39,8 +43,39 @@ export function chapterStats(html: string): StatsCounts {
   }), { ...EMPTY_STATS, comments: remarks })
 }
 
-/** Every chapter of a book, one at a time; `onProgress(done, total)`; stops quietly when `signal` aborts (the result is then null). */
-export async function computeBookStats(bookId: number, onProgress?: (done: number, total: number) => void, signal?: AbortSignal): Promise<BookStats | null> {
+const same = (a: string, b: string) => a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase()
+
+/** The comments of the commentary database that come from a book (its sources named like it); 0 when it knows none or cannot be read. */
+export async function bookCommentCount(bookId: number | string, title: string): Promise<number> {
+  try {
+    const mine = (await loadCommentSources()).filter((c) => c.kind !== 'lichess' && (same(c.title, title) || (c.book !== null && String(c.book) === String(bookId))))
+    const counts = await Promise.all(mine.map(async (c) => c.comments ?? (await loadCommentPage({ source: c.id }, 0, 1)).total))
+    return counts.reduce((a, b) => a + b, 0)
+  } catch {
+    return 0
+  }
+}
+
+/** The numbers with the comments the database holds for the book (the ones written into its text only when it holds none). */
+async function withDatabaseComments(sum: StatsCounts, bookId: number | string, title: string): Promise<StatsCounts> {
+  const fromDatabase = title ? await bookCommentCount(bookId, title) : 0
+  return fromDatabase > 0 ? { ...sum, comments: fromDatabase } : sum
+}
+
+/** The numbers of chapters already in memory (a resources-repository book). */
+export async function computeChaptersStats(chapters: { html: string }[], bookId: number | string, title: string, onProgress?: (done: number, total: number) => void, signal?: AbortSignal): Promise<BookStats | null> {
+  let sum = EMPTY_STATS
+  for (let i = 0; i < chapters.length; i++) {
+    if (signal?.aborted) return null
+    try { sum = addStats(sum, chapterStats(chapters[i].html)) } catch { /* counts as nothing */ }
+    onProgress?.(i + 1, chapters.length)
+    await new Promise((r) => setTimeout(r, 0))
+  }
+  return { ...(await withDatabaseComments(sum, bookId, title)), analysedAt: new Date().toISOString(), version: APP_VERSION }
+}
+
+/** Every chapter of a library book, one at a time; `onProgress(done, total)`; stops quietly when `signal` aborts (the result is then null). */
+export async function computeBookStats(bookId: number, title: string, onProgress?: (done: number, total: number) => void, signal?: AbortSignal): Promise<BookStats | null> {
   let sum = EMPTY_STATS
   let total = 1
   for (let c = 1; c <= total; c++) {
@@ -52,19 +87,15 @@ export async function computeBookStats(bookId: number, onProgress?: (done: numbe
     } catch { /* a chapter that cannot be read counts as nothing */ }
     onProgress?.(c, total)
   }
-  return signal?.aborted ? null : { ...sum, analysedAt: new Date().toISOString(), version: APP_VERSION }
+  return signal?.aborted ? null : { ...(await withDatabaseComments(sum, bookId, title)), analysedAt: new Date().toISOString(), version: APP_VERSION }
 }
 
-const key = (id: number) => `bookstats:${id}`
+const key = (id: number | string) => `bookstats:${id}`
 
-/** The stored numbers of a book: the server's, else this browser's; null when never computed. */
-export async function loadBookStats(id: number): Promise<BookStats | null> {
-  if (hasServerSession()) {
-    try {
-      const r = await httpClient<{ stats: BookStats | null }>(`/api/library/books/${id}/stats`)
-      if (r.stats) return r.stats
-    } catch { /* the browser's copy */ }
-  }
+/** Where the numbers of a resources-repository book are kept: the only folder the write token may write to. */
+export const statsPath = (title: string) => `suggestions/stats/${bookSlug(title)}/stats.json`
+
+const readLocal = (id: number | string): BookStats | null => {
   try {
     const raw = localStorage.getItem(key(id))
     return raw ? (JSON.parse(raw) as BookStats) : null
@@ -73,8 +104,31 @@ export async function loadBookStats(id: number): Promise<BookStats | null> {
   }
 }
 
-/** Keep the numbers of a book in the server (when there is one) and in this browser. */
-export async function saveBookStats(id: number, stats: BookStats): Promise<void> {
+/**
+ * The stored numbers of a book: of a library book (number id) from the server,
+ * of a resources-repository book (string id) from the repository; else this
+ * browser's copy. Null when never computed.
+ */
+export async function loadBookStats(id: number | string, title = ''): Promise<BookStats | null> {
+  try {
+    if (typeof id === 'number') {
+      if (hasServerSession()) {
+        const r = await httpClient<{ stats: BookStats | null }>(`/api/library/books/${id}/stats`)
+        if (r.stats) return r.stats
+      }
+    } else if (title) {
+      return await getJson<BookStats>(statsPath(title))
+    }
+  } catch { /* the browser's copy */ }
+  return readLocal(id)
+}
+
+/** Keep the numbers of a book: in this browser, and in the server (library book) or the repository (when the write token is set). */
+export async function saveBookStats(id: number | string, stats: BookStats, title = ''): Promise<void> {
   try { localStorage.setItem(key(id), JSON.stringify(stats)) } catch { /* storage full or blocked */ }
-  if (hasServerSession()) await httpClient(`/api/library/books/${id}/stats`, { method: 'PUT', body: JSON.stringify(stats) })
+  if (typeof id === 'number') {
+    if (hasServerSession()) await httpClient(`/api/library/books/${id}/stats`, { method: 'PUT', body: JSON.stringify(stats) })
+  } else if (title && canWriteResources()) {
+    await writeResourceFile(statsPath(title), `${JSON.stringify(stats)}\n`, `stats: ${title}`)
+  }
 }

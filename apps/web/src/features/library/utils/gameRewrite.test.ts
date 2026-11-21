@@ -1,7 +1,7 @@
 import { Chess } from 'chess.js'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { recognizeGames } from '@chess-ebook/chess-shared'
-import { applyGameRewrites, cycleBookComment, gameLineRange, pickBookComments, unwrapGameContainers, wrapGameContainers } from './gameRewrite'
+import { applyGameRewrites, cycleBookComment, gameLineRange, setBookComment, pickBookComments, unwrapGameContainers, wrapGameContainers } from './gameRewrite'
 import { htmlToProseText } from './proseText'
 
 const HTML = [
@@ -103,6 +103,20 @@ describe('cycleBookComment: another remark of the same position', () => {
   it('pickBookComments writes the counter of the remark it picked', () => {
     const out = pickBookComments(`<blockquote class="human-comment" data-comment-alternatives='${JSON.stringify(alts)}'><p>First.</p></blockquote>`, 1, () => 0.5)
     expect(new DOMParser().parseFromString(out, 'text/html').querySelector('button.comment-cycle')!.textContent).toBe('2/3')
+  })
+})
+
+describe('setBookComment: a remark chosen from the panel', () => {
+  it('replaces the shown text and source, keeps the position and the other remarks', () => {
+    const alts = [{ text: 'First.', source: 'A' }, { text: 'Second.', source: 'B' }]
+    const doc = new DOMParser().parseFromString(`<blockquote class="human-comment" data-comment-fen="8/8/8/8/8/8/8/K6k w - - 0 1" data-comment-alternatives='${JSON.stringify(alts)}'><p>First.</p><footer>— A</footer></blockquote>`, 'text/html')
+    const q = doc.querySelector('blockquote')!
+    setBookComment(q, { text: 'Second.', source: 'B', gameId: 'g9', ply: 7 })
+    expect(q.querySelector('p')!.textContent).toBe('Second.')
+    expect(q.querySelector('a.comment-source')!.getAttribute('data-comment-game')).toBe('g9')
+    expect(q.querySelector('button.comment-cycle')!.textContent).toBe('2/2')
+    expect(q.querySelector('button[data-comment-tools]')).not.toBeNull()
+    expect(q.getAttribute('data-comment-fen')).toBe('8/8/8/8/8/8/8/K6k w - - 0 1')
   })
 })
 

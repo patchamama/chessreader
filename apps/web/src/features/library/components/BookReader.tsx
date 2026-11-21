@@ -16,7 +16,9 @@ import { detectHeadings } from '../utils/headingDetect'
 import { clearGameLayout, loadGameLayouts, saveGameLayout } from '../store/gameLayoutStore'
 import { rewriteKey, useGameRewriteStore } from '../store/gameRewriteStore'
 import { useReaderViewStore } from '../store/readerViewStore'
-import { applyGameRewrites, cycleBookComment, pickBookComments, unwrapGameContainers, wrapGameContainers } from '../utils/gameRewrite'
+import BookRemarkPanel from './BookRemarkPanel'
+import { mentionOrigins } from '../utils/mentionOrigin'
+import { applyGameRewrites, cycleBookComment, setBookComment, pickBookComments, unwrapGameContainers, wrapGameContainers } from '../utils/gameRewrite'
 import { recommentGame } from '../review/recommentGame'
 import { nextPaint, withBusy, withProgress } from '../../../shared/layout/busyStore'
 import { captureOffset, captureTopAnchor, restoreOffset, restoreTopAnchor, type ScrollAnchor } from '../../../shared/layout/scrollAnchor'
@@ -122,6 +124,8 @@ interface MoveTooltip {
   arrows?: [string, string][]
   /** Squares to light one after another on the thumbnail (a flank's pawns). */
   sequence?: string[]
+  /** Squares of the pieces a bare piece move means, in another colour. */
+  from?: string[]
   /** What is hovered: a move of the game, a move of a line in a comment, or a named square. */
   kind?: 'move' | 'line' | 'square'
   /** The hovered move, to show the engine's view of it. */
@@ -145,11 +149,14 @@ function shownBoardFen(): string {
   return (s.currentNodeId ? tree.nodes.get(s.currentNodeId)?.fen : undefined) ?? tree.startFen ?? EMPTY_BOARD_FEN
 }
 
-function mentionMark(iso: IsolatedMove) {
+/** The board marks of a square named in the text; on `fen`, the piece that reaches it is located and an arrow drawn from it. */
+function mentionMark(iso: IsolatedMove, fen?: string | null) {
   const pair = dashedPair(iso.rawSan ?? '')
   const line = pair ? squareLine(pair.from, pair.to) : null
+  const from = !pair && fen ? mentionOrigins(fen, iso.piece, iso.square) : []
   return {
     square: iso.square, piece: iso.piece,
+    ...(from.length ? { from, arrows: from.map((f): [string, string] => [f, iso.square]) } : {}),
     ...(line && line.length > 2 ? { line } : {}),
     ...(pair && !(line && line.length > 2) ? { arrow: [pair.from, pair.to] as [string, string] } : {}),
   }
@@ -198,6 +205,8 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
   const [chooser, setChooser] = useState<ProseChooser | null>(null)
   const [tooltip, setTooltip] = useState<MoveTooltip | null>(null)
   const [sourceMenu, setSourceMenu] = useState<CommentSourceTarget | null>(null)
+  const [remarkPanel, setRemarkPanel] = useState<{ fen: string; quote: Element } | null>(null)
+  const setRemarkPanelRef = useRef(setRemarkPanel)
   const setSourceMenuRef = useRef(setSourceMenu)
   const closeSourceMenu = useCallback(() => setSourceMenu(null), [])
   const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -302,10 +311,10 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
   // then lights the square ("a2-g8": the whole diagonal; "d4-d5": an arrow).
   // Hovering only shows it on a thumbnail (S7).
   const showMention = (entry: { iso: IsolatedMove; tree: GameTree }) => {
-    const mark = mentionMark(entry.iso)
     // A move of a fragment no game holds: its square on the board as it is (S3).
-    if (entry.tree === NO_GAME_TREE) { setIsolatedHighlight(mark); return }
+    if (entry.tree === NO_GAME_TREE) { setIsolatedHighlight(mentionMark(entry.iso, shownBoardFen())); return }
     const at = nodeBeforeOffset(entry.tree, entry.iso.charStart ?? 0)
+    const mark = mentionMark(entry.iso, at ? at.fen : entry.tree.startFen)
     const board = useStudyBoardStore.getState()
     board.commitPreview()
     if (board.activeGame !== entry.tree || board.currentNodeId !== (at?.id ?? null) || board.playFen) {
@@ -957,13 +966,14 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
         if (!entry) return
         if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
         const at = nodeBeforeOffset(entry.tree, entry.iso.charStart ?? 0)
-        const mark = mentionMark(entry.iso)
         const rect = span.getBoundingClientRect()
         const fen = entry.tree === NO_GAME_TREE ? shownBoardFen() : at ? at.fen : entry.tree.startFen
+        const mark = mentionMark(entry.iso, fen)
         setTooltipRef.current({
           top: rect.bottom + 6, left: rect.left, fen,
           lastMove: null, highlight: entry.iso.square, kind: 'square',
           ...(mark.line ? { line: mark.line } : {}), ...(mark.arrow ? { arrow: mark.arrow } : {}),
+          ...('arrows' in mark && mark.arrows ? { arrows: mark.arrows, from: mark.from } : {}),
         })
         return
       }
@@ -1001,6 +1011,14 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
       const recomment = (e.target as HTMLElement | null)?.closest?.('[data-recomment]') as HTMLElement | null
       if (recomment) { toggleRecommentRef.current(Number(recomment.dataset.recomment)); return }
       const target = e.target as HTMLElement | null
+      // Review, choose or edit the database comments of this position.
+      const tools = target?.closest?.('button[data-comment-tools]') as HTMLElement | null
+      if (tools) {
+        const quote = tools.closest('blockquote.human-comment')
+        const fen = quote?.getAttribute('data-comment-fen')
+        if (quote && fen) setRemarkPanelRef.current({ fen, quote })
+        return
+      }
       // Another book remark of the same position ("1/3" → "2/3").
       const cycle = target?.closest?.('button[data-comment-cycle]') as HTMLElement | null
       if (cycle) {
@@ -1029,7 +1047,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
         e.preventDefault()
         const quote = source.closest('blockquote, [data-no-recognition]')
         const footer = source.closest('footer')?.cloneNode(true) as HTMLElement | undefined
-        footer?.querySelectorAll('a.comment-source, button.comment-cycle').forEach((a) => a.remove())
+        footer?.querySelectorAll('a.comment-source, button.comment-cycle, button.comment-tools').forEach((a) => a.remove())
         const rect = source.getBoundingClientRect()
         setSourceMenuRef.current({
           top: rect.bottom + 4, left: rect.left,
@@ -1115,6 +1133,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
     .epub-content blockquote.human-comment { border-left: 3px solid #a16207; background: #fefce8; padding: 0.4rem 0.8rem; margin: 0.6rem 0; color: #422006; font-style: italic; }
     .epub-content blockquote.human-comment p { text-indent: 0; margin-bottom: 0.2rem; }
     .epub-content blockquote.human-comment button.comment-cycle { margin-left: 0.4rem; border: 1px solid #a16207; border-radius: 4px; background: #fff; padding: 0 0.35rem; font-size: 0.85em; color: #78350f; cursor: pointer; }
+    .epub-content blockquote.human-comment button.comment-tools { margin-left: 0.3rem; border: 1px solid #a16207; border-radius: 4px; background: #fff; padding: 0 0.3rem; font-size: 0.85em; color: #78350f; cursor: pointer; }
     .epub-content blockquote.human-comment footer { font-style: normal; font-size: 0.8em; color: #78716c; }
     .epub-content p.diagram-line { text-align: center; text-indent: 0; font-size: 0.85em; color: #334155; margin-top: -0.6rem; }
     .epub-content p.diagram-alt { color: #64748b; font-style: italic; }
@@ -1450,6 +1469,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
             line={tooltip.line}
             arrow={tooltip.arrow}
             arrows={tooltip.arrows}
+            from={tooltip.from}
             sequence={tooltip.sequence}
             tree={tooltip.move?.tree}
             node={tooltip.move?.node}
@@ -1459,6 +1479,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
 
       {/* A book comment's source: new tab or new analysis board (S5) */}
       {sourceMenu && <CommentSourceMenu target={sourceMenu} onClose={closeSourceMenu} />}
+      {remarkPanel && <BookRemarkPanel fen={remarkPanel.fen} lang={notationLang} onUse={(remark) => setBookComment(remarkPanel.quote, remark)} onClose={() => setRemarkPanel(null)} />}
 
       {/* Prose variation chooser — anchored under the clicked move */}
       {chooser && (

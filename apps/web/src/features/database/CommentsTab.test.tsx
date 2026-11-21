@@ -51,6 +51,20 @@ beforeEach(() => {
   useBusyStore.setState({ tasks: [] })
 })
 
+describe('Comments of one book, opened from the library', () => {
+  it('starts filtered by the source named like the book', async () => {
+    render(<MemoryRouter><CommentsTab books={[]} initialBook="invented book" /></MemoryRouter>)
+    await waitFor(() => expect(api.loadCommentPage).toHaveBeenLastCalledWith(expect.objectContaining({ source: 1 }), 0, 50))
+    expect((await screen.findByRole('combobox', { name: 'Source' }) as HTMLSelectElement).value).toBe('1')
+  })
+
+  it('shows every comment when no book is named, or none matches', async () => {
+    render(<MemoryRouter><CommentsTab books={[]} initialBook="Unknown book" /></MemoryRouter>)
+    await row(7)
+    expect(api.loadCommentPage).not.toHaveBeenCalledWith(expect.objectContaining({ source: expect.anything() }), 0, 50)
+  })
+})
+
 describe('Database → Comments (S2)', () => {
   it('shows each comment with its position thumbnail, source, author, move, chapter and ids', async () => {
     show()

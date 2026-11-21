@@ -110,6 +110,15 @@ async function writeFile(path: string, text: string, sha: string | undefined, me
   if (!r.ok) throw new Error(String(r.status))
 }
 
+/** Whether files can be written to the resources repository (a write token and a GitHub repository). */
+export const canWriteResources = canCommit
+
+/** Writes a JSON file of the resources repository (the write token only reaches suggestions/ paths, see WRITABLE_PATH). */
+export async function writeResourceFile(path: string, text: string, message: string): Promise<void> {
+  const existing = await readFile(path)
+  await writeFile(path, text, existing?.sha, message)
+}
+
 const indexEntry = (s: Suggestion): SuggestionIndexEntry => ({
   id: s.id, kind: s.kind, book: bookSlug(s.target.book), chapter: s.target.chapter ?? null,
   path: suggestionPath(s).slice('suggestions/'.length), status: s.status,

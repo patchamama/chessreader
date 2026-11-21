@@ -56,7 +56,10 @@ export function humanCommentInner(
   const cycle = position && position.total > 1
     ? ` <button type="button" class="comment-cycle" data-comment-cycle="${position.index}" aria-label="Comment ${position.index + 1} of ${position.total}: show another comment of this position" title="Comment ${position.index + 1} of ${position.total}: show another">${position.index + 1}/${position.total}</button>`
     : ''
-  const footer = quote.source || link || cycle ? `<footer>${quote.source ? `— ${esc(quote.source)}` : ''}${link}${cycle}</footer>` : ''
+  const tools = quote.fen
+    ? ` <button type="button" class="comment-tools" data-comment-tools aria-label="Review, choose or edit the comments of this position" title="Review, choose or edit the comments of this position">✎</button>`
+    : ''
+  const footer = quote.source || link || cycle || tools ? `<footer>${quote.source ? `— ${esc(quote.source)}` : ''}${link}${cycle}${tools}</footer>` : ''
   return `<p>${text}</p>${footer}`
 }
 
@@ -143,10 +146,9 @@ function paragraph(p: string, langs: PieceLang[], before?: MainLinePositions): s
   if (quote) {
     // Every remark of the position is kept, so the reader can pick another one (S4).
     const mainLine = quote.alternatives ? mainLineFor(quote.alternatives.map((a) => a.text), before) : null
-    const alternatives = quote.alternatives
-      ? ` data-comment-alternatives="${attr(JSON.stringify(quote.alternatives))}"${quote.fen ? ` data-comment-fen="${attr(quote.fen)}"` : ''}`
-        + (mainLine ? ` data-comment-mainline="${attr(JSON.stringify(mainLine))}"` : '')
-      : ''
+    const alternatives = (quote.alternatives ? ` data-comment-alternatives="${attr(JSON.stringify(quote.alternatives))}"` : '')
+      + (quote.fen ? ` data-comment-fen="${attr(quote.fen)}"` : '')
+      + (mainLine ? ` data-comment-mainline="${attr(JSON.stringify(mainLine))}"` : '')
     const at = quote.alternatives ? Math.max(0, quote.alternatives.findIndex((a) => a.text === quote.text)) : 0
     const position = quote.alternatives ? { index: at, total: quote.alternatives.length } : undefined
     return `<blockquote class="human-comment" data-no-recognition${alternatives}>${humanCommentInner(quote, before, position)}</blockquote>`

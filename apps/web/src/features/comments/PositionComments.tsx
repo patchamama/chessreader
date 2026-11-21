@@ -5,8 +5,8 @@ import CommentDetailsModal from '../database/CommentDetailsModal'
 import { commentSource, commentTextFor, type HumanComment } from '../library/commentdb/commentLookup'
 import { commentInNotation } from '../library/commentdb/commentNotation'
 import { figurinesOn } from '../training/trapNotation'
-import type { CommentEntry } from './commentsApi'
 import { usePositionComments } from './usePositionComments'
+import { toEntry } from './toEntry'
 
 const T: Record<AppLanguage, { one: string; many: (n: number) => string; edit: string; title: string }> = {
   en: { one: '1 comment for this position', many: (n) => `${n} comments for this position`, edit: 'Edit', title: 'Comments for this position' },
@@ -16,15 +16,6 @@ const T: Record<AppLanguage, { one: string; many: (n: number) => string; edit: s
 
 /** The text of a comment in a language: its own text, or a translation; empty when it has none in it. */
 const textIn = (c: HumanComment, lang: string) => (c.translations?.[lang] || c.lang === lang ? commentTextFor(c, lang) : '')
-
-/** A listed comment as the entry the details editor takes. */
-function toEntry(c: HumanComment, fen: string): CommentEntry {
-  return {
-    id: c.id ?? 0, hash: '', fen, text: c.text, lang: c.lang, ply: c.ply, move: Math.ceil(c.ply / 2), san: c.san, gameId: c.gameId, chapter: null,
-    source: { id: 0, title: c.source.title, author: c.source.author, kind: c.source.kind, lang: c.lang, book: null },
-    game: { white: null, black: null, label: c.label }, translations: c.translations,
-  }
-}
 
 /**
  * The comments of the database for the position on the board, in the board's

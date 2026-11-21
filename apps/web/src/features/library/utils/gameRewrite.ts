@@ -159,6 +159,15 @@ export function pickBookComments(html: string, pick: number, random: () => numbe
   return changed ? serialise(doc) : html
 }
 
+/** Show a remark chosen elsewhere (the comments panel) in a quote: its text and source, keeping the position and the counter of the remarks. */
+export function setBookComment(quote: Element, remark: { text: string; source: string; gameId?: string; ply?: number }): void {
+  const fen = quote.getAttribute('data-comment-fen') ?? undefined
+  const mainLine = readCommentMainLine(quote.getAttribute('data-comment-mainline'))
+  const alternatives = readAlternativesOf(quote)
+  const at = alternatives ? Math.max(0, alternatives.findIndex((a) => a.text === remark.text)) : 0
+  quote.innerHTML = humanCommentInner({ ...remark, ...(fen ? { fen } : {}) }, mainLine, alternatives ? { index: at, total: alternatives.length } : undefined)
+}
+
 /** Another remark of the same position in a quote (the next one, wrapping after the last); false when it keeps only one. */
 export function cycleBookComment(quote: Element): boolean {
   const alternatives = readAlternativesOf(quote)

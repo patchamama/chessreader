@@ -122,6 +122,8 @@ export function MoveTooltipCard(p: {
   arrows?: [string, string][]
   /** Squares lit one after another (a flank's pawns). */
   sequence?: string[]
+  /** The squares of the pieces a bare piece move means, lit in another colour. */
+  from?: string[]
 }) {
   const lang = useSettingsStore((s) => s.language)
   const notationStyle = useSettingsStore((s) => s.notationStyle)
@@ -145,8 +147,11 @@ export function MoveTooltipCard(p: {
           orientation="white"
           lastMove={p.lastMove}
           hideLabels
-          customSquareStyles={marked.length > 0
-            ? Object.fromEntries(marked.map((sq) => [sq, { backgroundColor: 'rgba(250, 204, 21, 0.55)', boxShadow: 'inset 0 0 0 3px rgba(202, 138, 4, 0.9)' }]))
+          customSquareStyles={marked.length > 0 || (p.from?.length ?? 0) > 0
+            ? {
+              ...Object.fromEntries(marked.map((sq) => [sq, { backgroundColor: 'rgba(250, 204, 21, 0.55)', boxShadow: 'inset 0 0 0 3px rgba(202, 138, 4, 0.9)' }])),
+              ...Object.fromEntries((p.from ?? []).map((sq) => [sq, { backgroundColor: 'rgba(59, 130, 246, 0.45)', boxShadow: 'inset 0 0 0 3px rgba(37, 99, 235, 0.9)' }])),
+            }
             : undefined}
           arrows={drawn.length > 0 ? drawn.map(([from, to]) => ({ startSquare: from, endSquare: to, color: '#ca8a04' })) : undefined}
         />

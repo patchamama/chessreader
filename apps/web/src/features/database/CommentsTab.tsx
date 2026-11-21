@@ -51,7 +51,7 @@ function SavedNote({ saved }: { saved: SaveSuggestionResult }) {
  * the AI, make it universal or translate it (Test, then Save as a suggestion),
  * one by one or in batch.
  */
-export default function CommentsTab({ books }: { books: { id: string; title: string }[] }) {
+export default function CommentsTab({ books, initialBook }: { books: { id: string; title: string }[]; /** A book to filter by on opening (its title), e.g. from the library. */ initialBook?: string }) {
   const navigate = useNavigate()
   const llm = useLlm()
   const [filter, setFilter] = useState<Required<Pick<CommentFilter, 'q' | 'lang' | 'kind'>> & { source: number }>({ q: '', source: 0, lang: '', kind: '' })
@@ -75,6 +75,15 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
   const cancelBatch = useRef<() => void>(() => {})
 
   useEffect(() => { loadCommentSources().then(setSources, () => setSources([])) }, [])
+  // Opened from a book: show the comments of the source named like it.
+  const filtered = useRef(false)
+  useEffect(() => {
+    if (!initialBook || filtered.current || !sources.length) return
+    filtered.current = true
+    const want = initialBook.trim().toLocaleLowerCase()
+    const hit = sources.find((s) => s.kind !== 'lichess' && s.title.trim().toLocaleLowerCase() === want)
+    if (hit) setFilter((f) => ({ ...f, source: hit.id }))
+  }, [initialBook, sources])
   const cleanFilter = useCallback((): CommentFilter => {
     const f: CommentFilter = { q: filter.q, ...(filter.source ? { source: filter.source } : {}), lang: filter.lang, kind: filter.kind, ...(hiddenView ? { hidden: true } : {}) }
     return Object.fromEntries(Object.entries(f).filter(([, v]) => v !== '' && v !== undefined)) as CommentFilter

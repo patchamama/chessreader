@@ -16,6 +16,8 @@ import { VisitedMark } from '../../../shared/visited/VisitedMark'
 import { hasServerSession } from '../../../shared/api/serverSession'
 import { downloadEpub } from '../../suggestions/epubApi'
 import BookCoverDialog from './BookCoverDialog'
+import BookStatsPanel from '../stats/BookStatsPanel'
+import { canWriteResources } from '../../suggestions/suggestionsApi'
 
 const visitedCard = 'rounded-lg ring-2 ring-violet-300'
 
@@ -106,6 +108,7 @@ function RepoBooks() {
             <h3 className="font-semibold leading-snug">{b.title}</h3>
             {b.author && <p className="text-sm text-gray-600">{b.author}</p>}
             <p className="text-xs text-slate-500">{b.games} games{b.period ? ` · ${b.period[0]}–${b.period[1]}` : ''}</p>
+            {canWriteResources() && <BookStatsPanel bookId={b.id} title={b.title} />}
             <button className="mt-auto self-start text-sm font-medium text-blue-600 hover:underline disabled:opacity-50" disabled={opening === b.id} aria-label={`Read ${b.title}`} onClick={() => read(b)}>
               {opening === b.id ? 'Opening…' : 'Read'}
             </button>

@@ -149,6 +149,17 @@ describe('book comments with alternatives (S4)', () => {
     expect(new DOMParser().parseFromString(one, 'text/html').querySelector('button.comment-cycle')).toBeNull()
   })
 
+  it('a remark with a position has a tools button and keeps the position, with or without other remarks', () => {
+    const fen = 'rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1'
+    const html = textToChapters(`T\n[Comment source="A" text="Only one." fen="${fen}"]`).chapters[0].html
+    const quote = new DOMParser().parseFromString(html, 'text/html').querySelector('blockquote.human-comment')!
+    expect(quote.getAttribute('data-comment-fen')).toBe(fen)
+    expect(quote.querySelector('button[data-comment-tools]')).not.toBeNull()
+    expect(quote.querySelector('button.comment-cycle')).toBeNull()
+    const bare = textToChapters('T\n[Comment source="A" text="No position."]').chapters[0].html
+    expect(new DOMParser().parseFromString(bare, 'text/html').querySelector('button[data-comment-tools]')).toBeNull()
+  })
+
   it('textToHtml renders text as the paragraphs of a chapter', async () => {
     const { textToHtml } = await import('./textToChapters')
     expect(textToHtml('1. e4 e5\nA remark.')).toBe('<p>1. e4 e5</p>\n<p>A remark.</p>')

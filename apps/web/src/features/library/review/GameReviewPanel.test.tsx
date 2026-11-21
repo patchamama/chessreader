@@ -274,7 +274,8 @@ describe('GameReviewPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open annotated game' }))
     await waitFor(() => expect(screen.getByText('annotated book')).toBeInTheDocument())
     const html = useExternalBookStore.getState().chapters[0].html
-    expect(html).toContain('<blockquote class="human-comment" data-no-recognition><p>La dama sale demasiado pronto.</p><footer>— Kasparov, Mis geniales predecesores I, Partida 3</footer></blockquote>')
+    expect(html).toMatch(/<blockquote class="human-comment" data-no-recognition data-comment-fen="[^"]+"><p>La dama sale demasiado pronto\.<\/p><footer>— Kasparov, Mis geniales predecesores I, Partida 3/)
+    expect(html).toContain('data-comment-tools')
     spy.mockRestore()
     useSettingsStore.setState({ commentDbUrl: '' })
   })
