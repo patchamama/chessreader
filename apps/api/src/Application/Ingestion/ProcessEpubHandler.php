@@ -9,6 +9,7 @@ use App\Application\Ingestion\Port\EpubExtractor;
 use App\Domain\Library\Book;
 use App\Domain\Library\BookRepository;
 use App\Domain\Library\BookStatus;
+use App\Infrastructure\Epub\BookLanguage;
 use App\Infrastructure\Epub\EpubPackage;
 use App\Infrastructure\Epub\NcxTocParser;
 use App\Infrastructure\Epub\OpfManifestParser;
@@ -84,6 +85,14 @@ final class ProcessEpubHandler
                 author:    $opf['author'] ?: 'Unknown',
                 status:    BookStatus::Ready,
                 createdAt: $book->createdAt,
+            ));
+            $this->books->setLanguage($bookId, BookLanguage::resolve(
+                $opf['language'],
+                (static function () use ($chapters) {
+                    foreach (array_slice($chapters, 0, 8) as $chapter) {
+                        yield $chapter['html'];
+                    }
+                })(),
             ));
 
             // 9. Persist original EPUB for image serving, then cleanup extracted dir

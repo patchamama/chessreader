@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 vi.mock('../api/libraryApi', () => ({
   useBooks: vi.fn(),
@@ -55,13 +56,13 @@ describe('LibraryGrid', () => {
 
   it('shows loading spinner when fetching', () => {
     mockUseBooks.mockReturnValue(makeQuery({ isLoading: true, isPending: true, status: 'pending' }))
-    render(<MemoryRouter><LibraryGrid /></MemoryRouter>)
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><LibraryGrid /></MemoryRouter></QueryClientProvider>)
     expect(screen.getByRole('status')).toBeInTheDocument()
   })
 
   it('shows empty state when no books', () => {
     mockUseBooks.mockReturnValue(makeQuery({ isLoading: false, isSuccess: true, data: [] }))
-    render(<MemoryRouter><LibraryGrid /></MemoryRouter>)
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><LibraryGrid /></MemoryRouter></QueryClientProvider>)
     expect(screen.getByText(/no books yet/i)).toBeInTheDocument()
   })
 
@@ -71,7 +72,7 @@ describe('LibraryGrid', () => {
       { id: 2, title: 'My System', author: 'Nimzowitsch', createdAt: '2024-01-02', description: '' },
     ]
     mockUseBooks.mockReturnValue(makeQuery({ isLoading: false, isSuccess: true, data: books }))
-    render(<MemoryRouter><LibraryGrid /></MemoryRouter>)
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><LibraryGrid /></MemoryRouter></QueryClientProvider>)
     expect(screen.getByText('Chess Fundamentals')).toBeInTheDocument()
     expect(screen.getByText('My System')).toBeInTheDocument()
   })

@@ -18,6 +18,7 @@ import { downloadEpub } from '../../suggestions/epubApi'
 import BookCoverDialog from './BookCoverDialog'
 import BookStatsPanel from '../stats/BookStatsPanel'
 import { canWriteResources } from '../../suggestions/suggestionsApi'
+import { LanguageBadge, LanguageFilter, useLanguageChoice } from './BookLanguage'
 
 const visitedCard = 'rounded-lg ring-2 ring-violet-300'
 
@@ -29,6 +30,13 @@ export default function LibraryGrid() {
   // In the demo every book is an example: shown unless the reader closed it.
   const shown = demo ? books?.filter((b) => !hidden.includes(b.id)) : books
   const visited = useVisitedCheck()
+  const repo = useQuery<DbBook[]>({ queryKey: ['resources', 'books'], queryFn: loadBooks, enabled: demo && resourcesConfigured() })
+  const [chosen, chooseLanguage] = useLanguageChoice()
+  const languages = [...(shown ?? []).map((b) => b.language), ...(repo.data ?? []).map((b) => b.lang)]
+  // A remembered language no book has any more shows everything.
+  const language = languages.includes(chosen) ? chosen : ''
+  const listed = language ? shown?.filter((b) => b.language === language) : shown
+  const repoListed = language ? repo.data?.filter((b) => b.lang === language) : repo.data
   // Server books only: download the EPUB, suggest a cover (S6).
   const server = !demo && hasServerSession()
   const [coverOf, setCoverOf] = useState<{ id: number; title: string } | null>(null)
@@ -41,6 +49,7 @@ export default function LibraryGrid() {
   return (
     <div>
       <UploadBookForm />
+      <LanguageFilter languages={languages} value={language} onChange={chooseLanguage} />
       {downloadError && <p role="alert" className="px-4 text-sm text-red-600">Could not download {downloadError}</p>}
       {coverOf && <BookCoverDialog book={coverOf} onClose={() => setCoverOf(null)} />}
       {isLoading && (
@@ -49,14 +58,14 @@ export default function LibraryGrid() {
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent" />
         </div>
       )}
-      {!isLoading && (!shown || shown.length === 0) && (
+      {!isLoading && (!listed || listed.length === 0) && !(demo && repoListed?.length) && (
         <div className="p-8 text-center text-gray-500">
           No books yet
         </div>
       )}
-      {!isLoading && shown && shown.length > 0 && (
+      {!isLoading && listed && listed.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 p-4">
-          {shown.map((book) => {
+          {listed.map((book) => {
             const seen = visited('serverBook', book.id)
             // A click on a link to the reader inside the card records the book as opened (S9).
             const record = (e: MouseEvent) => {
@@ -77,15 +86,14 @@ export default function LibraryGrid() {
           })}
         </div>
       )}
-      {demo && resourcesConfigured() && <RepoBooks />}
+      {demo && resourcesConfigured() && <RepoBooks books={repoListed} error={repo.error as Error | null} />}
     </div>
   )
 }
 
 /** The books of the private resources repository (GitHub token in Settings), opened from their text. */
-function RepoBooks() {
+function RepoBooks({ books: data, error }: { books?: DbBook[]; error: Error | null }) {
   const navigate = useNavigate()
-  const { data, error } = useQuery<DbBook[]>({ queryKey: ['resources', 'books'], queryFn: loadBooks })
   const [opening, setOpening] = useState<string | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
   const visited = useVisitedCheck()
@@ -98,7 +106,7 @@ function RepoBooks() {
   return (
     <section className="p-4" aria-label="Books of the resources repository">
       <h2 className="text-lg font-semibold text-slate-800">Books of your resources</h2>
-      {error && <p role="alert" className="text-sm text-red-600">Could not read the resources: {(error as Error).message}</p>}
+      {error && <p role="alert" className="text-sm text-red-600">Could not read the resources: {error.message}</p>}
       {failed && <p role="alert" className="text-sm text-red-600">{failed}</p>}
       <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
         {(data ?? []).map((b) => (
@@ -107,6 +115,7 @@ function RepoBooks() {
             {b.thumb && <img src={b.thumb} alt={`Cover of ${b.title}`} className="mb-1 h-44 w-full rounded-md object-contain bg-slate-100" />}
             <h3 className="font-semibold leading-snug">{b.title}</h3>
             {b.author && <p className="text-sm text-gray-600">{b.author}</p>}
+            <LanguageBadge language={b.lang} />
             <p className="text-xs text-slate-500">{b.games} games{b.period ? ` · ${b.period[0]}–${b.period[1]}` : ''}</p>
             {canWriteResources() && <BookStatsPanel bookId={b.id} title={b.title} />}
             <button className="mt-auto self-start text-sm font-medium text-blue-600 hover:underline disabled:opacity-50" disabled={opening === b.id} aria-label={`Read ${b.title}`} onClick={() => read(b)}>

@@ -27,6 +27,12 @@ final class UpdateBookHandler
 
         $this->bookRepository->update($command->bookId, $command->title, $command->author, $command->description);
 
+        $language = $book->language;
+        if ($command->language !== null) {
+            $this->bookRepository->setLanguage($command->bookId, $command->language);
+            $language = $command->language;
+        }
+
         return new \App\Domain\Library\Book(
             $book->id,
             $book->ownerId,
@@ -35,6 +41,7 @@ final class UpdateBookHandler
             $book->status,
             $book->createdAt,
             $command->description,
+            $language,
         );
     }
 }

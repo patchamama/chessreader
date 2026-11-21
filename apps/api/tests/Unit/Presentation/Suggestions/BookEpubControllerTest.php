@@ -48,6 +48,7 @@ final class BookEpubControllerTest extends TestCase
             public function findByOwner(int $ownerId): array { return []; }
             public function update(int $id, string $title, string $author, string $description): void {}
             public function delete(int $id): void {}
+            public function setLanguage(int $id, string $language): void {}
             public function save(Book $book): int { return $book->id; }
             public function saveChapter(int $bookId, int $order, string $title, string $html): int { return 0; }
             public function findChaptersByBook(int $bookId): array { return []; }

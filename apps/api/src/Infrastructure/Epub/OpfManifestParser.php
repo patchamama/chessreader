@@ -10,6 +10,7 @@ namespace App\Infrastructure\Epub;
  * Returns:
  *   title    — dc:title string
  *   author   — dc:creator string
+ *   language — dc:language as written ('' when absent)
  *   manifest — ['id' => 'href', ...]
  *   spine    — ['id1', 'id2', ...] in spine order
  *   images   — ['href', ...] of image items (media-type image/*)
@@ -22,7 +23,7 @@ namespace App\Infrastructure\Epub;
 final class OpfManifestParser
 {
     /**
-     * @return array{title:string,author:string,manifest:array<string,string>,spine:list<string>,images:list<string>,cover:?string,coverImage:?string,coverPage:?string,nav:?string,ncx:?string}
+     * @return array{title:string,author:string,language:string,manifest:array<string,string>,spine:list<string>,images:list<string>,cover:?string,coverImage:?string,coverPage:?string,nav:?string,ncx:?string}
      */
     public function parse(string $opfPath): array
     {
@@ -41,7 +42,7 @@ final class OpfManifestParser
     /**
      * Parse OPF content from a raw XML string (e.g. read straight out of a ZIP).
      *
-     * @return array{title:string,author:string,manifest:array<string,string>,spine:list<string>,images:list<string>,cover:?string,coverImage:?string,coverPage:?string,nav:?string,ncx:?string}
+     * @return array{title:string,author:string,language:string,manifest:array<string,string>,spine:list<string>,images:list<string>,cover:?string,coverImage:?string,coverPage:?string,nav:?string,ncx:?string}
      */
     public function parseXml(string $xml): array
     {
@@ -64,6 +65,12 @@ final class OpfManifestParser
         $creatorNodes = $xpath->query('//dc:creator');
         $author = ($creatorNodes && $creatorNodes->length > 0)
             ? trim($creatorNodes->item(0)->textContent)
+            : '';
+
+        // Language (dc:language), as written
+        $langNodes = $xpath->query('//dc:language');
+        $language = ($langNodes && $langNodes->length > 0)
+            ? trim($langNodes->item(0)->textContent)
             : '';
 
         // Manifest items: id -> href
@@ -163,6 +170,6 @@ final class OpfManifestParser
             }
         }
 
-        return compact('title', 'author', 'manifest', 'spine', 'images', 'cover', 'coverImage', 'coverPage', 'nav', 'ncx');
+        return compact('title', 'author', 'language', 'manifest', 'spine', 'images', 'cover', 'coverImage', 'coverPage', 'nav', 'ncx');
     }
 }

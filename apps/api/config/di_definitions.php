@@ -222,7 +222,10 @@ return [
     },
 
     ListBooksHandler::class => function (ContainerInterface $c) {
-        return new ListBooksHandler($c->get(BookRepository::class));
+        return new ListBooksHandler(
+            $c->get(BookRepository::class),
+            $c->get('settings')['books_dir'] ?? dirname(__DIR__) . '/storage/books',
+        );
     },
 
     GetChapterHandler::class => function (ContainerInterface $c) {

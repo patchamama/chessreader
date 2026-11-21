@@ -155,3 +155,25 @@ describe('moves of a fragment without a position are painted as board marks (rea
     for (let i = 1; i < targets.length; i++) expect(targets[i].start).toBeGreaterThanOrEqual(targets[i - 1].end)
   })
 })
+
+describe('a <head> that travels with the chapter html (EPUBs with a <title>)', () => {
+  // Some EPUBs keep <head><title>Book title</title></head> in every chapter; the string path (DOMParser) drops it,
+  // but the reader injects the html into a div, where the <title> stays. Both must read the same text, or every
+  // recognised move is painted on the wrong letters.
+  const html = '<head><title>Garry Kasparov on My Great Predecessors: Vol 1</title></head><p>Fourth match, London 1834</p><p>1 e4 c5 2 Nf3</p>'
+
+  it('is not part of the text of a live DOM either', () => {
+    const div = document.createElement('div')
+    div.innerHTML = html
+    expect(extractProseText(div).text).toBe(htmlToProseText(html))
+    expect(htmlToProseText(html)).toBe('Fourth match, London 1834\n1 e4 c5 2 Nf3')
+  })
+
+  it('every recognised move points at its own characters in the live DOM', () => {
+    const div = document.createElement('div')
+    div.innerHTML = html
+    const prose = extractProseText(div)
+    const [game] = recognizeGames(htmlToProseText(html), { algorithm: 2 })
+    for (const node of game.tree.nodes.values()) expect(prose.text.slice(node.charStart, node.charEnd)).toBe(node.rawSan ?? node.san)
+  })
+})

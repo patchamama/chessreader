@@ -16,6 +16,9 @@ interface BookRepository
 
     public function update(int $id, string $title, string $author, string $description): void;
 
+    /** Sets the book's language (2-letter code, or '' when unknown). */
+    public function setLanguage(int $id, string $language): void;
+
     /** Deletes a book and all of its chapters. */
     public function delete(int $id): void;
 

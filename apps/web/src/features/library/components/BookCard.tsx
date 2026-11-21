@@ -5,6 +5,7 @@ import BookEditModal from './BookEditModal'
 import { getProgress } from '../store/readingStore'
 import BookStatsPanel from '../stats/BookStatsPanel'
 import { hasServerSession } from '../../../shared/api/serverSession'
+import { LanguageBadge } from './BookLanguage'
 
 interface Props {
   book: Book
@@ -67,6 +68,7 @@ export default function BookCard({ book, totalChapters, onHide }: Props) {
         )}
       </div>
       <p className="text-sm text-gray-600">{book.author}</p>
+      <LanguageBadge language={book.language} />
       {book.description && (
         <p className="text-xs text-slate-500 line-clamp-2">{book.description}</p>
       )}

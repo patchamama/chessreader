@@ -25,6 +25,8 @@ import { captureOffset, captureTopAnchor, restoreOffset, restoreTopAnchor, type 
 import { flashElement } from '../../../shared/layout/flash'
 import { BookCommentsToggle, StudyTools } from './ReaderToolbar'
 import { WidthControl } from './WidthControl'
+import { TextZoom } from './TextZoom'
+import { useTextZoom } from '../hooks/useTextZoom'
 import { ReaderToc } from './toc/ReaderToc'
 import { StudyBoard } from './StudyBoard'
 import { StudyPanelResizer } from './StudyPanelResizer'
@@ -219,6 +221,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
   const epub = useSettingsStore((s) => s.epub)
   const studyPanelWidth = useSettingsStore((s) => s.studyPanelWidth)
   const fontSize = useSettingsStore((s) => s.fontSize)
+  const textZoom = useTextZoom()
   const notationLang = useSettingsStore((s) => s.language)
   const notationStyle = useSettingsStore((s) => s.notationStyle)
   const { config: bookConfig } = useBookConfig(id)
@@ -1123,6 +1126,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
 
   // Scoped CSS for EPUB rendering based on user settings
   const epubCss = `
+    .reader-zoomable { zoom: var(--reader-zoom, 1); }
     .epub-content h1, .epub-content .epub-h1 { font-weight: ${epub.h1.bold ? '700' : '400'}; font-style: ${epub.h1.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h1.sizeDelta}px; margin: 1.2em 0 0.4em; }
     .epub-content h2, .epub-content .epub-h2 { font-weight: ${epub.h2.bold ? '700' : '400'}; font-style: ${epub.h2.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h2.sizeDelta}px; margin: 1em 0 0.3em; }
     .epub-content h3, .epub-content .epub-h3 { font-weight: ${epub.h3.bold ? '700' : '400'}; font-style: ${epub.h3.italic ? 'italic' : 'normal'}; font-size: ${fontSize + epub.h3.sizeDelta}px; margin: 0.9em 0 0.3em; }
@@ -1251,6 +1255,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
 
         {/* Width of the text column (S9). */}
         <WidthControl onBeforeChange={captureWidthAnchor} />
+        <TextZoom zoom={textZoom.zoom} onZoomIn={textZoom.zoomIn} onZoomOut={textZoom.zoomOut} onReset={textZoom.reset} />
 
         {/* Comment layout of the active game: braces ⇄ paragraphs (S7). */}
         {activeSummary && (
@@ -1361,7 +1366,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
               className={`${solvingProblem ? 'pointer-events-none select-none blur-sm transition' : 'transition'}${bookComments ? '' : ' hide-book-comments'}`}
               aria-hidden={solvingProblem || undefined}
             >
-              <div data-testid="reader-column" className="relative mx-auto" style={textWidth ? { maxWidth: `${textWidth}px` } : undefined}>
+              <div data-testid="reader-column" className="reader-zoomable relative mx-auto" style={textWidth || textZoom.zoom !== 100 ? { ...(textWidth ? { maxWidth: `${textWidth}px` } : {}), ...(textZoom.zoom !== 100 ? { '--reader-zoom': textZoom.zoom / 100 } as React.CSSProperties : {}) } : undefined}>
                 <ProseContent ref={contentRef} html={shownHtml} />
                 {editMode && <EditLayer containerRef={contentRef} rawHtml={rawHtml} shownHtml={shownHtml} book={bookTitle} chapter={currentChapter} isMainline={isMainlineMove} />}
               </div>

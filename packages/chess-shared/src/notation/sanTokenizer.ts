@@ -201,12 +201,13 @@ export function tokenize(text: string): SanToken[] {
     // "12.", "12...", "12…" and — as some books print them — a bare "12 "
     // right before a move ("1 d4 d5 2 c4"). A bare number before a word
     // ("en 2 partidas") is prose.
-    const re = /(?<!\$)\b(\d{1,3})(\.{1,3}|\u2026|\s(?=(?:O-O|[KQRBN][a-h1-8]?x?[a-h][1-8]|[a-h]x[a-h][1-8]|[a-h][1-8])(?![a-zA-Z])))/g;
+    // English books print Black's numbers with a space before the dots ("5 ... Kd8"): the ellipsis may follow spaces.
+    const re = /(?<!\$)\b(\d{1,3})(\.{1,3}|\u2026|[ \t]+(?:\.{2,3}|\u2026)|\s(?=(?:O-O|[KQRBN][a-h1-8]?x?[a-h][1-8]|[a-h]x[a-h][1-8]|[a-h][1-8])(?![a-zA-Z])))/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
       const num = parseInt(m[1], 10);
       const dots = m[2];
-      const isEllipsis = dots.length >= 2 || dots === '\u2026';
+      const isEllipsis = /\.\.|\u2026/.test(dots);
       matches.push({
         start: m.index,
         end: m.index + m[0].length,

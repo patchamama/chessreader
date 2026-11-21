@@ -67,6 +67,12 @@ final class LibraryController
         $title       = $body['title'] ?? '';
         $author      = $body['author'] ?? '';
         $description = $body['description'] ?? '';
+        $language    = $body['language'] ?? null;
+
+        if ($language !== null && (!is_string($language) || preg_match('/^(?:[a-z]{2})?$/', $language) !== 1)) {
+            $response->getBody()->write(json_encode(['error' => 'language must be a lowercase 2-letter code or empty']));
+            return $response->withStatus(422)->withHeader('Content-Type', 'application/json');
+        }
 
         // If partial update: load existing book to fill missing fields
         // For simplicity, require all fields or use '' as default
@@ -78,6 +84,7 @@ final class LibraryController
                 author:      $author,
                 description: $description,
                 isAdmin:     $isAdmin,
+                language:    $language,
             ));
         } catch (\RuntimeException $e) {
             $msg = $e->getMessage();
@@ -94,6 +101,7 @@ final class LibraryController
             'title'       => $book->title,
             'author'      => $book->author,
             'description' => $book->description,
+            'language'    => $book->language,
         ]));
         return $response->withHeader('Content-Type', 'application/json');
     }

@@ -42,6 +42,7 @@ final class DbalBookRepository implements BookRepository
                 'status'      => $book->status->value,
                 'created_at'  => $book->createdAt,
                 'description' => $book->description,
+                'language'    => $book->language,
             ]);
             return (int) $this->connection->lastInsertId();
         }
@@ -63,6 +64,11 @@ final class DbalBookRepository implements BookRepository
             'author'      => $author,
             'description' => $description,
         ], ['id' => $id]);
+    }
+
+    public function setLanguage(int $id, string $language): void
+    {
+        $this->connection->update('books', ['language' => $language], ['id' => $id]);
     }
 
     public function delete(int $id): void
@@ -120,6 +126,7 @@ final class DbalBookRepository implements BookRepository
             status:      BookStatus::from($row['status']),
             createdAt:   (string) $row['created_at'],
             description: (string) ($row['description'] ?? ''),
+            language:    (string) ($row['language'] ?? ''),
         );
     }
 

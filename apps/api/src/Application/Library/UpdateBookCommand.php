@@ -13,6 +13,8 @@ final class UpdateBookCommand
         public readonly string $author,
         public readonly string $description,
         public readonly bool $isAdmin = false,
+        /** null keeps the current language; '' clears it. */
+        public readonly ?string $language = null,
     ) {
     }
 }

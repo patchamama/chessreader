@@ -14,5 +14,7 @@ final class Book
         public readonly BookStatus $status,
         public readonly string     $createdAt,
         public readonly string     $description = '',
+        /** Lowercase 2-letter code ("en", "es"…), '' when unknown. */
+        public readonly string     $language = '',
     ) {}
 }

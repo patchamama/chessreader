@@ -14,6 +14,8 @@ export interface Book {
   author: string
   createdAt: string
   description: string
+  /** Lowercase 2-letter code ("en", "es"…); '' or missing when unknown. */
+  language?: string
 }
 
 export interface ChapterTocEntry {
