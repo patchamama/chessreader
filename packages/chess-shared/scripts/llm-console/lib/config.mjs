@@ -72,11 +72,11 @@ export function saveSettings(patch, home = configHome()) {
   return loadSettings(home)
 }
 
-const SECRET_NAMES = ['openai', 'anthropic', 'openai-compatible', 'github']
+const SECRET_NAMES = ['openai', 'anthropic', 'openai-compatible', 'github', 'lichess']
 
 /** The value of a secret: the console's file, else the usual environment variable. Never sent to the browser. */
 export function getSecret(name, home = configHome()) {
-  const env = { openai: 'OPENAI_API_KEY', anthropic: 'ANTHROPIC_API_KEY', github: 'GITHUB_TOKEN' }[name]
+  const env = { openai: 'OPENAI_API_KEY', anthropic: 'ANTHROPIC_API_KEY', github: 'GITHUB_TOKEN', lichess: 'LICHESS_TOKEN' }[name]
   return readJson(secretsFile(home))[name] || (env ? process.env[env] : '') || ''
 }
 

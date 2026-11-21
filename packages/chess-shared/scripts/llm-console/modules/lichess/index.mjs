@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { getSecret } from '../../lib/config.mjs'
 import { openDb, withDb } from '../../lib/db.mjs'
 import { USER_AGENT, attributionOf, filterGame, headersOf, humanComments, sourcesOf, splitPgnGames } from '../../../harvest-lichess.mjs'
 
@@ -69,7 +70,7 @@ const isTranslateRunning = (psText) => /scripts\/translate-comments\.mjs/.test(p
 const tail = (s, n = 1500) => String(s ?? '').trim().slice(-n)
 
 /** The service behind the routes. Everything outside the process (network, ps, spawn, clock) is injectable. */
-export function createService({ settings, home, fetchImpl = (...a) => fetch(...a), sleep = defaultSleep, spawn = defaultSpawn, ps = defaultPs, env = process.env, delayMs = 2500, scriptsDir = SCRIPTS } = {}) {
+export function createService({ settings, home, fetchImpl = (...a) => fetch(...a), sleep = defaultSleep, spawn = defaultSpawn, ps = defaultPs, env = process.env, delayMs = 2500, scriptsDir = SCRIPTS, getToken = () => env.LICHESS_TOKEN || '' } = {}) {
   const state = { job: { running: false, step: '', log: [], result: null, error: null } }
   const sourcesFile = () => settings().lichessSources || join(home, 'lichess-sources.json')
   const readSources = () => { try { return JSON.parse(readFileSync(sourcesFile(), 'utf8')) } catch { return {} } }
@@ -81,10 +82,11 @@ export function createService({ settings, home, fetchImpl = (...a) => fetch(...a
     const headers = { ...(init.headers ?? {}), ...(token && host === 'lichess.org' ? { Authorization: `Bearer ${token}` } : {}) }
     return fetchImpl(url, { ...init, headers })
   }
-  async function get(url, { token, accept = 'application/x-chess-pgn', retries = 3 } = {}) {
+  const tokenOf = (typed) => String(typed || getToken() || '').trim()
+  async function get(url, { token, accept = 'application/x-chess-pgn', retries = 3, method, body } = {}) {
     const f = authed(token)
     for (let attempt = 0; ; attempt++) {
-      const res = await f(url, { headers: { 'User-Agent': USER_AGENT, Accept: accept }, signal: AbortSignal.timeout(300_000) })
+      const res = await f(url, { ...(method ? { method } : {}), ...(body !== undefined ? { body } : {}), headers: { 'User-Agent': USER_AGENT, Accept: accept, ...(body !== undefined ? { 'Content-Type': 'text/plain' } : {}) }, signal: AbortSignal.timeout(300_000) })
       if (res.status === 200) return { text: await res.text(), headers: res.headers }
       if (res.status === 404) throw httpError(404, 'HTTP 404: not found or private (a token with study:read may be needed)')
       if (res.status === 401 || res.status === 403) throw httpError(res.status, `HTTP ${res.status}: the token is missing or not allowed`)
@@ -181,31 +183,76 @@ export function createService({ settings, home, fetchImpl = (...a) => fetch(...a
     const lm = headers?.get?.('last-modified')
     const updated = extra.updated ?? (lm && !Number.isNaN(Date.parse(lm)) ? new Date(lm).toISOString() : dates.sort().at(-1) ?? null)
     const owner = extra.owner ?? [...authors.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
-    return { id, name: extra.name ?? name, url: `https://lichess.org/study/${id}`, owner, updated, created: extra.created ?? null, chapters: games.length, annotated, keptGames: kept, comments, lang: extra.lang }
+    return { id, name: extra.name ?? name, url: `https://lichess.org/study/${id}`, owner, updated, created: extra.created ?? null, description: extra.description ?? null, chapters: games.length, annotated, keptGames: kept, comments, lang: extra.lang }
   }
 
-  async function preview({ ref, token, limit = 20 } = {}) {
-    const tok = token || env.LICHESS_TOKEN || ''
-    const { studies, users, config } = parseRef(ref)
+  /** The account behind the token and whether it may read private studies. Never returns the token. */
+  async function account({ token } = {}) {
+    const tok = tokenOf(token)
+    if (!tok) return { hasToken: false }
+    try {
+      const me = JSON.parse((await get('https://lichess.org/api/account', { token: tok, accept: 'application/json' })).text)
+      const out = { hasToken: true, user: me.username ?? me.id ?? null }
+      try {
+        const test = JSON.parse((await get('https://lichess.org/api/token/test', { token: tok, accept: 'application/json', method: 'POST', body: tok })).text)
+        const scopes = String(test?.[tok]?.scopes ?? '').split(',')
+        out.studyRead = scopes.includes('study:read')
+      } catch { out.studyRead = false }
+      return out
+    } catch (e) { return { hasToken: true, error: e.message } }
+  }
+
+  /** Lichess usernames of the authors/annotators recoverable from the studies in the database. */
+  function authorHandles() {
+    const { dbPath } = settings()
+    if (!dbPath || !existsSync(dbPath)) return []
+    return withDb(dbPath, (db) => {
+      const found = new Map()
+      for (const g of db.all("SELECT g.pgn FROM comment_games g JOIN comment_sources s ON s.id=g.source_id WHERE s.kind='lichess'")) {
+        const raw = headersOf(g.pgn).Annotator ?? ''
+        const h = /lichess\.org\/@\/([\w-]+)/.exec(raw)?.[1] ?? (USER.test(raw) ? raw : null)
+        if (h) found.set(h.toLowerCase(), (found.get(h.toLowerCase()) ?? 0) + 1)
+      }
+      return [...found.entries()].sort((a, b) => b[1] - a[1]).map(([h]) => h)
+    })
+  }
+  const MAX_AUTHORS = 25
+
+  async function preview({ ref, token, limit = 20, offset = 0, authors = false } = {}) {
+    const tok = tokenOf(token)
+    const warnings = []
+    let parsed
+    if (authors) {
+      const handles = authorHandles()
+      if (!handles.length) throw httpError(400, 'no Lichess author handles found in the studies of the database')
+      if (handles.length > MAX_AUTHORS) warnings.push(`${handles.length} authors, using the ${MAX_AUTHORS} with most games`)
+      parsed = { studies: [], users: handles.slice(0, MAX_AUTHORS).map((id) => ({ id })), config: {} }
+    } else parsed = parseRef(ref)
+    const { studies, users, config } = parsed
     const fileCfg = readSources()
     const opts = thresholds({ ...fileCfg, ...config })
     const lang = config.lang ?? fileCfg.lang ?? 'en'
     const dbPath = settings().dbPath
     const index = dbPath && existsSync(dbPath) ? withDb(dbPath, inDbIndex) : { studyIds: new Set() }
     const inList = new Set((fileCfg.studies ?? []).map((s) => (typeof s === 'string' ? s : s.id)))
-    const warnings = []
-    const todo = studies.map((s) => ({ id: s.id, lang: s.lang ?? lang, extra: {} }))
+    const direct = studies.map((s) => ({ id: s.id, lang: s.lang ?? lang, extra: {} }))
+    const listed = []
     let requests = 0
+    let page = null
     const pause = async () => { if (requests++ > 0) await sleep(delayMs) }
     for (const u of users) {
       await pause()
       try {
         const { text } = await get(`https://lichess.org/api/study/by/${u.id}`, { token: tok, accept: 'application/x-ndjson' })
-        const listed = text.split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l) } catch { return null } }).filter((s) => s?.id)
-        if (listed.length > limit) warnings.push(`${u.id}: ${listed.length} studies, showing the first ${limit}`)
-        for (const s of listed.slice(0, limit)) todo.push({ id: s.id, lang: u.lang ?? lang, extra: { owner: u.id, name: s.name, updated: s.updatedAt ? new Date(s.updatedAt).toISOString() : null, created: s.createdAt ? new Date(s.createdAt).toISOString() : null } })
+        for (const l of text.split('\n').filter(Boolean)) {
+          let s
+          try { s = JSON.parse(l) } catch { continue }
+          if (s?.id) listed.push({ id: s.id, lang: u.lang ?? lang, extra: { owner: u.id, name: s.name, description: s.description ?? null, updated: s.updatedAt ? new Date(s.updatedAt).toISOString() : null, created: s.createdAt ? new Date(s.createdAt).toISOString() : null } })
+        }
       } catch (e) { warnings.push(`${u.id}: ${e.message}`) }
     }
+    if (users.length) page = { total: listed.length, offset, limit }
+    const todo = [...direct, ...listed.slice(offset, offset + limit)]
     const seen = new Set()
     const out = []
     for (const item of todo) {
@@ -218,7 +265,7 @@ export function createService({ settings, home, fetchImpl = (...a) => fetch(...a
         out.push({ ...s, inDb: index.studyIds.has(item.id), inList: inList.has(item.id) })
       } catch (e) { out.push({ id: item.id, url: `https://lichess.org/study/${item.id}`, error: e.message }) }
     }
-    return { studies: out, warnings, filter: opts }
+    return { studies: out, warnings, filter: opts, page, usedToken: !!tok }
   }
 
   // ---- add ----
@@ -270,7 +317,7 @@ export function createService({ settings, home, fetchImpl = (...a) => fetch(...a
     if (!dbPath) throw httpError(400, 'no database set: choose one in the settings')
     if (state.job.running) throw httpError(409, 'a Lichess job is already running')
     if (isTranslateRunning(await ps())) throw httpError(409, 'a translate-comments.mjs process is running: wait for it to finish (only one process may write the database)')
-    const tok = token || env.LICHESS_TOKEN || ''
+    const tok = tokenOf(token)
     state.job = { running: true, step: 'harvest', log: [], result: null, error: null, startedAt: new Date().toISOString() }
     const work = join(home, 'lichess-work', String(Date.now()))
     try {
@@ -308,13 +355,14 @@ export function createService({ settings, home, fetchImpl = (...a) => fetch(...a
     }
   }
 
-  return { listStudies, preview, add, job: () => state.job, sourcesFile }
+  return { listStudies, preview, account, authorHandles, add, job: () => state.job, sourcesFile }
 }
 
 export default {
   routes(app, ctx) {
-    const svc = createService({ settings: () => ctx.settings(), home: ctx.home })
+    const svc = createService({ settings: () => ctx.settings(), home: ctx.home, getToken: () => getSecret('lichess', ctx.home) })
     app.get('/api/lichess/studies', () => svc.listStudies())
+    app.get('/api/lichess/account', () => svc.account({}))
     app.get('/api/lichess/job', () => svc.job())
     app.post('/api/lichess/preview', async (c) => svc.preview(await c.body()))
     app.post('/api/lichess/add', async (c) => svc.add(await c.body()))

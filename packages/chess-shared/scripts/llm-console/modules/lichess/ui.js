@@ -5,31 +5,35 @@ Console.addStrings({
     'li.existing': 'Studies in the database', 'li.summary': '{studies} studies · {games} games · {comments} comments', 'li.none': 'No Lichess studies in the database yet.',
     'li.col.name': 'Study', 'li.col.author': 'Author', 'li.col.games': 'Games', 'li.col.comments': 'Comments', 'li.col.avg': 'Comments / game', 'li.col.norm': 'Normalized', 'li.col.dropped': 'Dropped', 'li.col.trans': 'Translated', 'li.col.langs': 'Languages', 'li.col.dates': 'Dates',
     'li.find': 'Find new studies', 'li.findHelp': 'A study URL or id, a Lichess username (their public studies), several separated by spaces, or the JSON list file the harvester uses.',
-    'li.ref': 'URL, id, @user or JSON list', 'li.token': 'Lichess token (optional, kept in memory only, sent only to lichess.org)', 'li.preview': 'Preview', 'li.previewing': 'Fetching one study at a time…',
+    'li.ref': 'URL, id, @user or JSON list', 'li.token': 'Lichess token (optional, kept in memory only, sent only to lichess.org)', 'li.preview': 'Get studies', 'li.previewing': 'Fetching one study at a time…',
     'li.results': 'Preview', 'li.select': 'Add', 'li.col.owner': 'Owner', 'li.col.chapters': 'Chapters', 'li.col.annotated': 'Annotated', 'li.col.kept': 'Kept games', 'li.col.pcomments': 'Comments kept', 'li.col.updated': 'Updated', 'li.col.state': 'State',
     'li.inDb': 'already in the database', 'li.new': 'new', 'li.add': 'Add selected', 'li.adding': 'Adding… ({step})', 'li.added': 'Added {sources} source(s): {games} games, {comments} comments.', 'li.skipped': '{n} chapter(s) were already in the database.',
     'li.nothing': 'Nothing selected.', 'li.error': 'Error: {msg}', 'li.warning': 'Warning: {msg}', 'li.note': 'Next: queue normalization and translation of the new comments in the Queue tab.',
     'li.output': 'Script output', 'li.filterNote': 'Counted with the harvester filter: at least {minComments} comments of {minCommentChars}+ characters and {minPlies}+ plies per game.',
     'li.step.harvest': 'fetching studies', 'li.step.build': 'building comments', 'li.step.merge': 'writing to the database', 'li.open': 'open',
+    'li.get': 'Get studies', 'li.authors': 'More from the authors of my studies', 'li.more': 'Load more', 'li.page': 'Showing {from}–{to} of {total} studies listed', 'li.savedToken': 'Using the saved token (private studies of its account, higher rate limits). Optional.',
+    'li.browse': 'Browse studies on Lichess', 'li.popular': 'Popular studies', 'li.descNote': 'Study descriptions are shown on Lichess; they cannot be fetched automatically, so open the links to read them.', 'li.descr': 'Description',
   },
   es: {
     'li.tab': 'Estudios de Lichess', 'li.title': 'Estudios de Lichess', 'li.loading': 'Cargando…', 'li.noDb': 'No hay base de datos. Inicia la consola con --db <comments.sqlite>.',
     'li.existing': 'Estudios en la base de datos', 'li.summary': '{studies} estudios · {games} partidas · {comments} comentarios', 'li.none': 'Todavía no hay estudios de Lichess en la base de datos.',
     'li.col.name': 'Estudio', 'li.col.author': 'Autor', 'li.col.games': 'Partidas', 'li.col.comments': 'Comentarios', 'li.col.avg': 'Comentarios / partida', 'li.col.norm': 'Normalizados', 'li.col.dropped': 'Descartados', 'li.col.trans': 'Traducidos', 'li.col.langs': 'Idiomas', 'li.col.dates': 'Fechas',
     'li.find': 'Buscar estudios nuevos', 'li.findHelp': 'La URL o el id de un estudio, un usuario de Lichess (sus estudios públicos), varios separados por espacios, o el archivo JSON de lista que usa el recolector.',
-    'li.ref': 'URL, id, @usuario o lista JSON', 'li.token': 'Token de Lichess (opcional, solo en memoria, solo se envía a lichess.org)', 'li.preview': 'Previsualizar', 'li.previewing': 'Consultando un estudio cada vez…',
+    'li.ref': 'URL, id, @usuario o lista JSON', 'li.token': 'Token de Lichess (opcional, solo en memoria, solo se envía a lichess.org)', 'li.preview': 'Traer estudios', 'li.previewing': 'Consultando un estudio cada vez…',
     'li.results': 'Previsualización', 'li.select': 'Añadir', 'li.col.owner': 'Propietario', 'li.col.chapters': 'Capítulos', 'li.col.annotated': 'Comentados', 'li.col.kept': 'Partidas válidas', 'li.col.pcomments': 'Comentarios válidos', 'li.col.updated': 'Actualizado', 'li.col.state': 'Estado',
     'li.inDb': 'ya está en la base de datos', 'li.new': 'nuevo', 'li.add': 'Añadir seleccionados', 'li.adding': 'Añadiendo… ({step})', 'li.added': 'Añadidas {sources} fuente(s): {games} partidas, {comments} comentarios.', 'li.skipped': '{n} capítulo(s) ya estaban en la base de datos.',
     'li.nothing': 'No hay nada seleccionado.', 'li.error': 'Error: {msg}', 'li.warning': 'Aviso: {msg}', 'li.note': 'Siguiente: encola la normalización y traducción de los comentarios nuevos en la pestaña Cola.',
     'li.output': 'Salida del script', 'li.filterNote': 'Contado con el filtro del recolector: al menos {minComments} comentarios de {minCommentChars}+ caracteres y {minPlies}+ medias jugadas por partida.',
     'li.step.harvest': 'descargando estudios', 'li.step.build': 'construyendo comentarios', 'li.step.merge': 'escribiendo en la base de datos', 'li.open': 'abrir',
+    'li.get': 'Traer estudios', 'li.authors': 'Más de los autores de mis estudios', 'li.more': 'Cargar más', 'li.page': 'Mostrando {from}–{to} de {total} estudios listados', 'li.savedToken': 'Usando el token guardado (estudios privados de su cuenta, límites más altos). Es opcional.',
+    'li.browse': 'Explorar estudios en Lichess', 'li.popular': 'Estudios populares', 'li.descNote': 'Las descripciones de los estudios se ven en Lichess; no se pueden traer automáticamente, abre los enlaces para leerlas.', 'li.descr': 'Descripción',
   },
 })
 
 Console.registerTab({
   id: 'lichess', order: 50, title: { en: 'Lichess studies', es: 'Estudios de Lichess' },
   render(el, { t, api, esc, n }) {
-    let data = null, preview = null, sort = { key: 'comments', dir: -1 }, msg = '', busy = '', timer = null, disposed = false
+    let hasSaved = false, lastReq = null, data = null, preview = null, sort = { key: 'comments', dir: -1 }, msg = '', busy = '', timer = null, disposed = false
     const picked = new Set()
     let token = '' // memory only
     const oneDec = (v) => (Math.round(v * 10) / 10).toLocaleString()
@@ -60,13 +64,14 @@ Console.registerTab({
       const rows = preview.studies.map((s) => {
         if (s.error) return `<tr><td></td><td>${esc(s.id)}</td><td colspan="7" class="err">${esc(s.error)}</td></tr>`
         return `<tr><td><input type="checkbox" data-pick="${esc(s.id)}" aria-label="${esc(t('li.select'))} ${esc(s.id)}" ${picked.has(s.id) ? 'checked' : ''} ${busy ? 'disabled' : ''}></td>
-          <td><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.name ?? s.id)}</a> <span class="tag">${esc(s.id)}</span></td><td>${esc(s.owner ?? '')}</td><td>${n(s.chapters)}</td><td>${n(s.annotated)}</td><td>${n(s.keptGames)}</td><td>${n(s.comments)}</td>
+          <td><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.name ?? s.id)}</a> <span class="tag">${esc(s.id)}</span>${s.description ? `<br><span class="sub-line">${esc(s.description)}</span>` : ''}</td><td>${esc(s.owner ?? '')}</td><td>${n(s.chapters)}</td><td>${n(s.annotated)}</td><td>${n(s.keptGames)}</td><td>${n(s.comments)}</td>
           <td>${esc(s.updated ? s.updated.slice(0, 10) : '')}</td><td>${s.inDb ? `<span class="pill idle">${t('li.inDb')}</span>` : `<span class="pill run">${t('li.new')}</span>`}</td></tr>`
       }).join('')
       return `<h2>${t('li.results')}</h2>
         ${preview.warnings.map((w) => `<p class="err">${esc(t('li.warning', { msg: w }))}</p>`).join('')}
         <p class="sub-line">${t('li.filterNote', f)}</p>
         <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>${t('li.select')}</th><th>${t('li.col.name')}</th><th>${t('li.col.owner')}</th><th>${t('li.col.chapters')}</th><th>${t('li.col.annotated')}</th><th>${t('li.col.kept')}</th><th>${t('li.col.pcomments')}</th><th>${t('li.col.updated')}</th><th>${t('li.col.state')}</th></tr></thead><tbody>${rows}</tbody></table></div>
+        ${preview.page && preview.page.offset + preview.page.limit < preview.page.total ? `<p class="sub-line">${t('li.page', { from: preview.page.offset + 1, to: Math.min(preview.page.total, preview.page.offset + preview.page.limit), total: preview.page.total })} <button type="button" class="btn" id="li-more" ${busy ? 'disabled' : ''}>${t('li.more')}</button></p>` : ''}
         <p><button type="button" class="btn primary" id="li-add" ${busy || !picked.size ? 'disabled' : ''}>${busy === 'add' ? esc(t('li.adding', { step: stepLabel() })) : t('li.add')}</button></p>`
     }
     let step = ''
@@ -78,10 +83,14 @@ Console.registerTab({
       el.innerHTML = `<h1>${t('li.title')}</h1>
         <div class="card"><h2>${t('li.existing')}</h2>${existingHtml()}</div>
         <div class="card" style="margin-top:14px"><h2>${t('li.find')}</h2><p class="sub-line">${t('li.findHelp')}</p>
+          <p><a href="https://lichess.org/study" target="_blank" rel="noopener noreferrer">${t('li.browse')}</a> · <a href="https://lichess.org/study/all/hot" target="_blank" rel="noopener noreferrer">${t('li.popular')}</a></p>
+          <p class="sub-line">${t('li.descNote')}</p>
           <form id="li-form" style="display:grid;gap:8px;max-width:640px">
             <label>${t('li.ref')}<textarea id="li-ref" rows="2" style="width:100%" autocomplete="off" spellcheck="false">${esc(el.dataset.ref ?? '')}</textarea></label>
             <label>${t('li.token')}<input id="li-token" type="password" autocomplete="off" style="width:100%" value="${esc(token)}"></label>
-            <div><button type="submit" class="btn primary" ${busy ? 'disabled' : ''}>${busy === 'preview' ? t('li.previewing') : t('li.preview')}</button></div>
+            <div><button type="submit" class="btn primary" id="li-get" ${busy ? 'disabled' : ''}>${busy === 'preview' ? t('li.previewing') : t('li.preview')}</button>
+              <button type="button" class="btn" id="li-authors" ${busy ? 'disabled' : ''}>${t('li.authors')}</button></div>
+            ${hasSaved ? `<p class="sub-line">${t('li.savedToken')}</p>` : ''}
           </form>
           <p id="li-msg" role="status" class="${msg.startsWith('!') ? 'err' : 'sub-line'}">${esc(msg.replace(/^!/, ''))}</p>
           ${previewHtml()}
@@ -90,7 +99,9 @@ Console.registerTab({
       el.querySelectorAll('[data-pick]').forEach((c) => c.addEventListener('change', () => { c.checked ? picked.add(c.dataset.pick) : picked.delete(c.dataset.pick); draw() }))
       el.querySelector('#li-ref').addEventListener('input', (e) => { el.dataset.ref = e.target.value })
       el.querySelector('#li-token').addEventListener('input', (e) => { token = e.target.value })
-      el.querySelector('#li-form').addEventListener('submit', (e) => { e.preventDefault(); void runPreview() })
+      el.querySelector('#li-form').addEventListener('submit', (e) => { e.preventDefault(); void runPreview({}) })
+      el.querySelector('#li-authors').addEventListener('click', () => void runPreview({ authors: true }))
+      el.querySelector('#li-more')?.addEventListener('click', () => void runPreview({ ...lastReq, offset: preview.page.offset + preview.page.limit, append: true }))
       el.querySelector('#li-add')?.addEventListener('click', () => void runAdd())
       if (focus) document.getElementById(focus)?.focus()
     }
@@ -100,13 +111,17 @@ Console.registerTab({
       draw()
     }
 
-    async function runPreview() {
-      const ref = (el.dataset.ref ?? '').trim()
-      if (!ref) return
-      busy = 'preview'; msg = ''; preview = null; picked.clear(); draw()
+    async function runPreview({ authors = false, offset = 0, append = false, ref: again } = {}) {
+      const ref = authors ? '' : (append ? again : (el.dataset.ref ?? '').trim())
+      if (!authors && !ref) return
+      const prev = append ? preview : null
+      busy = 'preview'; msg = ''; if (!append) { preview = null; picked.clear() }
+      draw()
       try {
-        preview = await api('/api/lichess/preview', { method: 'POST', body: { ref, ...(token ? { token } : {}) } })
-        for (const s of preview.studies) if (!s.error && !s.inDb) picked.add(s.id)
+        const r = await api('/api/lichess/preview', { method: 'POST', body: { ...(authors ? { authors: true } : { ref }), ...(offset ? { offset } : {}), ...(token ? { token } : {}) } })
+        lastReq = authors ? { authors: true } : { ref }
+        preview = prev ? { ...r, studies: [...prev.studies, ...r.studies.filter((s) => !prev.studies.some((x) => x.id === s.id))], warnings: [...new Set([...prev.warnings, ...r.warnings])] } : r
+        for (const s of r.studies) if (!s.error && !s.inDb) picked.add(s.id)
       } catch (e) { msg = `!${t('li.error', { msg: e.message })}` }
       busy = ''; draw()
     }
@@ -127,6 +142,7 @@ Console.registerTab({
 
     draw()
     void load()
+    api('/api/lichess/account').then((a) => { hasSaved = !!a.hasToken; draw() }).catch(() => {})
     return () => { disposed = true; if (timer) clearInterval(timer) }
   },
 })

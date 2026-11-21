@@ -91,6 +91,7 @@
   addEventListener('hashchange', show)
   document.addEventListener('DOMContentLoaded', async () => {
     document.querySelectorAll('[data-lang]').forEach((b) => b.addEventListener('click', () => setLang(b.dataset.lang)))
+    document.getElementById('gear').addEventListener('click', () => navigate('settings'))
     document.getElementById('gpu').addEventListener('click', () => {
       const p = document.getElementById('gpu-panel')
       p.hidden = !p.hidden

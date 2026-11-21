@@ -31,8 +31,8 @@ const STUDY = (id, name = 'Study') => [pgnOf(id, 'chap0001', name), pgnOf(id, 'c
 function fakeFetch(routes) {
   const calls = []
   const impl = async (url, init = {}) => {
-    calls.push({ url: String(url), headers: init.headers ?? {} })
-    const r = routes(String(url), calls.length)
+    calls.push({ url: String(url), headers: init.headers ?? {}, body: init.body })
+    const r = routes(String(url), calls.length, init)
     const res = typeof r === 'string' ? { status: 200, body: r } : r
     return { status: res.status, text: async () => res.body ?? '', headers: { get: (k) => res.headers?.[k.toLowerCase()] ?? null } }
   }
@@ -251,12 +251,103 @@ describe('add', () => {
   })
 })
 
+describe('token fallback, account and authors of my studies', () => {
+  const deps = (f, extra = {}) => ({ settings: () => ({ dbPath: '' }), home: dir, fetchImpl: f.impl, sleep: async () => {}, delayMs: 0, env: {}, ...extra })
+  const ACCOUNT = (url, init) => {
+    if (url.endsWith('/api/account')) return JSON.stringify({ id: 'mandy', username: 'Mandy' })
+    if (url.endsWith('/api/token/test')) return JSON.stringify({ [init?.body]: { scopes: 'study:read,preference:read', userId: 'mandy' } })
+    return null
+  }
+
+  it('uses the saved secret when the body has none, and the typed token wins', async () => {
+    const f = fakeFetch(() => STUDY('abcdEFGH'))
+    const svc = createService(deps(f, { getToken: () => 'lip_saved' }))
+    await svc.preview({ ref: 'abcdEFGH' })
+    expect(f.calls[0].headers.Authorization).toBe('Bearer lip_saved')
+    const out = await svc.preview({ ref: 'abcdEFGH', token: 'lip_typed' })
+    expect(f.calls[1].headers.Authorization).toBe('Bearer lip_typed')
+    expect(JSON.stringify(out)).not.toMatch(/lip_/)
+  })
+
+  it('never echoes the token in an error', async () => {
+    const f = fakeFetch(() => ({ status: 401 }))
+    const err = await createService(deps(f)).preview({ ref: 'abcdEFGH', token: 'lip_leak' }).then((o) => JSON.stringify(o), (e) => e.message)
+    expect(err).not.toContain('lip_leak')
+  })
+
+  it('account: no token', async () => {
+    const f = fakeFetch(() => ({ status: 500 }))
+    expect(await createService(deps(f)).account({})).toEqual({ hasToken: false })
+    expect(f.calls).toHaveLength(0)
+  })
+
+  it('account: user name and study:read scope, token only to lichess.org and not returned', async () => {
+    const f = fakeFetch((url, _n, init) => ACCOUNT(url, init) ?? { status: 404 })
+    const out = await createService(deps(f, { getToken: () => 'lip_saved' })).account({})
+    expect(out).toEqual({ hasToken: true, user: 'Mandy', studyRead: true })
+    expect(f.calls.every((c) => c.url.startsWith('https://lichess.org/'))).toBe(true)
+    expect(f.calls.find((c) => c.url.endsWith('/token/test')).body).toBe('lip_saved')
+    expect(JSON.stringify(out)).not.toContain('lip_saved')
+  })
+
+  it('account: studyRead false when the scope is missing, and a bad token is reported', async () => {
+    const mk = (scopes, status = 200) => ({ impl: async (url, init) => {
+      const u = String(url)
+      const body = u.endsWith('/api/account') ? { username: 'Mandy' } : { [init?.body]: scopes == null ? null : { scopes } }
+      return { status, text: async () => JSON.stringify(body), headers: { get: () => null } }
+    } })
+    expect((await createService(deps(mk('preference:read'), { getToken: () => 'lip_a' })).account({})).studyRead).toBe(false)
+    const bad = await createService(deps({ impl: async () => ({ status: 401, text: async () => '', headers: { get: () => null } }) }, { getToken: () => 'lip_a' })).account({})
+    expect(bad).toMatchObject({ hasToken: true, error: expect.any(String) })
+    expect(JSON.stringify(bad)).not.toContain('lip_a')
+  })
+
+  it('more from the authors of my studies: lists their public studies without any token and marks the ones in the db', async () => {
+    const dbPath = makeDb(join(dir, 'c.sqlite'))
+    const list = ['exisTing', 'other001', 'other002', 'other003'].map((id, i) => JSON.stringify({ id, name: `S ${i}`, description: i === 1 ? 'About rooks' : undefined, updatedAt: 1710000000000 })).join('\n')
+    const f = fakeFetch((url) => (url.includes('/api/study/by/inventedcoach') ? list : STUDY(/study\/(\w{8})\.pgn/.exec(url)[1])))
+    const svc = createService(deps(f, { settings: () => ({ dbPath }) }))
+    expect(svc.authorHandles()).toEqual(['inventedcoach'])
+    const out = await svc.preview({ authors: true, limit: 3 })
+    expect(out.studies.map((s) => s.id)).toEqual(['exisTing', 'other001', 'other002'])
+    expect(out.studies.map((s) => s.inDb)).toEqual([true, false, false])
+    expect(out.studies[1]).toMatchObject({ owner: 'inventedcoach', description: 'About rooks' })
+    expect(out.page).toEqual({ total: 4, offset: 0, limit: 3 })
+    expect(out.usedToken).toBe(false)
+    expect(f.calls.every((c) => c.headers.Authorization === undefined)).toBe(true)
+    const next = await svc.preview({ authors: true, limit: 3, offset: 3 })
+    expect(next.studies.map((s) => s.id)).toEqual(['other003'])
+  })
+
+  it('uses the saved token silently for those requests', async () => {
+    const dbPath = makeDb(join(dir, 'c.sqlite'))
+    const f = fakeFetch((url) => (url.includes('/api/study/by/') ? JSON.stringify({ id: 'other001', name: 'S' }) : STUDY('other001')))
+    const out = await createService(deps(f, { settings: () => ({ dbPath }), getToken: () => 'lip_saved' })).preview({ authors: true })
+    expect(f.calls[0].headers.Authorization).toBe('Bearer lip_saved')
+    expect(out.usedToken).toBe(true)
+    expect(JSON.stringify(out)).not.toContain('lip_saved')
+  })
+
+  it('authors: only real handles are used, and none is a 400', async () => {
+    const dbPath = makeDb(join(dir, 'c.sqlite'), false)
+    const db = new DatabaseSync(dbPath)
+    db.exec("INSERT INTO comment_sources VALUES (1,'lichess','L','x','en',2)")
+    db.prepare('INSERT INTO comment_games VALUES (?,?,?,?,?,?)').run('1-1', 1, null, null, 'c', '[Event "x"]\n[Annotator "Some Person With Spaces"]\n\n1. e4 *')
+    db.prepare('INSERT INTO comment_games VALUES (?,?,?,?,?,?)').run('1-2', 1, null, null, 'c', '[Event "x"]\n[Annotator "https://lichess.org/@/Real_User"]\n\n1. e4 *')
+    db.close()
+    const svc = createService(deps(fakeFetch(() => ''), { settings: () => ({ dbPath }) }))
+    expect(svc.authorHandles()).toEqual(['real_user'])
+    const empty = makeDb(join(dir, 'e.sqlite'), false)
+    await expect(createService(deps(fakeFetch(() => ''), { settings: () => ({ dbPath: empty }) })).preview({ authors: true })).rejects.toMatchObject({ status: 400 })
+  })
+})
+
 describe('routes', () => {
   it('registers the four routes and serves the studies list', async () => {
     const dbPath = makeDb(join(dir, 'c.sqlite'))
     const app = createApp()
     lichessModule.routes(app, { home: dir, settings: () => ({ dbPath }), app })
-    expect(app.routes.map(([m, p]) => `${m} ${p}`).sort()).toEqual(['GET /api/lichess/job', 'GET /api/lichess/studies', 'POST /api/lichess/add', 'POST /api/lichess/preview'])
+    expect(app.routes.map(([m, p]) => `${m} ${p}`).sort()).toEqual(['GET /api/lichess/account', 'GET /api/lichess/job', 'GET /api/lichess/studies', 'POST /api/lichess/add', 'POST /api/lichess/preview'])
     const handler = app.routes.find(([m, p]) => m === 'GET' && p === '/api/lichess/studies')[2]
     expect((await handler({})).studies).toHaveLength(1)
   })
