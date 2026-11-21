@@ -150,6 +150,12 @@ export async function restoreComment(id: number): Promise<void> {
   clearCommentListCache()
 }
 
+/** Saves the universal text (lang = the comment's own) or a translation of a comment into the server's database (admin). */
+export async function setCommentTranslation(id: number, lang: string, text: string): Promise<void> {
+  await httpClient<{ saved: number }>(`/api/comments/${id}/translations/${lang}`, { method: 'PUT', body: JSON.stringify({ text }) })
+  clearCommentListCache()
+}
+
 /** @deprecated Comments are hidden, not deleted: use hideComment. */
 export const deleteComment = hideComment
 

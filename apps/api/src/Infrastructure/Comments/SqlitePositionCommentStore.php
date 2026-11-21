@@ -250,6 +250,32 @@ final class SqlitePositionCommentStore implements PositionCommentStore
         return $this->setHidden($id, false);
     }
 
+    public function setTranslation(int $id, string $lang, string $text): bool
+    {
+        $pdo = $this->pdo();
+        if ($pdo === null) {
+            return false;
+        }
+        try {
+            $pdo->exec('CREATE TABLE IF NOT EXISTS comment_translations (comment_id INTEGER NOT NULL, lang TEXT NOT NULL, text TEXT NOT NULL, PRIMARY KEY (comment_id, lang))');
+            $exists = $pdo->prepare('SELECT 1 FROM position_comments WHERE id = :id');
+            $exists->execute([':id' => $id]);
+            if (!$exists->fetchColumn()) {
+                return false;
+            }
+            $pdo->prepare('INSERT INTO comment_translations (comment_id, lang, text) VALUES (:id, :lang, :text) ON CONFLICT (comment_id, lang) DO UPDATE SET text = excluded.text')
+                ->execute([':id' => $id, ':lang' => $lang, ':text' => $text]);
+            $this->columns = [];
+            return true;
+        } catch (\PDOException $e) {
+            $m = strtolower($e->getMessage());
+            if (str_contains($m, 'readonly') || str_contains($m, 'read-only') || str_contains($m, 'unable to open')) {
+                throw new CommentsReadOnly('The comments database is read-only', 0, $e);
+            }
+            throw $e;
+        }
+    }
+
     /** Hides or restores one comment; its row and translations stay. The tombstone keeps "hidden" across rebuilds. */
     private function setHidden(int $id, bool $hide): bool
     {

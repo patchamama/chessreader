@@ -7,7 +7,10 @@ vi.mock('../../shared/llm', () => ({ useLlm: () => llm }))
 const save = vi.hoisted(() => vi.fn())
 vi.mock('../suggestions/suggestionsApi', () => ({ saveSuggestion: save }))
 const del = vi.hoisted(() => vi.fn())
-vi.mock('../comments/commentsApi', async (orig) => ({ ...(await orig<typeof import('../comments/commentsApi')>()), hideComment: del }))
+const setTranslation = vi.hoisted(() => vi.fn())
+vi.mock('../comments/commentsApi', async (orig) => ({ ...(await orig<typeof import('../comments/commentsApi')>()), hideComment: del, setCommentTranslation: setTranslation }))
+const session = vi.hoisted(() => ({ on: false }))
+vi.mock('../../shared/api/serverSession', () => ({ hasServerSession: () => session.on }))
 
 import CommentDetailsModal from './CommentDetailsModal'
 
@@ -29,6 +32,41 @@ beforeEach(() => {
   save.mockReset()
   save.mockResolvedValue({ saved: true, where: 'server', path: 'p' })
   onClose.mockReset()
+  setTranslation.mockReset()
+  setTranslation.mockResolvedValue(undefined)
+  session.on = false
+})
+
+describe('Saving into the database (server)', () => {
+  it('writes each changed text into the comment, so opening the details again shows it', async () => {
+    session.on = true
+    const onSaved = vi.fn()
+    render(<CommentDetailsModal comment={c} onClose={onClose} onSaved={onSaved} />)
+    fireEvent.change(within(dialog()).getByRole('textbox', { name: 'Universal text' }), { target: { value: 'White keeps c4.' } })
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(setTranslation).toHaveBeenCalledWith(7, 'en', 'White keeps c4.'))
+    expect(setTranslation).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith({ en: 'White keeps c4.' }))
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('does not close and tells why when the database cannot be written', async () => {
+    session.on = true
+    setTranslation.mockRejectedValue(new Error('read-only'))
+    open()
+    fireEvent.change(within(dialog()).getByRole('textbox', { name: 'German' }), { target: { value: 'Weiß behält c4.' } })
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Save' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('read-only')
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('without a server it only stores the suggestion', async () => {
+    open()
+    fireEvent.change(within(dialog()).getByRole('textbox', { name: 'German' }), { target: { value: 'Weiß behält c4.' } })
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    expect(setTranslation).not.toHaveBeenCalled()
+  })
 })
 
 describe('Comment details modal (S3)', () => {

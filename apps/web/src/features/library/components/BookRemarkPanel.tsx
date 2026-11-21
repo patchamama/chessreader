@@ -18,7 +18,10 @@ const normalizedOf = (c: HumanComment, lang: string) => c.translations?.[lang] |
  * the AI that is set up).
  */
 export default function BookRemarkPanel({ fen, lang, onUse, onClose }: { fen: string; lang: string; onUse: (c: ChosenRemark) => void; onClose: () => void }) {
-  const all = usePositionComments(fen)
+  const read = usePositionComments(fen)
+  // Texts saved into the database from the editor, shown without reading the position again.
+  const [saved, setSaved] = useState<Record<number, Record<string, string>>>({})
+  const all = read.map((c) => (c.id !== undefined && saved[c.id] ? { ...c, translations: { ...c.translations, ...saved[c.id] } } : c))
   const [editing, setEditing] = useState<HumanComment | null>(null)
   const use = (c: HumanComment, text: string) => onUse({ text, source: commentSource(c), ...(c.gameId ? { gameId: c.gameId } : {}), ...(c.ply > 0 ? { ply: c.ply } : {}) })
   const button = 'rounded border border-slate-300 bg-white px-2 py-0.5 text-xs hover:bg-slate-50'
@@ -50,7 +53,7 @@ export default function BookRemarkPanel({ fen, lang, onUse, onClose }: { fen: st
           )
         })}
       </ul>
-      {editing && <CommentDetailsModal comment={toEntry(editing, fen)} onClose={() => setEditing(null)} />}
+      {editing && <CommentDetailsModal comment={toEntry(editing, fen)} onClose={() => setEditing(null)} onSaved={(t) => setSaved((s) => ({ ...s, [editing.id ?? 0]: { ...s[editing.id ?? 0], ...t } }))} />}
     </div>
   )
 }

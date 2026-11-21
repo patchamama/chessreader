@@ -6,7 +6,8 @@ import { proposeComment, saveCommentProposal, type CommentAction } from '../comm
 import DeleteControl from './DeleteControl'
 import OpenGameButton from './OpenGameButton'
 import LinkedText from '../../shared/ui/LinkedText'
-import { hideComment, moveLabel, type CommentEntry } from '../comments/commentsApi'
+import { hasServerSession } from '../../shared/api/serverSession'
+import { hideComment, moveLabel, setCommentTranslation, type CommentEntry } from '../comments/commentsApi'
 
 /** One editable text of the comment: the universal text (own language) or a translation. */
 interface Field { key: string; lang: string; label: string; action: CommentAction }
@@ -20,7 +21,7 @@ const fieldsOf = (c: CommentEntry): Field[] => [
  * Comment details (S3): every field of a comment with its diagram; the missing
  * texts are typed or generated with the AI, and Save stores each changed one as a suggestion.
  */
-export default function CommentDetailsModal({ comment: c, onClose, onHidden }: { comment: CommentEntry; onClose: () => void; onHidden?: () => void }) {
+export default function CommentDetailsModal({ comment: c, onClose, onHidden, onSaved }: { comment: CommentEntry; onClose: () => void; onHidden?: () => void; /** The texts written into the database (by language), so the lists can show them. */ onSaved?: (saved: Record<string, string>) => void }) {
   const llm = useLlm()
   const fields = fieldsOf(c)
   const initial = (f: Field) => c.translations?.[f.key] ?? ''
@@ -50,12 +51,19 @@ export default function CommentDetailsModal({ comment: c, onClose, onHidden }: {
     setBusy('save')
     setError(null)
     try {
+      const written: Record<string, string> = {}
       for (const f of fields) {
         const text = values[f.key].trim()
         if (!text || text === initial(f).trim()) continue
         const model = generated[f.key]
+        // The suggestion is the record; with a server the text is also written into its database, where the lists and the reader read it.
         await saveCommentProposal(c, f.action, { text, lang: f.lang, model: model ?? 'manual', problems: [] }, model ? 'ai' : 'user')
+        if (hasServerSession()) {
+          await setCommentTranslation(c.id, f.lang, text)
+          written[f.lang] = text
+        }
       }
+      if (Object.keys(written).length) onSaved?.(written)
       onClose()
     } catch (e) {
       setError((e as Error).message)

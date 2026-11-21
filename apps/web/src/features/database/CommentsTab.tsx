@@ -318,7 +318,8 @@ export default function CommentsTab({ books, initialBook }: { books: { id: strin
         })}
       </ul>
         </>)}
-      {details && <CommentDetailsModal comment={details} onClose={() => setDetails(null)} onHidden={() => dropDeleted(details.id)} />}
+      {details && <CommentDetailsModal comment={details} onClose={() => setDetails(null)} onHidden={() => dropDeleted(details.id)}
+        onSaved={(t) => setPage((p) => p && { ...p, comments: p.comments.map((x) => (x.id === details.id ? { ...x, translations: { ...x.translations, ...t } } : x)) })} />}
     </div>
   )
 }

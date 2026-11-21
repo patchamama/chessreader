@@ -93,6 +93,22 @@ final class CommentsController
         return $this->toggle($response, $id, false);
     }
 
+    /** PUT /api/comments/{id}/translations/{lang} {text}: saves the universal text or a translation of a comment. */
+    public function setTranslation(ServerRequestInterface $request, ResponseInterface $response, int $id, string $lang): ResponseInterface
+    {
+        $body = $request->getParsedBody();
+        $text = is_array($body) && is_string($body['text'] ?? null) ? trim($body['text']) : '';
+        if (!preg_match('/^[a-z]{2,3}$/', $lang) || $text === '' || mb_strlen($text) > 20000) {
+            return $this->json($response, ['error' => 'lang is a language code and text is 1 to 20000 characters'], 400);
+        }
+        try {
+            $found = $this->store->setTranslation($id, $lang, $text);
+        } catch (CommentsReadOnly) {
+            return $this->json($response, ['error' => 'The comments database is read-only on this server; change the comment where it is built'], 409);
+        }
+        return $found ? $this->json($response, ['saved' => $id, 'lang' => $lang]) : $this->json($response, ['error' => 'not found'], 404);
+    }
+
     private function toggle(ResponseInterface $response, int $id, bool $hide): ResponseInterface
     {
         try {

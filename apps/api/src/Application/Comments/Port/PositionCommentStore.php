@@ -43,6 +43,14 @@ interface PositionCommentStore
     public function restore(int $id): bool;
 
     /**
+     * Sets the text of a comment in a language (the universal text of its own language, or a
+     * translation), replacing the one there. False when the id is unknown.
+     *
+     * @throws CommentsReadOnly when the database cannot be written
+     */
+    public function setTranslation(int $id, string $lang, string $text): bool;
+
+    /**
      * The positions with most visible comments (a position = hash + key, the FEN without move
      * counters), count desc then hash; filters as in list() (`hidden` is ignored). Each: the full
      * FEN, the count, the per-source counts (max 6, count desc) and up to 3 sample comments

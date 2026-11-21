@@ -26,7 +26,10 @@ export default function PositionComments({ fen }: { fen: string }) {
   const lang = useSettingsStore((s) => s.language)
   const figurines = useSettingsStore((s) => figurinesOn(s))
   const t = T[lang] ?? T.en
-  const all = usePositionComments(fen)
+  // Texts saved into the database from the editor, shown without reading the position again.
+  const [saved, setSaved] = useState<Record<number, Record<string, string>>>({})
+  const read = usePositionComments(fen)
+  const all = read.map((c) => (c.id !== undefined && saved[c.id] ? { ...c, translations: { ...c.translations, ...saved[c.id] } } : c))
   const [editing, setEditing] = useState<HumanComment | null>(null)
 
   const inLang = all.filter((c) => textIn(c, lang))
@@ -41,7 +44,7 @@ export default function PositionComments({ fen }: { fen: string }) {
           <button type="button" className="shrink-0 rounded border border-sky-300 bg-white px-2 py-0.5 text-xs" onClick={() => setEditing(c)}>{t.edit}</button>
         </div>
       ))}
-      {editing && <CommentDetailsModal comment={toEntry(editing, fen)} onClose={() => setEditing(null)} />}
+      {editing && <CommentDetailsModal comment={toEntry(editing, fen)} onClose={() => setEditing(null)} onSaved={(t) => setSaved((s) => ({ ...s, [editing.id ?? 0]: { ...s[editing.id ?? 0], ...t } }))} />}
     </section>
   )
 }

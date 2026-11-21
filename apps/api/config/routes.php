@@ -100,6 +100,7 @@ return function (App $app): void {
 
     // Hiding (and restoring) a comment changes the shared database: admin only.
     $app->delete('/api/comments/{id:[0-9]+}', [CommentsController::class, 'delete'])->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
+    $app->put('/api/comments/{id:[0-9]+}/translations/{lang:[a-z]{2,3}}', [CommentsController::class, 'setTranslation'])->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
     $app->post('/api/comments/{id:[0-9]+}/restore', [CommentsController::class, 'restore'])->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
 
     // Diagram routes (require JWT + Approved)

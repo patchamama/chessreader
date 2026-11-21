@@ -145,6 +145,28 @@ final class SqlitePositionCommentStoreTest extends TestCase
         self::assertSame([['position_hash' => 'fedcba9876543210', 'text_hash' => hash('sha256', 'Pinning the knight is 100% thematic.')]], $tomb);
     }
 
+    public function test_set_translation_writes_and_replaces_the_text_of_a_language(): void
+    {
+        $pdo = self::database();
+        $store = new SqlitePositionCommentStore('', $pdo);
+
+        self::assertTrue($store->setTranslation(2, 'es', 'Clavar el caballo.'));
+        self::assertTrue($store->setTranslation(2, 'es', 'Clavar el caballo es temático.'));
+        self::assertTrue($store->setTranslation(2, 'en', 'Pinning.'));
+
+        self::assertSame(2, (int) $pdo->query('SELECT COUNT(*) FROM comment_translations WHERE comment_id = 2')->fetchColumn());
+        $row = array_values(array_filter($store->list([], 0, 50)['comments'], fn ($c) => $c['id'] === 2))[0];
+        self::assertEquals(['en' => 'Pinning.', 'es' => 'Clavar el caballo es temático.'], $row['translations']);
+    }
+
+    public function test_set_translation_of_an_unknown_comment_writes_nothing(): void
+    {
+        $pdo = self::database();
+        $store = new SqlitePositionCommentStore('', $pdo);
+        self::assertFalse($store->setTranslation(99, 'es', 'x'));
+        self::assertSame(0, (int) $pdo->query('SELECT COUNT(*) FROM comment_translations')->fetchColumn());
+    }
+
     public function test_sources_count_only_visible_comments(): void
     {
         $store = new SqlitePositionCommentStore('', self::database());

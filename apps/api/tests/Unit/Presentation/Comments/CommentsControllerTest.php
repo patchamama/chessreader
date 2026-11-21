@@ -96,6 +96,31 @@ final class CommentsControllerTest extends TestCase
         self::assertSame(404, $this->mutate('restore', 'POST', 99)->getStatusCode());
     }
 
+    private function translate(int $id, string $lang, mixed $body): ResponseInterface
+    {
+        $request = (new ServerRequestFactory())->createServerRequest('PUT', "/api/comments/{$id}/translations/{$lang}")->withParsedBody($body);
+        return $this->controller->setTranslation($request, (new ResponseFactory())->createResponse(), $id, $lang);
+    }
+
+    public function test_set_translation_saves_the_text_and_shows_it_in_the_list(): void
+    {
+        $res = $this->translate(2, 'es', ['text' => '  Clavar el caballo.  ']);
+        self::assertSame(200, $res->getStatusCode());
+        self::assertSame(['saved' => 2, 'lang' => 'es'], json_decode((string) $res->getBody(), true));
+        [, $body] = $this->call('list', '/api/comments');
+        $row = array_values(array_filter($body['comments'], fn ($c) => $c['id'] === 2))[0];
+        self::assertSame('Clavar el caballo.', $row['translations']['es']);
+    }
+
+    public function test_set_translation_rejects_a_bad_language_or_text_and_unknown_comments(): void
+    {
+        self::assertSame(400, $this->translate(2, 'e', ['text' => 'x'])->getStatusCode());
+        self::assertSame(400, $this->translate(2, 'es', ['text' => '   '])->getStatusCode());
+        self::assertSame(400, $this->translate(2, 'es', ['text' => str_repeat('x', 20001)])->getStatusCode());
+        self::assertSame(400, $this->translate(2, 'es', null)->getStatusCode());
+        self::assertSame(404, $this->translate(99, 'es', ['text' => 'x'])->getStatusCode());
+    }
+
     public function test_top_returns_the_ranking_and_caps_the_limit(): void
     {
         [$status, $body] = $this->call('top', '/api/comments/top?limit=500&kind=lichess');
