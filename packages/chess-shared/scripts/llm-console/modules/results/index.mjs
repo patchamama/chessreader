@@ -90,6 +90,13 @@ function writeRedo(file, entries) {
   renameSync(tmp, file)
 }
 
+/** The square a SAN move lands on ("Nxf3+" -> "f3"); null for castling or when it cannot be read. */
+export function destinationSquare(san) {
+  const m = /([a-h][1-8])(?:=?[QRBNqrbn])?[+#]?[!?]*$/.exec(String(san ?? ''))
+  return m ? m[1] : null
+}
+const fenOf = (position) => (position ? `${position} 0 1` : null)
+
 const moveLabel = (c) => `${c.move_number ?? Math.ceil(c.ply / 2)}${c.ply % 2 ? '.' : '...'}${c.san}`
 
 const COMMENT_SQL = `SELECT c.id AS id, c.text AS text, c.lang AS own, c.position AS position, c.ply AS ply, c.san AS san, s.title AS source, s.kind AS kind
@@ -130,7 +137,9 @@ export default {
       const offset = Math.max(0, Number.parseInt(q.offset ?? '', 10) || 0)
       const idx = await indexFor(s.reviewPath).read()
       const needle = (q.q ?? '').trim().toLowerCase()
-      let list = idx.entries.filter((e) => (!q.action || e.action === q.action) && (!q.status || e.status === q.status) && (!q.lang || e.lang === q.lang) && (!needle || e.hay.includes(needle)))
+      // `before` is a cursor: only lines older than it, so pages stay stable while the job appends new ones.
+      const before = Number.isInteger(Number(q.before)) && q.before !== undefined && q.before !== '' ? Math.min(Number(q.before), idx.entries.length) : idx.entries.length
+      let list = idx.entries.filter((e) => e.seq < before && (!q.action || e.action === q.action) && (!q.status || e.status === q.status) && (!q.lang || e.lang === q.lang) && (!needle || e.hay.includes(needle)))
       const db = openDb(s.dbPath, { readOnly: true })
       try {
         if (q.kind) {
@@ -148,12 +157,12 @@ export default {
             return {
               seq: e.seq, id: e.id, lang: e.lang, action: e.action, status: e.status, model: e.model,
               original: d.original ?? '', proposal: d.proposal ?? null, problems: d.problems ?? [],
-              source: row?.source ?? null, kind: row?.kind ?? null, ply: row?.ply ?? null, san: row?.san ?? null, own: row?.own ?? null,
+              source: row?.source ?? null, kind: row?.kind ?? null, ply: row?.ply ?? null, san: row?.san ?? null, fen: fenOf(row?.position), mark: destinationSquare(row?.san), own: row?.own ?? null,
               current: stored.get(`${e.id}:${e.lang}`) ?? null,
               redo: redo.get(keyOf(e)) ?? null,
             }
           })
-          return { configured: true, total: list.length, offset, limit, rows, counts: idx.counts }
+          return { configured: true, total: list.length, offset, limit, before, rows, counts: idx.counts }
         }
       } finally { db.close() }
     })
@@ -369,7 +378,7 @@ export default {
         const comment = db.get(`${COMMENT_SQL} WHERE c.id = ?`, id) ?? null
         const stored = Object.fromEntries(db.all('SELECT lang, text FROM comment_translations WHERE comment_id = ?', id).map((r) => [r.lang, r.text]))
         const redo = readRedo(redoFile()).filter((e) => e.id === id)
-        return { configured: true, comment, stored, attempts, redo }
+        return { configured: true, comment: comment ? { ...comment, fen: fenOf(comment.position), mark: destinationSquare(comment.san) } : null, stored, attempts, redo }
       }, { readOnly: true })
     })
   },

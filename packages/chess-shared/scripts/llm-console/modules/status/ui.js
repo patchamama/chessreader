@@ -11,7 +11,7 @@ Console.addStrings({
     'status.normalize': 'Normalize (universal text)', 'status.translate': 'Translate', 'status.books': 'Books', 'status.lichess': 'Lichess', 'status.onlyLang': 'only {lang}',
     'status.normSection': 'Normalization (universal text in the comment\'s own language)', 'status.normLine': '{ok} normalized · {dropped} dropped · {left} not normalized', 'status.transSection': 'Translation into each language',
     'status.startNorm': 'Queue normalization', 'status.startTrans': 'Queue translation', 'status.queued': 'Added to the queue', 'status.queueError': 'Could not queue: {msg}',
-    'status.latest': 'Latest results to review', 'status.tabNorm': 'Last normalization', 'status.tabTrans': 'Last translation', 'status.tabProblems': 'Rejected / dropped / failed', 'status.none': 'No results of this kind yet.',
+    'status.latest': 'Latest results to review', 'status.tabNorm': 'Last normalization', 'status.tabTrans': 'Last translation', 'status.tabProblems': 'Rejected / dropped / failed', 'status.none': 'No results of this kind yet.', 'status.showPosition': 'Show the position', 'status.after': 'after', 'status.initial': 'initial position',
     'status.original': 'Original', 'status.normalizedText': 'Normalized text', 'status.translation': 'Translation', 'status.bookText': 'Text of the book / study', 'status.newest': 'newest', 'status.noText': '(no text)', 'status.move': 'move {n}{dots} {san}',
     'st.accepted': 'accepted', 'st.rejected': 'rejected', 'st.dropped': 'dropped (not universal)', 'st.failed': 'failed', 'status.lang.es': 'Spanish', 'status.lang.en': 'English', 'status.lang.de': 'German', 'status.lang.fr': 'French',
   },
@@ -26,7 +26,7 @@ Console.addStrings({
     'status.normalize': 'Normalizar (texto universal)', 'status.translate': 'Traducir', 'status.books': 'Libros', 'status.lichess': 'Lichess', 'status.onlyLang': 'solo {lang}',
     'status.normSection': 'Normalización (texto universal en el idioma del comentario)', 'status.normLine': '{ok} normalizados · {dropped} descartados · {left} sin normalizar', 'status.transSection': 'Traducción a cada idioma',
     'status.startNorm': 'Encolar normalización', 'status.startTrans': 'Encolar traducción', 'status.queued': 'Añadido a la cola', 'status.queueError': 'No se pudo encolar: {msg}',
-    'status.latest': 'Últimos resultados para revisar', 'status.tabNorm': 'Última normalización', 'status.tabTrans': 'Última traducción', 'status.tabProblems': 'Rechazados / descartados / fallos', 'status.none': 'Todavía no hay resultados de este tipo.',
+    'status.latest': 'Últimos resultados para revisar', 'status.tabNorm': 'Última normalización', 'status.tabTrans': 'Última traducción', 'status.tabProblems': 'Rechazados / descartados / fallos', 'status.none': 'Todavía no hay resultados de este tipo.', 'status.showPosition': 'Ver la posición', 'status.after': 'tras', 'status.initial': 'posición inicial',
     'status.original': 'Original', 'status.normalizedText': 'Texto normalizado', 'status.translation': 'Traducción', 'status.bookText': 'Texto del libro / estudio', 'status.newest': 'más reciente', 'status.noText': '(sin texto)', 'status.move': 'jugada {n}{dots} {san}',
     'st.accepted': 'aceptado', 'st.rejected': 'rechazado', 'st.dropped': 'descartado (no universal)', 'st.failed': 'falló', 'status.lang.es': 'Español', 'status.lang.en': 'Inglés', 'status.lang.de': 'Alemán', 'status.lang.fr': 'Francés',
   },
@@ -36,6 +36,8 @@ Console.registerTab({
   id: 'status', order: 10, title: { en: 'Status', es: 'Estado' },
   render(el, { t, api, navigate, esc, n }) {
     let data = null, tab = null, timer = null, notice = ''
+    const openFen = new Set()
+    const hl = (text) => ConsoleChess.highlightMoves(text)
     const lang = (l) => t(`status.lang.${l}`) === `status.lang.${l}` ? l : t(`status.lang.${l}`)
     const kind = (k) => (k === 'book' ? t('status.books') : k === 'lichess' ? t('status.lichess') : k)
     const pct = (a, b) => (b > 0 ? Math.min(100, (a / b) * 100) : 100)
@@ -112,9 +114,11 @@ Console.registerTab({
         ${list.length ? list.map((e, i) => `<article class="item ${i === 0 ? 'first' : ''}"><div class="meta"><span class="tag">#${e.id}</span><span>${esc(e.source ?? '')}${e.kind === 'lichess' ? ' · Lichess' : ''}</span>
           ${e.san ? `<span>${t('status.move', { n: Math.ceil((e.ply ?? 0) / 2), dots: (e.ply ?? 1) % 2 ? '.' : '...', san: esc(e.san) })}</span>` : ''}
           <span>${e.action === 'translate' ? `${esc(lang(e.own ?? '?'))} → <b>${esc(lang(e.lang))}</b>` : esc(lang(e.lang))}</span><span>${esc(e.model ?? '')}</span><span>${t(`st.${e.status}`)}</span>${i === 0 ? `<span class="tag">${t('status.newest')}</span>` : ''}</div>
-          <div class="cmp"><div><h3>${lblA}</h3><p>${esc(e.original)}</p></div><div><h3>${lblB}</h3><p>${e.proposal ? esc(e.proposal) : `<span class="empty">${t('status.noText')}</span>`}</p></div></div>
+          ${e.fen ? `<button class="fen-btn" data-fen="${e.id}:${e.action}" title="${t('status.showPosition')}" aria-label="${t('status.showPosition')}">♟</button>${openFen.has(`${e.id}:${e.action}`) ? `<div class="fen-thumb">${ConsoleChess.boardSvg(e.fen, { size: 150 })}<div class="cap">${esc(ConsoleChess.afterLabel(e.ply, e.san, { after: t('status.after'), initial: t('status.initial') }))}</div></div>` : ''}` : ''}
+          <div class="cmp"><div><h3>${lblA}</h3><p>${hl(e.original)}</p></div><div><h3>${lblB}</h3><p>${e.proposal ? hl(e.proposal) : `<span class="empty">${t('status.noText')}</span>`}</p></div></div>
           ${e.problems?.length ? `<div class="problems">⚠ ${e.problems.map(esc).join(' · ')}</div>` : ''}</article>`).join('') : `<p class="empty">${t('status.none')}</p>`}</section>`
       el.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { tab = b.dataset.tab; draw() }))
+      el.querySelectorAll('[data-fen]').forEach((b) => b.addEventListener('click', () => { const k = b.dataset.fen; if (openFen.has(k)) openFen.delete(k); else openFen.add(k); draw() }))
       el.querySelectorAll('[data-q]').forEach((b) => b.addEventListener('click', () => { const [ph, k, L] = b.dataset.q.split('|'); void queue(ph, k, L ? { langs: [L] } : {}) }))
     }
 

@@ -294,3 +294,19 @@ describe('translations are made from the normalization', () => {
     await expect(v2({ universal: false, phase: 'normalize' }, fetchImpl)).resolves.toBeTruthy()
   })
 })
+
+describe('quotations keep their author in both prompts, and the translation translates the quote', () => {
+  it('the normalization keeps the quotation and its author together', async () => {
+    const { universalPromptV2 } = await import('./translate-comments.mjs')
+    const { system } = universalPromptV2({ fen: 'x', move: 'e4', text: 't', lang: 'en' })
+    expect(system).toMatch(/quotation together with (its author|who said it)/i)
+  })
+  it('the translation keeps the author in the quotation, translates the quoted words and leaves the name as it is', async () => {
+    const { translatePromptV2 } = await import('./translate-comments.mjs')
+    const { system } = translatePromptV2({ text: 'Tarrasch said: "Chess, like love, is infectious."', lang: 'en' }, 'es')
+    expect(system).toMatch(/quotation/i)
+    expect(system).toMatch(/author/i)
+    expect(system).toMatch(/translate the quoted (words|text)/i)
+    expect(system).toMatch(/name\b.*\bas (it is|written)/i)
+  })
+})

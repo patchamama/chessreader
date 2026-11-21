@@ -80,7 +80,7 @@ export function countsOf(db, langs) {
 function enrich(db, entries) {
   const ids = [...new Set(entries.map((e) => e.id))].filter(Number.isInteger)
   if (!ids.length) return entries
-  const rows = db.all(`SELECT c.id AS id, c.ply AS ply, c.san AS san, c.lang AS own, s.title AS source, s.kind AS kind FROM position_comments c JOIN comment_games g ON g.id=c.game_id JOIN comment_sources s ON s.id=g.source_id WHERE c.id IN (${ids.join(',')})`)
+  const rows = db.all(`SELECT c.id AS id, c.ply AS ply, c.san AS san, c.position || ' 0 1' AS fen, c.lang AS own, s.title AS source, s.kind AS kind FROM position_comments c JOIN comment_games g ON g.id=c.game_id JOIN comment_sources s ON s.id=g.source_id WHERE c.id IN (${ids.join(',')})`)
   const by = new Map(rows.map((r) => [r.id, r]))
   return entries.map((e) => ({ ...e, ...(by.get(e.id) ?? {}) }))
 }

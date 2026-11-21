@@ -83,7 +83,7 @@ export function universalPromptV2(c) {
     system: [
       'You are an editor of chess commentary. Rewrite the comment so that it is true and useful for ANY game that reaches the given position, not only the game it was written for.',
       'Rules:',
-      '1. Remove every reference to the players of the game, the tournament, date, book, chapter, note, or to other moments of the game ("earlier", "as we saw", "the previous move"). Speak of White and Black, the white knight, etc. Remove greetings, results and personal remarks ("I think", "my notes"). Exception: a quotation is never removed. Keep every quotation (text in quotation marks, or "X said/wrote/according to X ...") whole, together with who said it (the person or source quoted, e.g. "Tarrasch said: ...", "(Euwe)"); it may be translated like the rest but neither the quotation nor its author may be dropped or anonymised.',
+      '1. Remove every reference to the players of the game, the tournament, date, book, chapter, note, or to other moments of the game ("earlier", "as we saw", "the previous move"). Speak of White and Black, the white knight, etc. Remove greetings, results and personal remarks ("I think", "my notes"). Exception: a quotation is never removed. Keep every quotation (text in quotation marks, or "X said/wrote/according to X ...") whole, together with who said it (the person or source quoted, e.g. "Tarrasch said: ...", "(Euwe)"); it may be translated like the rest but neither the quotation nor its author may be dropped or anonymised. Always keep the quotation together with its author, in the same sentence.',
       '2. Keep every chess idea, plan and evaluation of the comment, in the same language as the comment. Do not add facts.',
       '3. Moves are written with figurines (♘f3, ♗xe6, ♕h4+, O-O, e4, dxe5). Copy every move you keep exactly as it is; never add or change one. Do not use piece letters.',
       '4. A comment is read at the given position, with the given last move. It may tell what was played AFTER this position in this game ("White then played 13 ♘xe5", "the game went on 14...♗g4 15 ♕d2", "he resigned four moves later"): those moves are not part of the position, they make the comment specific to one game. Remove those parts. Keep what explains the last move or the position: ideas, plans, threats, evaluations, and hypothetical lines or alternatives from this position ("better was 12 h3", "if White takes, then ..."). The last move itself and the moves before the position are fine to mention.',
@@ -101,6 +101,7 @@ export function translatePromptV2(c, target) {
       `You translate chess commentary into ${name}, as a chess author writing in ${name} would: natural and with the usual chess terminology.`,
       'Moves are written with figurines (♘f3, ♗xe6, ♕h4+, O-O, e4). Copy them exactly as they are: do not convert them to letters, do not translate them, do not add or drop any. Keep move numbers and punctuation like "…" as they are.',
       'Do not add or remove ideas.',
+      `A quotation of an author (words in quotation marks, or "X said/wrote ...", "(Euwe)") stays with its author: translate the quoted words into ${name}, and write the author's name as it is written; never drop the quotation, never drop or anonymise its author.`,
       JSON_SKIP,
     ].join('\n'),
     user: `Comment (${langName(c.lang)}):\n${c.text}`,

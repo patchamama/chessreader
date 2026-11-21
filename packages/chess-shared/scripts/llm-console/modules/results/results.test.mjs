@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../../lib/http.mjs'
 import { setSecret } from '../../lib/config.mjs'
-import results, { createResultsIndex } from './index.mjs'
+import results, { createResultsIndex, destinationSquare } from './index.mjs'
 
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite')
 const MIGRATION = readFileSync(new URL('../../../../../../apps/api/migrations/005_position_comments.sql', import.meta.url), 'utf8')
@@ -294,5 +294,34 @@ describe('review of one translation: edit, revoke, local redo', () => {
   })
   it('rejects an unknown via', async () => {
     expect((await call(makeApp({ complete: answer('x') }), 'POST', '/api/results/redo', { items: [{ id: 1, action: 'translate', lang: 'es' }], via: 'carrier-pigeon' })).status).toBe(400)
+  })
+})
+
+describe('lazy loading contract and position data', () => {
+  it('rows and the comment carry fen, ply, san and the destination square', async () => {
+    seed()
+    const app = makeApp()
+    const row = (await call(app, 'GET', '/api/results?action=universal&status=accepted&q=orig 1')).json.rows[0]
+    expect(row).toMatchObject({ fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1', ply: 1, san: 'e4', mark: 'e4' })
+    expect((await call(app, 'GET', '/api/results/1')).json.comment.fen).toBe(row.fen)
+  })
+  it('reads the destination square of a SAN', () => {
+    expect([destinationSquare('e4'), destinationSquare('Nxf3+'), destinationSquare('exd5'), destinationSquare('e8=Q#'), destinationSquare('O-O'), destinationSquare(''), destinationSquare(null)])
+      .toEqual(['e4', 'f3', 'd5', 'e8', null, null, null])
+  })
+  it('pages stay stable while attempts are appended: a cursor excludes the newer lines', async () => {
+    seed()
+    const app = makeApp()
+    const p1 = (await call(app, 'GET', '/api/results?limit=2')).json
+    expect(p1.rows.map((r) => r.seq)).toEqual([5, 4])
+    appendFileSync(reviewPath, line(2, 'translate', 'accepted') + line(1, 'universal', 'failed'))
+    const p2 = (await call(app, 'GET', `/api/results?limit=2&offset=2&before=${p1.before}`)).json
+    expect(p2.rows.map((r) => r.seq)).toEqual([3, 2])
+    expect(p2.total).toBe(p1.total)
+    const fresh = (await call(app, 'GET', '/api/results?limit=2')).json
+    expect(fresh.rows.map((r) => r.seq)).toEqual([7, 6])
+    expect(fresh.total).toBe(p1.total + 2)
+    const all = [...p1.rows, ...p2.rows, ...(await call(app, 'GET', `/api/results?limit=10&offset=4&before=${p1.before}`)).json.rows].map((r) => r.seq)
+    expect(new Set(all).size).toBe(all.length)
   })
 })
