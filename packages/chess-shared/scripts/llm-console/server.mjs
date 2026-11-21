@@ -6,14 +6,14 @@ import { execFile } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createApp } from './lib/http.mjs'
-import { loadSettings, saveSettings, secretStatus, setSecret } from './lib/config.mjs'
+import { configHome, loadSettings, saveSettings, secretStatus, setSecret } from './lib/config.mjs'
 import { gpuInfo } from './lib/gpu.mjs'
 import * as ollama from './lib/ollama.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 
 /** The app with the core routes and every module of modules/ (each `modules/<name>/index.mjs` default-exports { routes(app, ctx) }). */
-export async function buildApp({ home, modulesDir = join(HERE, 'modules'), publicDir = join(HERE, 'public') } = {}) {
+export async function buildApp({ home = configHome(), modulesDir = join(HERE, 'modules'), publicDir = join(HERE, 'public') } = {}) {
   const app = createApp({ publicDir })
   const ctx = { home, settings: () => loadSettings(home), app }
 

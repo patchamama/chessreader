@@ -15,6 +15,8 @@ export const DEFAULTS = {
   models: { ...RECOMMENDED },
   langs: ['es'],
   concurrency: 3,
+  /** What the normalization may do with the moves of a comment: 'strict' rejects a rewrite that drops any move; 'moderate' lets it drop moves of later play (a "then/later" cue or a later move number). */
+  removal: 'moderate',
   /** Pause the queue every `everyMin` minutes for `forMin` minutes (to let the GPU cool down); 0 = never. */
   pause: { everyMin: 0, forMin: 5 },
   /** An external model that can stand in for the local ones: { provider: 'openai'|'anthropic'|'openai-compatible', model, baseUrl }. The key is a secret. */
@@ -55,6 +57,7 @@ const CHECKS = {
   concurrency: (v) => Number.isInteger(v) && v >= 1 && v <= 16,
   langs: (v) => Array.isArray(v) && v.length > 0 && v.every((l) => /^[a-z]{2}$/.test(l)),
   language: (v) => v === 'en' || v === 'es',
+  removal: (v) => v === 'strict' || v === 'moderate',
   ollamaUrl: (v) => typeof v === 'string' && /^https?:\/\//.test(v),
 }
 

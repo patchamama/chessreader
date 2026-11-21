@@ -78,3 +78,10 @@ a { color: var(--accent); }
 .mono { font-family: var(--mono); font-size: .82rem; }
 .muted { color: var(--muted); }
 .star { color: var(--warn); }
+.tbl { border-collapse: collapse; width: 100%; font-size: .88rem; }
+.tbl th, .tbl td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tbl th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+.linklike { border: 0; background: transparent; color: var(--accent); cursor: pointer; padding: 0; font: inherit; text-decoration: underline; }
+.warn { color: var(--warn); font-weight: 600; }
+.scroll { overflow-x: auto; }
+textarea { width: 100%; }

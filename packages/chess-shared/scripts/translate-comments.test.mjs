@@ -176,7 +176,7 @@ describe('v2: Ollama native, figurines, skipped comments, two models', () => {
   })
 
   it('a universal rewrite that is rejected is not translated: the original names its players', async () => {
-    const { calls, fetchImpl } = ollama(() => JSON.stringify({ text: 'Nothing like the original.' }))
+    const { calls, fetchImpl } = ollama(() => JSON.stringify({ text: 'Nothing like the original, but ♗h6 wins.' }))
     const summary = await v2({ sourceKind: 'lichess' }, fetchImpl)
     expect(calls.filter((c) => c.url.endsWith('/api/chat'))).toHaveLength(1)
     expect(summary).toMatchObject({ rejected: 1, written: 0 })
@@ -223,5 +223,74 @@ describe('the universal prompt keeps quotations and who said them', () => {
     expect(system).not.toMatch(/quoted author/i)
     expect(system).toMatch(/keep every quotation/i)
     expect(system).toMatch(/who said it/i)
+  })
+})
+
+describe('the universal prompt drops what the game played afterwards', () => {
+  it('tells to remove categorical references to later moves, or to skip a comment that is only that', async () => {
+    const { universalPromptV2 } = await import('./translate-comments.mjs')
+    const { system } = universalPromptV2({ fen: 'x', move: 'e4', text: 't', lang: 'en' })
+    expect(system).toMatch(/played AFTER this position/)
+    expect(system).toMatch(/remove those parts/i)
+    expect(system).toMatch(/nothing useful remains.*skip/is)
+    // The move just played and hypothetical lines stay allowed.
+    expect(system).toMatch(/hypothetical/i)
+  })
+})
+
+describe('validateRewrite: strict and moderate removal of moves', () => {
+  const original = 'The knight eyes c4. Then White played 13 ♘xe5 ♗xe5 14 ♕h5.'
+  const shorter = 'The knight eyes c4.'
+
+  it('strict (the default) rejects any move that is not in the proposal', async () => {
+    const { validateRewrite } = await import('./translate-comments.mjs')
+    expect(validateRewrite(original, shorter)[0]).toMatch(/moves missing/)
+    expect(validateRewrite(original, shorter, { removal: 'strict', move: '12...♘b6' })[0]).toMatch(/moves missing/)
+  })
+
+  it('moderate lets moves go when the comment speaks of later play: a "then/later" cue or a later move number', async () => {
+    const { validateRewrite } = await import('./translate-comments.mjs')
+    expect(validateRewrite(original, shorter, { removal: 'moderate', move: '12...♘b6' })).toEqual([])
+    // A move number after the commented move, with no word cue at all.
+    expect(validateRewrite('Strong knight. 13 ♘xe5 ♗xe5 14 ♕h5 wins.', 'Strong knight.', { removal: 'moderate', move: '12...♘b6' })).toEqual([])
+    // Spanish and German cues.
+    expect(validateRewrite('El caballo es fuerte. Después jugó ♘xe5.', 'El caballo es fuerte.', { removal: 'moderate', move: '12...♘b6' })).toEqual([])
+    expect(validateRewrite('Der Springer ist stark. Danach folgte ♘xe5.', 'Der Springer ist stark.', { removal: 'moderate', move: '12...♘b6' })).toEqual([])
+  })
+
+  it('moderate still rejects a move dropped without any allusion to later play, and one that is earlier or the same', async () => {
+    const { validateRewrite } = await import('./translate-comments.mjs')
+    expect(validateRewrite('The knight on ♘b6 eyes c4 and d5.', 'The knight eyes c4 and d5.', { removal: 'moderate', move: '12...♘b6' })[0]).toMatch(/moves missing/)
+    expect(validateRewrite('Strong. 10 ♘xe5 ♗xe5 was the idea.', 'Strong.', { removal: 'moderate', move: '12...♘b6' })[0]).toMatch(/moves missing/)
+  })
+
+  it('never lets a proposal add a move, in either mode', async () => {
+    const { validateRewrite } = await import('./translate-comments.mjs')
+    expect(validateRewrite(original, 'The knight eyes c4 and ♗g5.', { removal: 'moderate', move: '12...♘b6' })[0]).toMatch(/moves added/)
+  })
+
+  it('the batch rejects a universal text that dropped the commented move itself, whatever the mode', async () => {
+    for (const removal of ['moderate', 'strict']) {
+      const { fetchImpl } = ollama(() => JSON.stringify({ text: 'The knight eyes c4 and d5.' }))
+      await v2({ sourceKind: 'lichess', removal, phase: 'normalize' }, fetchImpl)
+      expect(rows().find((r) => r.lang === 'en')).toBeUndefined()
+    }
+  })
+
+  it('a translation is always strict', async () => {
+    const { validateRewrite } = await import('./translate-comments.mjs')
+    expect(validateRewrite('Then ♘xe5 wins.', 'Luego gana.', { removal: 'strict' })[0]).toMatch(/moves missing/)
+  })
+})
+
+describe('translations are made from the normalization', () => {
+  it('refuses to translate without the normalized text (v2 without --universal)', async () => {
+    const { fetchImpl } = ollama(() => JSON.stringify({ text: 'x' }))
+    await expect(v2({ universal: false, phase: 'translate' }, fetchImpl)).rejects.toThrow(/normalized text/)
+    await expect(v2({ universal: false }, fetchImpl)).rejects.toThrow(/normalized text/)
+  })
+  it('normalizing alone does not need it', async () => {
+    const { fetchImpl } = ollama(() => JSON.stringify({ text: 'The ♗g5 and ...b5 are strong.' }))
+    await expect(v2({ universal: false, phase: 'normalize' }, fetchImpl)).resolves.toBeTruthy()
   })
 })

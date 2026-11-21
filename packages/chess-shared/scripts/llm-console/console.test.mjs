@@ -57,6 +57,9 @@ describe('settings and secrets', () => {
     expect(loadSettings(home)).toMatchObject({ langs: ['es'], concurrency: 3, models: { normalize: 'gpt-oss:20b', translate: 'translategemma:27b' } })
     const s = saveSettings({ dbPath: '/data/run.sqlite', concurrency: 2, langs: ['es', 'de'] }, home)
     expect(s).toMatchObject({ concurrency: 2, langs: ['es', 'de'], reviewPath: '/data/run.review.jsonl', logPath: '/data/run.log' })
+    expect(loadSettings(home).removal).toBe('moderate')
+    expect(saveSettings({ removal: 'strict' }, home).removal).toBe('strict')
+    expect(() => saveSettings({ removal: 'loose' }, home)).toThrow('invalid removal')
     expect(() => saveSettings({ concurrency: 0 }, home)).toThrow('invalid concurrency')
     expect(() => saveSettings({ langs: ['spanish'] }, home)).toThrow('invalid langs')
     expect(() => saveSettings({ ollamaUrl: 'file:///etc' }, home)).toThrow('invalid ollamaUrl')
@@ -186,6 +189,14 @@ describe('the assembled app', () => {
     expect(JSON.stringify(s.json)).not.toContain('sk-ant-secret')
     expect((await call(app, 'GET', '/api/modules')).json.modules).toContain('status')
     expect((await call(app, 'PUT', '/api/settings', { headers: { 'x-console': '1' }, body: { concurrency: 99 } })).status).toBe(400)
+  })
+  it('uses the default home when none is given, so every module gets a path', async () => {
+    const saved = process.env.LLM_CONSOLE_HOME
+    process.env.LLM_CONSOLE_HOME = home
+    try {
+      const app = await buildApp()
+      expect((await call(app, 'GET', '/api/modules')).json.modules).toEqual(expect.arrayContaining(['status', 'queue', 'bench', 'lichess', 'results', 'sync']))
+    } finally { if (saved === undefined) delete process.env.LLM_CONSOLE_HOME; else process.env.LLM_CONSOLE_HOME = saved }
   })
   it('says the status is not configured without a database', async () => {
     const app = await buildApp({ home })

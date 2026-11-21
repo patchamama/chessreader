@@ -24,15 +24,29 @@ Objective: a local web console (EN/ES) to run, watch, benchmark and publish the 
 - Anything that writes to a remote repository shows a dry-run (local vs remote statistics) first and needs an explicit button.
 - Tests use fakes (no real tokens, no network, temp databases); the real `apps/api/storage` and the live run db are never written by tests.
 
+## Module contract (read by every delegated unit)
+- A module is the folder `packages/chess-shared/scripts/llm-console/modules/<name>/` with `index.mjs` (`export default { routes(app, ctx) }`; `ctx.settings()` returns the current settings, `ctx.home` the config home, `ctx.app` the router) and `ui.js` (browser script, wrapped by the server in an IIFE; it calls `Console.registerTab({ id, order, title: {en, es}, render(el, { params, t, api, navigate, esc, n }) → cleanup })` and `Console.addStrings({ en, es })`; see the header comment of `public/app.js`). Tests live in the module folder as `*.test.mjs` (Vitest).
+- Routes: `app.get|post|put|delete('/api/<name>/…', async (ctx) => data)`; `ctx.body()` parses JSON; throw `Object.assign(new Error(msg), { status })` for HTTP errors. Every non-GET route needs the `X-Console: 1` header (the browser `api()` helper adds it).
+- Shared libs (do not edit them; report what is missing): `lib/db.mjs` (`openDb(path, { readOnly })`, `withDb`), `lib/config.mjs` (`loadSettings`, `saveSettings`, `getSecret(name)` for openai | anthropic | openai-compatible | github), `lib/ollama.mjs` (`ps`, `tags`, `pull`, `chat` with timings), `lib/llm.mjs` (`complete(cfg, { system, user, json })` for ollama | openai | anthropic | openai-compatible), `lib/gpu.mjs`. The comment prompts and validators are exported by `../translate-comments.mjs` (`universalPromptV2`, `translatePromptV2`, `parseAiText`, `validateRewrite`, `TARGET_LANGS`; read-only: import them, never fork them).
+- The comments database has the schema of `apps/api/migrations/005_position_comments.sql` (+ `move_number`): `comment_sources`, `comment_games`, `position_comments`, `comment_translations(comment_id, lang, text)`; the universal (normalized) text of a comment is the row whose `lang` is the comment's own language (an empty `text` = dropped as not universal). The review file (`dbPath` with `.review.jsonl`) has one JSON line per LLM result: `{ id, lang, action: 'universal'|'translate', original, proposal, problems, model, status: 'accepted'|'rejected'|'dropped'|'failed' }`.
+- Only ONE process may write the database at a time (the translate script holds it). Any module that writes uses `openDb(path, { readOnly: false })` with the busy timeout, writes in short transactions, and refuses to start a job while `ps` shows a `scripts/translate-comments.mjs` process it did not start.
+- The status tab links the result categories to `#/results?action=<universal|translate>&status=<accepted|dropped|rejected|failed>` (action omitted = both) and queues work with `POST /api/queue { phase: 'normalize'|'translate', kind: 'book'|'lichess', langs?: string[], onlyLang?: string }`.
+- Language: UI strings in English and Spanish (every key in both); code, comments, tests in English. Never log or return a secret; a GitHub token comes from `getSecret('github')`, `gh auth token`, or a value typed in the UI that is kept in memory only.
+- Tests: fakes only — no network, no real token, temp databases and temp dirs; never touch `apps/api/storage`, `~/.local-llms-tasks`, or the live run database. Run: `cd packages/chess-shared && npx vitest run scripts/llm-console`.
+
 ## Tasks
 - [x] T1 S8 S10 S14 skeleton: server, libs, shell UI (tabs, EN/ES, GPU header), status tab, launchers — inline (parent)
-- [ ] T2 S3 S5 S6 S13 queue + runner + settings (models with recommended ★, langs, concurrency, pause/cool-down, ollama pull, external LLM) and S4 prompts viewer — delegated
-- [ ] T3 S2 S9 results browser (category links, filters, pagination) + selection + redo with external AI — delegated
-- [ ] T4 S7 benchmark (up to 3 LLMs, timings) + external judge / prompt improvement — delegated
-- [ ] T5 S11 Lichess studies (list, stats, fetch/add) — delegated
-- [ ] T6 S12 resources + sample repo sync (stats, dry-run, token, sample selection) — delegated
-- [ ] T7 integrate, bilingual check, README, version bump + tag
+- [x] T2 S3 S5 S6 S13 queue + runner + settings (models with recommended ★, langs, concurrency, pause/cool-down, ollama pull, external LLM) and S4 prompts viewer — delegated
+- [x] T3 S2 S9 results browser (category links, filters, pagination) + selection + redo with external AI — delegated
+- [x] T4 S7 benchmark (up to 3 LLMs, timings) + external judge / prompt improvement — delegated
+- [x] T5 S11 Lichess studies (list, stats, fetch/add) — delegated
+- [x] T6 S12 resources + sample repo sync (stats, dry-run, token, sample selection) — delegated
+- [x] T7 integrate, bilingual check, README, version bump + tag
 
 ## Log
 - L1 2026-11-21 user (verbatim): "por ahora que solo se traduzcan del inglés al español y que no se traduzcan a otro idioma y que se haga la normalización. Por otro lado, estas categorías ponles enlaces ... [S2–S13 as quoted above]"
 - L2 2026-11-21 parent: live run restarted as `w12/run-es.sh` (translate books en→es, translate lichess en→es, then normalization passes) with `--langs es`; the previous `run-all.sh` was stopped.
+- L3 2026-11-21 user (verbatim): "las traducciones deben de hacerse siempre a partir de la normalización del comentario. Algo importante en la normalización es que si se hace referencia a alguna jugada que se va a hacer categoricamente después, entonces esa parte debe de quitarse o simplemente debe de descartarse este comentario al ser demasiado específico, si no se aporta otra parte del comentario útil que ayude a comprender la jugada o el estado de configuración del tablero actual." Done in translate-comments.mjs (prompt rules 4-5; translation refuses to run without --universal) and in the results/bench modules.
+- L4 2026-11-21 user (verbatim): "Agregar opción de validad eliminación de jugadas como modo estricto que permitiría rechazar estas resultados y modo moderado que permitiría eliminar jugadas sin se comentan jugadas posteriores que ocurriran en la partida más tarde, después, en la jugada x, haciendo alución a una jugada x anterior o posterior." Done: `validateRewrite(..., { removal: 'strict'|'moderate', move })`, `--removal`, setting `removal` (default moderate), Queue tab selector.
+- L5 2026-11-21 user (verbatim): "si se pulsa en una de las traducciones para revisarlas, mostrar en modal con editor que permita revocarla o eliminarla para posterior procesamiento nuevamente o desde la ia externa rehacerla u otra ia del llm local." Done in the results module (modal: edit, revoke, delete and queue again, redo with external AI or a local model).
+- L6 Parent: all five modules verified in the browser against the real run database (status, queue ★ fix, results modal, lichess list, publish); the web editor (apps/web) keeps translating from the original text and strict validation — not changed.

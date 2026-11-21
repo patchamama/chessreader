@@ -85,8 +85,9 @@ export function universalPromptV2(c) {
       'Rules:',
       '1. Remove every reference to the players of the game, the tournament, date, book, chapter, note, or to other moments of the game ("earlier", "as we saw", "the previous move"). Speak of White and Black, the white knight, etc. Remove greetings, results and personal remarks ("I think", "my notes"). Exception: a quotation is never removed. Keep every quotation (text in quotation marks, or "X said/wrote/according to X ...") whole, together with who said it (the person or source quoted, e.g. "Tarrasch said: ...", "(Euwe)"); it may be translated like the rest but neither the quotation nor its author may be dropped or anonymised.',
       '2. Keep every chess idea, plan and evaluation of the comment, in the same language as the comment. Do not add facts.',
-      '3. Moves are written with figurines (♘f3, ♗xe6, ♕h4+, O-O, e4, dxe5). Copy every move of the comment exactly as it is; never add, drop or change one. Do not use piece letters.',
-      '4. If no chess content remains after removing those references (only the result, greetings, news about the event), answer {"text": "", "skip": true}.',
+      '3. Moves are written with figurines (♘f3, ♗xe6, ♕h4+, O-O, e4, dxe5). Copy every move you keep exactly as it is; never add or change one. Do not use piece letters.',
+      '4. A comment is read at the given position, with the given last move. It may tell what was played AFTER this position in this game ("White then played 13 ♘xe5", "the game went on 14...♗g4 15 ♕d2", "he resigned four moves later"): those moves are not part of the position, they make the comment specific to one game. Remove those parts. Keep what explains the last move or the position: ideas, plans, threats, evaluations, and hypothetical lines or alternatives from this position ("better was 12 h3", "if White takes, then ..."). The last move itself and the moves before the position are fine to mention.',
+      '5. If no chess content remains after removing those references and the later moves (only the result, greetings, news about the event, or a story of what was played next), and nothing useful remains to understand the last move or the position, answer {"text": "", "skip": true}.',
       JSON_SKIP,
     ].join('\n'),
     user: `Position (FEN): ${c.fen}\nLast move: ${c.move}\nComment:\n${c.text}`,
@@ -140,14 +141,52 @@ export function moveKeys(text) {
     m[1] ? 'O-O-O' : m[2] ? 'O-O' : `${m[3] ? 'P' : 'p'}${m[5] ? 'x' : ''}${m[6]}${m[7] ? '=' : ''}`)
 }
 
-/** The problems of a rewritten comment; [] when it may be stored. */
-export function validateRewrite(original, proposal) {
+// Words that say a comment is talking about what happens later in the game (English, Spanish, German, French),
+// and explicit references to a move number ("on move 14", "en la jugada 14", "im 14. Zug").
+const LATER_CUE = new RegExp(
+  '(?<![\\p{L}])(?:then|later|afterwards?|after that|next|followed|subsequently|eventually|finally|' +
+  'luego|despu[eé]s|m[aá]s tarde|posteriormente|a continuaci[oó]n|seguidamente|finalmente|' +
+  'dann|sp[aä]ter|danach|anschlie[sß]end|schlie[sß]lich|' +
+  'puis|ensuite|plus tard|apr[eè]s|finalement|' +
+  '(?:on |at |in )?(?:the )?(?:move|jugada|zug|coup)\\s*\\d+|\\d+\\s*(?:st|nd|rd|th|\\.)?\\s*(?:move|jugada|zug|coup))(?![\\p{L}])', 'iu')
+
+/** The number of the move a label like "12...♘b6" or "13.e4" names; null when it has none. */
+const labelNumber = (label) => { const m = /^\s*(\d+)/.exec(label ?? ''); return m ? Number(m[1]) : null }
+
+/**
+ * The moves of the original that a universal rewrite dropped but the comment excuses in the moderate mode:
+ * each one follows a word that speaks of later play within 100 characters, or is written with a move number
+ * after the commented move's.
+ */
+function unexcused(original, removed, move) {
+  const current = labelNumber(move)
+  let previous = null
+  return removed.filter((m) => {
+    const before = original.slice(Math.max(0, m.index - 100), m.index)
+    const number = /(\d+)\s*(?:\.\.\.|…|\.)?\s*$/.exec(original.slice(Math.max(0, m.index - 10), m.index))
+    // A move written right after an excused one (a line: "13 ♘xe5 ♗xe5 14 ♕h5") belongs to the same later play.
+    const continuesLine = previous && /^[\s.…,;\d]*$/.test(original.slice(previous.index + previous[0].length, m.index))
+    const excused = continuesLine || (number && current !== null && Number(number[1]) > current) || LATER_CUE.test(before)
+    previous = excused ? m : null
+    return !excused
+  })
+}
+
+/**
+ * The problems of a rewritten comment; [] when it may be stored.
+ * removal: 'strict' (default) — every move of the original must stay;
+ *          'moderate' — a move may go when the comment alludes to later play (a "then/later" cue or a later
+ *          move number) near it; `move` is the commented move ("12...♘b6") the numbers are compared with.
+ * A proposal never adds a move.
+ */
+export function validateRewrite(original, proposal, { removal = 'strict', move } = {}) {
   const problems = []
   const text = proposal.trim()
   if (!text) return ['the proposal is empty']
   if (text.length > 3 * Math.max(original.trim().length, 1)) problems.push('the proposal is more than 3 times longer than the original')
   const kept = new Set(moveKeys(text))
-  const missing = [...original.matchAll(MOVE_RE)].filter((m) => !kept.has(moveKeys(m[0])[0])).map((m) => m[0])
+  const removed = [...original.matchAll(MOVE_RE)].filter((m) => !kept.has(moveKeys(m[0])[0]))
+  const missing = (removal === 'moderate' ? unexcused(original, removed, move) : removed).map((m) => m[0])
   if (missing.length) problems.push(`moves missing from the proposal: ${[...new Set(missing)].join(', ')}`)
   // Stricter than the app's check: an unattended batch must not invent moves either.
   const known = new Set(moveKeys(original))
@@ -219,6 +258,8 @@ const moveLabel = (c) => {
 export async function translateComments(opts, { fetchImpl = fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), log = console.log } = {}) {
   const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite')
   const langs = opts.langs ?? TARGET_LANGS
+  // Translations are made from the normalized text, never from the original: it still names players, tournaments and later moves.
+  if (opts.v2 && !opts.universal && opts.phase !== 'normalize') throw new Error('translations are made from the normalized text: run with --universal (normalize first)')
   for (const l of langs) if (!LANGS[l]) throw new Error(`unsupported language: ${l} (use ${TARGET_LANGS.join(', ')})`)
   if (!opts.model) throw new Error('a model is needed (--model or LLM_MODEL)')
   const reviewPath = opts.review ?? `${opts.db}.review.jsonl`
@@ -252,7 +293,7 @@ export async function translateComments(opts, { fetchImpl = fetch, sleep = (ms) 
         line.status = 'dropped'
       } else {
         line.proposal = parsed.text
-        line.problems = validateRewrite(source, line.proposal)
+        line.problems = validateRewrite(source, line.proposal, { removal: opts.v2 && action === 'universal' ? opts.removal ?? 'moderate' : 'strict', move: moveLabel(c) })
         line.status = line.problems.length ? 'rejected' : 'accepted'
       }
     } catch (e) {
@@ -334,6 +375,7 @@ function parseArgs(argv) {
     else if (a === '--v2') flags.v2 = true
     else if (a === '--translate-model') flags.translateModel = value()
     else if (a === '--concurrency') flags.concurrency = Number(value())
+    else if (a === '--removal') { flags.removal = value(); if (!['strict', 'moderate'].includes(flags.removal)) throw new Error('--removal is strict or moderate') }
     else if (a.startsWith('--')) throw new Error(`unknown flag ${a}`)
     else flags.db = a
   }
