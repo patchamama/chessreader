@@ -4,6 +4,8 @@ import { boardSvgDataUrl } from '../library/utils/boardSvg'
 import { langName, TARGET_LANGS } from '../comments/commentPrompts'
 import { proposeComment, saveCommentProposal, type CommentAction } from '../comments/commentAi'
 import DeleteControl from './DeleteControl'
+import OpenGameButton from './OpenGameButton'
+import LinkedText from '../../shared/ui/LinkedText'
 import { hideComment, moveLabel, type CommentEntry } from '../comments/commentsApi'
 
 /** One editable text of the comment: the universal text (own language) or a translation. */
@@ -82,7 +84,7 @@ export default function CommentDetailsModal({ comment: c, onClose, onHidden }: {
           </dl>
         </div>
         <h3 className="mt-3 font-semibold">Original text</h3>
-        <p className="whitespace-pre-line rounded bg-slate-50 p-2">{c.text}</p>
+        <p className="whitespace-pre-line rounded bg-slate-50 p-2"><LinkedText text={c.text} /></p>
         {fields.map((f) => (
           <div key={f.key} className="mt-2">
             <label className="flex items-center gap-2 font-semibold" htmlFor={`field-${f.key}`}>{f.label}</label>
@@ -97,6 +99,7 @@ export default function CommentDetailsModal({ comment: c, onClose, onHidden }: {
         ))}
         {error && <p role="alert" className="mt-2 text-red-700">{error}</p>}
         <p className="mt-3 flex flex-wrap items-center justify-end gap-2">
+          <OpenGameButton className="rounded border border-slate-300 px-3 py-1" game={{ gameId: c.gameId, annotator: c.source.title, white: c.game.white, black: c.game.black, label: c.game.label }} />
           <DeleteControl className="mr-auto" onConfirm={async () => { await hideComment(c.id); onHidden?.(); onClose() }} />
           <button className="rounded bg-violet-700 px-3 py-1 text-white disabled:opacity-40" disabled={busy !== null} onClick={() => void save()}>Save</button>
           <button className="rounded border border-slate-300 px-3 py-1" onClick={onClose}>Cancel</button>

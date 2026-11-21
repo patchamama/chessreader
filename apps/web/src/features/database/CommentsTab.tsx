@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLlm } from '../../shared/llm'
-import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../shared/externalBook/externalBookStore'
 import { withBusy, withProgress } from '../../shared/layout/busyStore'
-import { saveProgress } from '../library/store/readingStore'
 import { boardSvgDataUrl } from '../library/utils/boardSvg'
-import { pgnToChapters } from '../gamesearch/pgnChapters'
-import { hideComment, restoreComment, loadCommentGame, loadCommentPage, loadCommentSources, moveLabel, type CommentEntry, type CommentFilter, type CommentSource } from '../comments/commentsApi'
+import { hideComment, restoreComment, loadCommentPage, loadCommentSources, moveLabel, type CommentEntry, type CommentFilter, type CommentSource } from '../comments/commentsApi'
 import { langName, TARGET_LANGS, type TargetLang } from '../comments/commentPrompts'
 import {
   proposeComment, proposeGameTranslation, runPagedBatch, saveCommentProposal, saveGameProposal,
@@ -14,6 +11,8 @@ import {
 } from '../comments/commentAi'
 import type { SaveSuggestionResult } from '../suggestions/suggestionsApi'
 import { openGameInBook } from './openInBook'
+import { openCommentGame } from './openCommentGame'
+import LinkedText from '../../shared/ui/LinkedText'
 import BatchProgressBar from './BatchProgressBar'
 import PositionFinder from './PositionFinder'
 import RankingView from './RankingView'
@@ -105,14 +104,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
 
   const openGame = (c: CommentEntry) => withBusy('Opening the game', async () => {
     try {
-      const g = await loadCommentGame(c.gameId)
-      const name = playersOf({ ...c, game: { ...c.game, white: g.white ?? c.game.white, black: g.black ?? c.game.black } })
-      const tags = [['White', g.white ?? '?'], ['Black', g.black ?? '?'], ['Annotator', c.source.title]].map(([k, v]) => `[${k} "${v.replace(/"/g, "'")}"]`).join('\n')
-      const { chapters } = pgnToChapters(`${tags}\n\n${g.pgn}`, { fromPosition: true })
-      if (!chapters.length) throw new Error('the game could not be read')
-      saveProgress(EXTERNAL_BOOK_ID, 1)
-      useExternalBookStore.getState().open(name, chapters)
-      navigate(`/read/${EXTERNAL_BOOK_ID}`)
+      navigate(await openCommentGame({ gameId: c.gameId, annotator: c.source.title, white: c.game.white, black: c.game.black, label: c.game.label }))
     } catch (e) {
       setError(`Game ${c.gameId}: ${(e as Error).message}`)
     }
@@ -260,7 +252,7 @@ export default function CommentsTab({ books }: { books: { id: string; title: str
                 {llm.available && <input type="checkbox" aria-label={`Select comment ${c.id}`} checked={selected.has(c.id)} onChange={() => toggle(c.id)} className="self-start" />}
                 <img src={boardSvgDataUrl(c.fen)} alt={`Position after ${move}`} loading="lazy" width={96} height={96} className="h-24 w-24 shrink-0 rounded" />
                 <div className="min-w-0 flex-1">
-                  <p className="whitespace-pre-line">{c.text}</p>
+                  <p className="whitespace-pre-line"><LinkedText text={c.text} /></p>
                   <p className="mt-1 text-xs text-slate-600">
                     <strong>{c.source.title}</strong>{c.source.author ? ` · ${c.source.author}` : ''}{c.source.kind === 'lichess' ? ' · Lichess' : ''}
                     {' · '}{playersOf(c)} · <span className="font-mono">{move}</span> · Chapter {c.chapter ?? '—'} · {langName(c.lang)}

@@ -123,6 +123,25 @@ export function applyGameRewrites(
   return serialise(doc)
 }
 
+function readAlternativesOf(quote: Element): CommentAlternative[] | null {
+  try {
+    const list = JSON.parse(quote.getAttribute('data-comment-alternatives') ?? '[]') as CommentAlternative[]
+    return Array.isArray(list) && list.length > 1 ? list : null
+  } catch {
+    return null
+  }
+}
+
+/** Show remark `index` of a quote that keeps several (with its counter), reading its moves against the main line (S7). */
+function showAlternative(quote: Element, alternatives: CommentAlternative[], index: number): boolean {
+  const choice = alternatives[index]
+  if (!choice || typeof choice.text !== 'string') return false
+  const fen = quote.getAttribute('data-comment-fen') ?? undefined
+  const mainLine = readCommentMainLine(quote.getAttribute('data-comment-mainline'))
+  quote.innerHTML = humanCommentInner({ ...choice, source: choice.source ?? '', ...(fen ? { fen } : {}) }, mainLine, { index, total: alternatives.length })
+  return true
+}
+
 /**
  * The book comments shown again (S4): every quote that keeps several remarks of
  * its position shows one of them, picked at random. `pick` 0 keeps the remark
@@ -133,22 +152,19 @@ export function pickBookComments(html: string, pick: number, random: () => numbe
   const doc = new DOMParser().parseFromString(html, 'text/html')
   let changed = false
   doc.body.querySelectorAll('blockquote.human-comment[data-comment-alternatives]').forEach((quote) => {
-    let alternatives: CommentAlternative[]
-    try {
-      alternatives = JSON.parse(quote.getAttribute('data-comment-alternatives') ?? '[]') as CommentAlternative[]
-    } catch {
-      return
-    }
-    if (!Array.isArray(alternatives) || alternatives.length < 2) return
-    const choice = alternatives[Math.min(alternatives.length - 1, Math.floor(random() * alternatives.length))]
-    if (!choice || typeof choice.text !== 'string') return
-    const fen = quote.getAttribute('data-comment-fen') ?? undefined
-    // Numbered moves of the remark ("5…Nc6") are read against the game's main line (S7).
-    const mainLine = readCommentMainLine(quote.getAttribute('data-comment-mainline'))
-    quote.innerHTML = humanCommentInner({ ...choice, source: choice.source ?? '', ...(fen ? { fen } : {}) }, mainLine)
-    changed = true
+    const alternatives = readAlternativesOf(quote)
+    if (!alternatives) return
+    if (showAlternative(quote, alternatives, Math.min(alternatives.length - 1, Math.floor(random() * alternatives.length)))) changed = true
   })
   return changed ? serialise(doc) : html
+}
+
+/** Another remark of the same position in a quote (the next one, wrapping after the last); false when it keeps only one. */
+export function cycleBookComment(quote: Element): boolean {
+  const alternatives = readAlternativesOf(quote)
+  if (!alternatives) return false
+  const current = Number(quote.querySelector('[data-comment-cycle]')?.getAttribute('data-comment-cycle')) || 0
+  return showAlternative(quote, alternatives, (current + 1) % alternatives.length)
 }
 
 /**

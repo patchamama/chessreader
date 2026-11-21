@@ -16,7 +16,7 @@ import { detectHeadings } from '../utils/headingDetect'
 import { clearGameLayout, loadGameLayouts, saveGameLayout } from '../store/gameLayoutStore'
 import { rewriteKey, useGameRewriteStore } from '../store/gameRewriteStore'
 import { useReaderViewStore } from '../store/readerViewStore'
-import { applyGameRewrites, pickBookComments, unwrapGameContainers, wrapGameContainers } from '../utils/gameRewrite'
+import { applyGameRewrites, cycleBookComment, pickBookComments, unwrapGameContainers, wrapGameContainers } from '../utils/gameRewrite'
 import { recommentGame } from '../review/recommentGame'
 import { nextPaint, withBusy, withProgress } from '../../../shared/layout/busyStore'
 import { captureOffset, captureTopAnchor, restoreOffset, restoreTopAnchor, type ScrollAnchor } from '../../../shared/layout/scrollAnchor'
@@ -1001,6 +1001,13 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
       const recomment = (e.target as HTMLElement | null)?.closest?.('[data-recomment]') as HTMLElement | null
       if (recomment) { toggleRecommentRef.current(Number(recomment.dataset.recomment)); return }
       const target = e.target as HTMLElement | null
+      // Another book remark of the same position ("1/3" → "2/3").
+      const cycle = target?.closest?.('button[data-comment-cycle]') as HTMLElement | null
+      if (cycle) {
+        const quote = cycle.closest('blockquote.human-comment')
+        if (quote) cycleBookComment(quote)
+        return
+      }
       // A comment's line to a NEW analysis board; the study board is kept (S5).
       const toBoard = target?.closest?.('button.line-to-board') as HTMLElement | null
       if (toBoard) {
@@ -1022,7 +1029,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
         e.preventDefault()
         const quote = source.closest('blockquote, [data-no-recognition]')
         const footer = source.closest('footer')?.cloneNode(true) as HTMLElement | undefined
-        footer?.querySelectorAll('a.comment-source').forEach((a) => a.remove())
+        footer?.querySelectorAll('a.comment-source, button.comment-cycle').forEach((a) => a.remove())
         const rect = source.getBoundingClientRect()
         setSourceMenuRef.current({
           top: rect.bottom + 4, left: rect.left,
@@ -1107,6 +1114,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
     .epub-content p.diagram-eval { text-align: center; text-indent: 0; font-size: 0.85em; color: #555; margin-top: -0.5rem; }
     .epub-content blockquote.human-comment { border-left: 3px solid #a16207; background: #fefce8; padding: 0.4rem 0.8rem; margin: 0.6rem 0; color: #422006; font-style: italic; }
     .epub-content blockquote.human-comment p { text-indent: 0; margin-bottom: 0.2rem; }
+    .epub-content blockquote.human-comment button.comment-cycle { margin-left: 0.4rem; border: 1px solid #a16207; border-radius: 4px; background: #fff; padding: 0 0.35rem; font-size: 0.85em; color: #78350f; cursor: pointer; }
     .epub-content blockquote.human-comment footer { font-style: normal; font-size: 0.8em; color: #78716c; }
     .epub-content p.diagram-line { text-align: center; text-indent: 0; font-size: 0.85em; color: #334155; margin-top: -0.6rem; }
     .epub-content p.diagram-alt { color: #64748b; font-style: italic; }

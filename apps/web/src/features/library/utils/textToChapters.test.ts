@@ -138,6 +138,17 @@ describe('book comments with alternatives (S4)', () => {
     expect(JSON.parse(quote.getAttribute('data-comment-alternatives')!)).toEqual(alts)
   })
 
+  it('shows which remark is shown ("1/2") on a button, only when there are several', async () => {
+    const { commentAlternativesAttr } = await import('./diagramMark')
+    const alts = [{ text: 'Idea one.', source: 'A' }, { text: 'Idea two.', source: 'B' }]
+    const many = textToChapters(`T\n[Comment source="B" text="Idea two."${commentAlternativesAttr(alts)}]`).chapters[0].html
+    const btn = new DOMParser().parseFromString(many, 'text/html').querySelector('blockquote.human-comment button.comment-cycle')!
+    expect(btn.textContent).toBe('2/2')
+    expect(btn.getAttribute('data-comment-cycle')).toBe('1')
+    const one = textToChapters('T\n[Comment source="A" text="Only one."]').chapters[0].html
+    expect(new DOMParser().parseFromString(one, 'text/html').querySelector('button.comment-cycle')).toBeNull()
+  })
+
   it('textToHtml renders text as the paragraphs of a chapter', async () => {
     const { textToHtml } = await import('./textToChapters')
     expect(textToHtml('1. e4 e5\nA remark.')).toBe('<p>1. e4 e5</p>\n<p>A remark.</p>')

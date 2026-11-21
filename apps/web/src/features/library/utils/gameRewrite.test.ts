@@ -1,7 +1,7 @@
 import { Chess } from 'chess.js'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { recognizeGames } from '@chess-ebook/chess-shared'
-import { applyGameRewrites, gameLineRange, pickBookComments, unwrapGameContainers, wrapGameContainers } from './gameRewrite'
+import { applyGameRewrites, cycleBookComment, gameLineRange, pickBookComments, unwrapGameContainers, wrapGameContainers } from './gameRewrite'
 import { htmlToProseText } from './proseText'
 
 const HTML = [
@@ -78,6 +78,31 @@ describe('pickBookComments (S4)', () => {
     expect(q.querySelector('footer')!.textContent).toContain('— B')
     expect(q.querySelector('a.comment-source')!.getAttribute('data-comment-game')).toBe('g')
     expect(q.getAttribute('data-comment-alternatives')).not.toBeNull()
+  })
+})
+
+describe('cycleBookComment: another remark of the same position', () => {
+  const alts = [{ text: 'First.', source: 'A' }, { text: 'Second.', source: 'B', gameId: 'g', ply: 2 }, { text: 'Third.', source: 'C' }]
+  const make = () => {
+    const doc = new DOMParser().parseFromString(`<blockquote class="human-comment" data-comment-alternatives='${JSON.stringify(alts)}'><p>First.</p><footer>— A <button class="comment-cycle" data-comment-cycle="0">1/3</button></footer></blockquote>`, 'text/html')
+    return doc.querySelector('blockquote')!
+  }
+
+  it('shows the next remark with its counter, and wraps around after the last', () => {
+    const q = make()
+    cycleBookComment(q)
+    expect(q.querySelector('p')!.textContent).toBe('Second.')
+    expect(q.querySelector('button.comment-cycle')!.textContent).toBe('2/3')
+    expect(q.querySelector('a.comment-source')!.getAttribute('data-comment-game')).toBe('g')
+    cycleBookComment(q)
+    cycleBookComment(q)
+    expect(q.querySelector('p')!.textContent).toBe('First.')
+    expect(q.querySelector('button.comment-cycle')!.textContent).toBe('1/3')
+  })
+
+  it('pickBookComments writes the counter of the remark it picked', () => {
+    const out = pickBookComments(`<blockquote class="human-comment" data-comment-alternatives='${JSON.stringify(alts)}'><p>First.</p></blockquote>`, 1, () => 0.5)
+    expect(new DOMParser().parseFromString(out, 'text/html').querySelector('button.comment-cycle')!.textContent).toBe('2/3')
   })
 })
 

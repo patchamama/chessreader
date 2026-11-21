@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useSettingsStore, type AppLanguage } from '../../shared/settings/settingsStore'
+import LinkedText from '../../shared/ui/LinkedText'
 import CommentDetailsModal from '../database/CommentDetailsModal'
 import { commentSource, commentTextFor, type HumanComment } from '../library/commentdb/commentLookup'
 import { commentInNotation } from '../library/commentdb/commentNotation'
@@ -45,7 +46,7 @@ export default function PositionComments({ fen }: { fen: string }) {
       <h2 className="text-sm font-semibold"><span aria-hidden="true">📚 </span><span>{shown.length === 1 ? t.one : t.many(shown.length)}</span></h2>
       {shown.map(({ c, text }, i) => (
         <div key={c.id ?? i} className="flex items-start gap-2">
-          <p className="min-w-0 flex-1">{commentInNotation(text, lang, figurines)} <span className="text-xs text-sky-700">— {commentSource(c)}</span></p>
+          <p className="min-w-0 flex-1"><LinkedText text={commentInNotation(text, lang, figurines)} /> <span className="text-xs text-sky-700">— {commentSource(c)}</span></p>
           <button type="button" className="shrink-0 rounded border border-sky-300 bg-white px-2 py-0.5 text-xs" onClick={() => setEditing(c)}>{t.edit}</button>
         </div>
       ))}

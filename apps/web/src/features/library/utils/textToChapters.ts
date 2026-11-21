@@ -44,6 +44,8 @@ export function textToHtml(text: string): string {
 export function humanCommentInner(
   quote: Pick<CommentMark, 'text' | 'source' | 'fen' | 'gameId' | 'ply'>,
   mainLine?: MainLinePositions,
+  /** Which of the position's remarks this is ("2/3"); a button then shows another one. */
+  position?: { index: number; total: number },
 ): string {
   // Moves are read in whatever notation the quote uses (S7), anchored on the
   // game's main line when they carry a number ("5…Nc6"), else on the quote's position.
@@ -51,7 +53,10 @@ export function humanCommentInner(
   const link = quote.gameId
     ? ` <a class="comment-source" data-comment-game="${attr(quote.gameId)}" data-comment-ply="${quote.ply ?? ''}" href="#" aria-label="Open the source of this comment" title="Open the source of this comment">↗</a>`
     : ''
-  const footer = quote.source || link ? `<footer>${quote.source ? `— ${esc(quote.source)}` : ''}${link}</footer>` : ''
+  const cycle = position && position.total > 1
+    ? ` <button type="button" class="comment-cycle" data-comment-cycle="${position.index}" aria-label="Comment ${position.index + 1} of ${position.total}: show another comment of this position" title="Comment ${position.index + 1} of ${position.total}: show another">${position.index + 1}/${position.total}</button>`
+    : ''
+  const footer = quote.source || link || cycle ? `<footer>${quote.source ? `— ${esc(quote.source)}` : ''}${link}${cycle}</footer>` : ''
   return `<p>${text}</p>${footer}`
 }
 
@@ -142,7 +147,9 @@ function paragraph(p: string, langs: PieceLang[], before?: MainLinePositions): s
       ? ` data-comment-alternatives="${attr(JSON.stringify(quote.alternatives))}"${quote.fen ? ` data-comment-fen="${attr(quote.fen)}"` : ''}`
         + (mainLine ? ` data-comment-mainline="${attr(JSON.stringify(mainLine))}"` : '')
       : ''
-    return `<blockquote class="human-comment" data-no-recognition${alternatives}>${humanCommentInner(quote, before)}</blockquote>`
+    const at = quote.alternatives ? Math.max(0, quote.alternatives.findIndex((a) => a.text === quote.text)) : 0
+    const position = quote.alternatives ? { index: at, total: quote.alternatives.length } : undefined
+    return `<blockquote class="human-comment" data-no-recognition${alternatives}>${humanCommentInner(quote, before, position)}</blockquote>`
   }
   const mark = parseDiagramMark(p)
   if (!mark) return `<p>${esc(p)}</p>`
