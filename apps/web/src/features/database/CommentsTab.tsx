@@ -13,6 +13,7 @@ import type { SaveSuggestionResult } from '../suggestions/suggestionsApi'
 import { openGameInBook } from './openInBook'
 import { openCommentGame } from './openCommentGame'
 import LinkedText from '../../shared/ui/LinkedText'
+import { matchSource } from '../library/stats/sourceMatch'
 import BatchProgressBar from './BatchProgressBar'
 import PositionFinder from './PositionFinder'
 import RankingView from './RankingView'
@@ -80,8 +81,7 @@ export default function CommentsTab({ books, initialBook }: { books: { id: strin
   useEffect(() => {
     if (!initialBook || filtered.current || !sources.length) return
     filtered.current = true
-    const want = initialBook.trim().toLocaleLowerCase()
-    const hit = sources.find((s) => s.kind !== 'lichess' && s.title.trim().toLocaleLowerCase() === want)
+    const hit = matchSource(sources, initialBook)
     if (hit) setFilter((f) => ({ ...f, source: hit.id }))
   }, [initialBook, sources])
   const cleanFilter = useCallback((): CommentFilter => {

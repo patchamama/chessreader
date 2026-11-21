@@ -14,9 +14,10 @@ const src = (id: number, title: string, extra: object = {}) => ({ id, title, aut
 beforeEach(() => vi.clearAllMocks())
 
 describe('bookCommentCount: the comments of the database that come from a book', () => {
-  it('sums the comments of the sources named like the book', async () => {
-    loadCommentSources.mockResolvedValue([src(1, 'Mis geniales predecesores I. De Steinitz a Alekhine', { comments: 1200 }), src(2, 'Other', { comments: 9 }), src(3, 'mis geniales predecesores i. de steinitz a alekhine', { comments: 3 })])
-    expect(await bookCommentCount(5, 'Mis geniales predecesores I. De Steinitz a Alekhine')).toBe(1203)
+  it('counts the comments of the source whose short title starts the library title', async () => {
+    loadCommentSources.mockResolvedValue([src(1, 'Mis geniales predecesores I', { comments: 1200 }), src(2, 'Mis geniales predecesores II', { comments: 900 }), src(3, 'Other', { comments: 9 })])
+    expect(await bookCommentCount(5, 'Mis geniales predecesores I. De Steinitz a Alekhine')).toBe(1200)
+    expect(await bookCommentCount(6, 'Mis geniales predecesores II. De Euwe A Tal')).toBe(900)
   })
 
   it('counts through the list when a source has no precomputed count', async () => {

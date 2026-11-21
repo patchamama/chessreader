@@ -5,6 +5,7 @@ import { chapterGames, fetchBookChapter } from '../../errors/bookErrors'
 import { getJson } from '../commentdb/commentLookup'
 import { bookSlug } from '../errata/errataFormat'
 import { loadCommentPage, loadCommentSources } from '../../comments/commentsApi'
+import { matchSource } from './sourceMatch'
 import { canWriteResources, writeResourceFile } from '../../suggestions/suggestionsApi'
 
 /** The numbers of a book (or of a chapter). */
@@ -43,14 +44,12 @@ export function chapterStats(html: string): StatsCounts {
   }), { ...EMPTY_STATS, comments: remarks })
 }
 
-const same = (a: string, b: string) => a.trim().toLocaleLowerCase() === b.trim().toLocaleLowerCase()
-
-/** The comments of the commentary database that come from a book (its sources named like it); 0 when it knows none or cannot be read. */
+/** The comments of the commentary database that come from a book (its source, matched by title or book id); 0 when it knows none or cannot be read. */
 export async function bookCommentCount(bookId: number | string, title: string): Promise<number> {
   try {
-    const mine = (await loadCommentSources()).filter((c) => c.kind !== 'lichess' && (same(c.title, title) || (c.book !== null && String(c.book) === String(bookId))))
-    const counts = await Promise.all(mine.map(async (c) => c.comments ?? (await loadCommentPage({ source: c.id }, 0, 1)).total))
-    return counts.reduce((a, b) => a + b, 0)
+    const source = matchSource(await loadCommentSources(), title, bookId)
+    if (!source) return 0
+    return source.comments ?? (await loadCommentPage({ source: source.id }, 0, 1)).total
   } catch {
     return 0
   }
