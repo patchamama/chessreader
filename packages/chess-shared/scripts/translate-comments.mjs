@@ -228,6 +228,8 @@ export async function translateComments(opts, { fetchImpl = fetch, sleep = (ms) 
   const translateLlm = { ...llm, model: opts.translateModel ?? opts.model }
   if (llm.ollama) for (const m of new Set([llm.model, translateLlm.model])) await preloadOllama(baseUrl, m, fetchImpl)
   const db = new DatabaseSync(opts.db)
+  // Another process (the status console, a database viewer) may be reading: wait for it instead of failing with "database is locked".
+  db.exec('PRAGMA busy_timeout = 30000')
   const where = opts.sourceKind ? 'WHERE s.kind = ?' : ''
   const hasMoveNumber = db.prepare('PRAGMA table_info(position_comments)').all().some((c) => c.name === 'move_number')
   const comments = db.prepare(`SELECT c.id, c.text, c.lang, c.position, c.ply, c.san${hasMoveNumber ? ', c.move_number' : ''}

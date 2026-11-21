@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM tasks console</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><strong data-i18n="app.title">LLM tasks console</strong><span class="sub" id="dbname"></span></div>
+  <nav id="tabs" role="tablist" aria-label="Sections"></nav>
+  <div class="tools">
+    <div class="lang" role="group" aria-label="Language"><button data-lang="en">EN</button><button data-lang="es">ES</button></div>
+    <button id="gpu" class="gpu" aria-haspopup="true" aria-expanded="false" title="GPU"><span id="gpu-text">GPU …</span></button>
+    <div id="gpu-panel" class="gpu-panel" hidden></div>
+  </div>
+</header>
+<main id="main"></main>
+<script src="app.js"></script>
+<script src="/api/module-scripts"></script>
+</body>
+</html>
