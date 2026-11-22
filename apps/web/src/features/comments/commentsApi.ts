@@ -220,3 +220,28 @@ async function aggregateTop(filter: CommentFilter): Promise<TopPosition[]> {
       return { rank: i + 1, fen: g.fen, count: g.entries.length, sources, samples }
     })
 }
+
+export interface BookGamePayload {
+  book: { title: string; author?: string | null; lang: string }
+  chapter: number
+  game: {
+    label?: string | null
+    white?: string | null
+    black?: string | null
+    pgn: string
+    comments: { hash: string; key: string; ply: number; move: number; san: string; text: string }[]
+    /** Per language: the game's PGN and the comments (same order as `comments`). */
+    translations?: Record<string, { pgn?: string; comments: string[] }>
+  }
+}
+
+/**
+ * Keeps a book's game in the server's commentary database with its comments in
+ * the book's language and their translations; the game record also holds the
+ * PGN in each language (admin). Saving the same game again adds nothing twice.
+ */
+export async function saveBookGame(payload: BookGamePayload): Promise<{ gameId: string; sourceId: number; added: number; translated: number }> {
+  const result = await httpClient<{ gameId: string; sourceId: number; added: number; translated: number }>('/api/comments/book-games', { method: 'POST', body: JSON.stringify(payload) })
+  clearCommentListCache()
+  return result
+}

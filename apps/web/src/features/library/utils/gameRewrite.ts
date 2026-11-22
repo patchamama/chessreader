@@ -89,11 +89,11 @@ function serialise(doc: Document): string {
 export function applyGameRewrites(
   html: string,
   games: RecognizedGame[],
-  rewrites: Record<number, string | { text: string }>,
+  rewrites: Record<number, string | { text: string; leading?: number }>,
 ): string {
   const chosen = Object.entries(rewrites)
-    .map(([i, r]) => ({ game: games[Number(i)], text: typeof r === 'string' ? r : r?.text }))
-    .filter((c): c is { game: RecognizedGame; text: string } => !!c.game && typeof c.text === 'string' && c.text.trim() !== '')
+    .map(([i, r]) => ({ game: games[Number(i)], text: typeof r === 'string' ? r : r?.text, leading: typeof r === 'string' ? 0 : r?.leading ?? 0 }))
+    .filter((c): c is { game: RecognizedGame; text: string; leading: number } => !!c.game && typeof c.text === 'string' && c.text.trim() !== '')
   if (chosen.length === 0 || !html) return html
 
   const doc = new DOMParser().parseFromString(html, 'text/html')
@@ -101,8 +101,12 @@ export function applyGameRewrites(
   const prose = extractProseText(body)
   // Every range is found on the same text before anything is changed.
   const edits: { blocks: Element[]; text: string }[] = []
-  for (const { game, text } of chosen) {
-    const { start, end } = gameLineRange(prose.text, game)
+  for (const { game, text, leading } of chosen) {
+    const range = gameLineRange(prose.text, game)
+    const { end } = range
+    // Comments printed before the first move belong to the game's text too: `leading` lines.
+    let start = range.start
+    for (let i = 0; i < leading && start > 0; i++) start = prose.text.lastIndexOf('\n', start - 2) + 1
     const blocks = blocksBetween(prose, body, start, Math.max(start, end - 1))
     if (!blocks || blocks.some((b) => CONTAINERS.has(b.tagName.toUpperCase()))) continue
     edits.push({ blocks, text })

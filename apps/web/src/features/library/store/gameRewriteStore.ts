@@ -11,7 +11,12 @@ import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../../shared/external
 const KEY = 'chessreader-game-rewrites-v1'
 
 /** The new text of a game, and the layout the reader had chosen for it before (given back on restore). */
-export interface GameRewrite { text: string; layout?: CommentLayout }
+export interface GameRewrite {
+  text: string
+  layout?: CommentLayout
+  /** Lines before the game's first move that the text also replaces (a translation covers them). */
+  leading?: number
+}
 
 type Rewrites = Record<string, Record<number, GameRewrite>>
 

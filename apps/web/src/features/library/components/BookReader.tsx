@@ -33,6 +33,8 @@ import { StudyPanelResizer } from './StudyPanelResizer'
 import { VariationChooser } from './VariationChooser'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { revealStudyBoard } from '../utils/revealStudyBoard'
+import { TranslateChapterButton } from '../translate/TranslateChapterButton'
+import { useLibraryBook } from '../translate/useLibraryBook'
 import { getProgress, saveProgress, getChapterScroll, saveChapterScroll } from '../store/readingStore'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { successorOf, hasAlternativesAhead, variationLinesFrom } from '../utils/proseChess'
@@ -235,6 +237,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
 
   const { data, isLoading } = useChapter(id, currentChapter)
   const bookTitle = useBookTitle(id)
+  const libraryBook = useLibraryBook(id)
   const touchBook = useTouchBook()
   const contentRef = useRef<HTMLDivElement>(null)
 
@@ -431,6 +434,13 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
       pendingRefresh.current = null
       console.warn('[BookReader] could not comment the game again', e)
     })
+  }
+  /** A game's comments translated: its new text shows in place of the book's (undo: the same icon as a recomment). */
+  const applyTranslation = (gameIndex: number, rewrite: { text: string; leading: number }) => {
+    const layoutBefore = loadGameLayouts(id, currentChapter)[gameIndex]
+    clearGameLayout(id, currentChapter, gameIndex)
+    useGameRewriteStore.getState().save(id, currentChapter, gameIndex, { ...rewrite, ...(layoutBefore ? { layout: layoutBefore } : {}) })
+    setLayoutVersion((v) => v + 1)
   }
   const toggleRecommentRef = useRef(toggleRecomment)
   useEffect(() => { toggleRecommentRef.current = toggleRecomment })
@@ -1267,6 +1277,18 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
             <span aria-hidden="true">{activeSummary.braces ? '¶' : '{ }'}</span>
           </button>
         )}
+
+        {/* The comments in another language than the interface's: translate them with AI, one by one. */}
+        <TranslateChapterButton
+          games={baseGames}
+          text={basePlainText}
+          bookTitle={bookTitle ?? ''}
+          bookAuthor={libraryBook?.author ?? null}
+          bookLanguage={libraryBook?.language ?? null}
+          chapter={currentChapter}
+          canSave={isAdmin}
+          onApplied={applyTranslation}
+        />
 
         {/* Book comments in the text, shown or hidden: just before the board button (S4). */}
         <BookCommentsToggle />

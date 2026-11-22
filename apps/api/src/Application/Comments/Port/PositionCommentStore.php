@@ -15,7 +15,7 @@ interface PositionCommentStore
      */
     public function forPosition(string $hash, string $key, int $limit): array;
 
-    /** @return array{id: string, label: ?string, white: ?string, black: ?string, pgn: string, source: array{title: string, author: ?string, kind: string}}|null */
+    /** @return array{id: string, label: ?string, white: ?string, black: ?string, pgn: string, translations: array<string, string>, source: array{title: string, author: ?string, kind: string}}|null */
     public function game(string $id): ?array;
 
     /**
@@ -49,6 +49,27 @@ interface PositionCommentStore
      * @throws CommentsReadOnly when the database cannot be written
      */
     public function setTranslation(int $id, string $lang, string $text): bool;
+
+    /**
+     * Sets the PGN of a game in a language (language => pgn), replacing the one there. False when
+     * the game id is unknown.
+     *
+     * @throws CommentsReadOnly when the database cannot be written
+     */
+    public function setGameTranslation(string $gameId, string $lang, string $pgn): bool;
+
+    /**
+     * Adds a game of a book with its comments (and optional translations) in one transaction.
+     * The source is (kind 'book', title), reused when present; the game id is deterministic from
+     * title, chapter and PGN, so repeating a call adds no duplicate comment (same hash and text in
+     * that game). Input is validated by the caller. `translations` comment lists follow the order
+     * of `comments`; an empty string is skipped.
+     *
+     * @param array{book: array{title: string, author?: ?string, lang: string}, chapter: int, game: array{label?: ?string, white?: ?string, black?: ?string, pgn: string, comments: list<array{hash: string, key: string, ply: int, move: int, san: string, text: string}>, translations?: array<string, array{pgn?: string, comments?: list<string>}>}} $data
+     * @return array{gameId: string, sourceId: int, added: int, translated: int}
+     * @throws CommentsReadOnly when the database cannot be written
+     */
+    public function addBookGame(array $data): array;
 
     /**
      * The positions with most visible comments (a position = hash + key, the FEN without move

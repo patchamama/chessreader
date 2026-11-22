@@ -265,4 +265,157 @@ final class SqlitePositionCommentStoreTest extends TestCase
         self::assertCount(1, $store->top([], 1));
         self::assertSame([], (new SqlitePositionCommentStore(sys_get_temp_dir() . '/none-' . bin2hex(random_bytes(4)) . '.sqlite'))->top([], 50));
     }
+
+    /** @return array<string, mixed> */
+    private static function bookGame(array $over = []): array
+    {
+        return array_replace_recursive([
+            'book' => ['title' => 'New Invented Book', 'author' => 'B. Author', 'lang' => 'en'],
+            'chapter' => 2,
+            'game' => [
+                'label' => 'Game one', 'white' => 'W', 'black' => 'B', 'pgn' => '1. e4 e5 2. Nf3 *',
+                'comments' => [
+                    ['hash' => 'aaaaaaaaaaaaaaaa', 'key' => 'k1', 'ply' => 1, 'move' => 1, 'san' => 'e4', 'text' => 'The king pawn.'],
+                    ['hash' => 'bbbbbbbbbbbbbbbb', 'key' => 'k2', 'ply' => 2, 'move' => 1, 'san' => 'e5', 'text' => 'Symmetry.'],
+                ],
+            ],
+        ], $over);
+    }
+
+    public function test_game_has_no_translations_until_one_is_saved(): void
+    {
+        $store = new SqlitePositionCommentStore('', self::database());
+        self::assertSame([], $store->game('1-1')['translations']);
+        self::assertTrue($store->setGameTranslation('1-1', 'es', '1. e4 e5 {es}'));
+        self::assertTrue($store->setGameTranslation('1-1', 'es', '1. e4 e5 {es2}'));
+        self::assertTrue($store->setGameTranslation('1-1', 'fr', '1. e4 e5 {fr}'));
+        self::assertSame(['es' => '1. e4 e5 {es2}', 'fr' => '1. e4 e5 {fr}'], $store->game('1-1')['translations']);
+        self::assertSame([], $store->game('2-1')['translations']);
+        self::assertSame('1. e4 e5 *', $store->game('1-1')['pgn']);
+    }
+
+    public function test_set_game_translation_of_an_unknown_game_is_false(): void
+    {
+        self::assertFalse((new SqlitePositionCommentStore('', self::database()))->setGameTranslation('nope', 'es', 'x'));
+    }
+
+    public function test_set_game_translation_on_a_read_only_database_reports_it(): void
+    {
+        $file = sys_get_temp_dir() . '/comments-ro-' . bin2hex(random_bytes(4)) . '.sqlite';
+        self::database()->exec("VACUUM INTO '" . $file . "'");
+        chmod($file, 0444);
+        try {
+            $store = new SqlitePositionCommentStore($file);
+            $this->expectException(\App\Application\Comments\Port\CommentsReadOnly::class);
+            $store->setGameTranslation('1-1', 'es', 'x');
+        } finally {
+            chmod($file, 0644);
+            @unlink($file);
+        }
+    }
+
+    public function test_adds_a_book_game_with_its_source_comments_and_chapter(): void
+    {
+        $pdo = self::database();
+        $store = new SqlitePositionCommentStore('', $pdo);
+        $res = $store->addBookGame(self::bookGame());
+        self::assertSame('b' . substr(sha1('New Invented Book|2|1. e4 e5 2. Nf3 *'), 0, 12), $res['gameId']);
+        self::assertSame(2, $res['added']);
+        self::assertSame(0, $res['translated']);
+        $src = $pdo->query("SELECT * FROM comment_sources WHERE id = {$res['sourceId']}")->fetch(\PDO::FETCH_ASSOC);
+        self::assertSame(['book', 'New Invented Book', 'B. Author', 'en', 1], [$src['kind'], $src['title'], $src['author'], $src['lang'], (int) $src['priority']]);
+        $game = $store->game($res['gameId']);
+        self::assertSame('1. e4 e5 2. Nf3 *', $game['pgn']);
+        self::assertSame(['W', 'B', 'Game one'], [$game['white'], $game['black'], $game['label']]);
+        $row = $pdo->query("SELECT * FROM position_comments WHERE game_id = '{$res['gameId']}' ORDER BY id")->fetch(\PDO::FETCH_ASSOC);
+        self::assertSame(['aaaaaaaaaaaaaaaa', 'k1', 1, 1, 'e4', 'en', 'The king pawn.', 2], [
+            $row['hash'], $row['position'], (int) $row['ply'], (int) $row['move_number'], $row['san'], $row['lang'], $row['text'], (int) $row['chapter'],
+        ]);
+        self::assertSame($res['sourceId'], $store->list(['source' => $res['sourceId']], 0, 50)['comments'][0]['source']['id']);
+    }
+
+    public function test_adding_the_same_book_game_again_adds_nothing_and_reuses_the_source(): void
+    {
+        $pdo = self::database();
+        $store = new SqlitePositionCommentStore('', $pdo);
+        $first = $store->addBookGame(self::bookGame());
+        $again = $store->addBookGame(self::bookGame());
+        self::assertSame($first['gameId'], $again['gameId']);
+        self::assertSame($first['sourceId'], $again['sourceId']);
+        self::assertSame(0, $again['added']);
+        self::assertSame(2, (int) $pdo->query("SELECT COUNT(*) FROM position_comments WHERE game_id = '{$first['gameId']}'")->fetchColumn());
+        self::assertSame(1, (int) $pdo->query("SELECT COUNT(*) FROM comment_sources WHERE title = 'New Invented Book'")->fetchColumn());
+        self::assertSame(1, (int) $pdo->query("SELECT COUNT(*) FROM comment_games WHERE id = '{$first['gameId']}'")->fetchColumn());
+    }
+
+    public function test_a_repeated_comment_inside_one_game_is_stored_once(): void
+    {
+        $dup = ['hash' => 'aaaaaaaaaaaaaaaa', 'key' => 'k1', 'ply' => 1, 'move' => 1, 'san' => 'e4', 'text' => 'The king pawn.'];
+        $res = (new SqlitePositionCommentStore('', self::database()))->addBookGame(self::bookGame(['game' => ['comments' => [$dup, $dup]]]));
+        self::assertSame(1, $res['added']);
+    }
+
+    public function test_a_new_book_source_gets_the_highest_book_priority_in_use(): void
+    {
+        $pdo = self::database();
+        $pdo->exec("INSERT INTO comment_sources (id, kind, title, author, lang, priority) VALUES (3, 'book', 'Other Book', NULL, 'es', 5)");
+        $res = (new SqlitePositionCommentStore('', $pdo))->addBookGame(self::bookGame());
+        self::assertSame(5, (int) $pdo->query("SELECT priority FROM comment_sources WHERE id = {$res['sourceId']}")->fetchColumn());
+        $existing = (new SqlitePositionCommentStore('', $pdo))->addBookGame(self::bookGame(['book' => ['title' => 'Invented Book']]));
+        self::assertSame(1, $existing['sourceId']);
+    }
+
+    public function test_book_game_translations_go_to_comment_and_game_translations(): void
+    {
+        $pdo = self::database();
+        $store = new SqlitePositionCommentStore('', $pdo);
+        $res = $store->addBookGame(self::bookGame(['game' => ['translations' => [
+            'es' => ['pgn' => '1. e4 e5 {es} *', 'comments' => ['El peón rey.', 'Simetría.']],
+            'fr' => ['comments' => ['Le pion roi.', '']],
+        ]]]));
+        self::assertSame(3, $res['translated']);
+        self::assertSame(['es' => '1. e4 e5 {es} *'], $store->game($res['gameId'])['translations']);
+        $page = $store->list(['source' => $res['sourceId']], 0, 50);
+        self::assertSame(['es' => 'El peón rey.', 'fr' => 'Le pion roi.'], $page['comments'][0]['translations']);
+        self::assertSame(['es' => 'Simetría.'], $page['comments'][1]['translations']);
+        // Re-sending the translations updates them in place.
+        $store->addBookGame(self::bookGame(['game' => ['translations' => ['es' => ['comments' => ['Otro.', 'Simetría.']]]]]));
+        self::assertSame('Otro.', $store->list(['source' => $res['sourceId']], 0, 50)['comments'][0]['translations']['es']);
+    }
+
+    public function test_a_failed_book_game_ingest_leaves_nothing_behind(): void
+    {
+        $pdo = self::database();
+        $pdo->exec('CREATE TABLE game_translations (game_id TEXT NOT NULL)'); // wrong shape: the upsert fails
+        $store = new SqlitePositionCommentStore('', $pdo);
+        try {
+            $store->addBookGame(self::bookGame(['game' => ['translations' => ['es' => ['pgn' => 'x']]]]));
+            self::fail('expected a failure');
+        } catch (\Throwable) {
+        }
+        self::assertSame(0, (int) $pdo->query("SELECT COUNT(*) FROM comment_sources WHERE title = 'New Invented Book'")->fetchColumn());
+        self::assertSame(3, (int) $pdo->query('SELECT COUNT(*) FROM position_comments')->fetchColumn());
+    }
+
+    public function test_book_game_ingest_on_a_read_only_database_reports_it(): void
+    {
+        $file = sys_get_temp_dir() . '/comments-ro-' . bin2hex(random_bytes(4)) . '.sqlite';
+        self::database()->exec("VACUUM INTO '" . $file . "'");
+        chmod($file, 0444);
+        try {
+            $store = new SqlitePositionCommentStore($file);
+            $this->expectException(\App\Application\Comments\Port\CommentsReadOnly::class);
+            $store->addBookGame(self::bookGame());
+        } finally {
+            chmod($file, 0644);
+            @unlink($file);
+        }
+    }
+
+    public function test_book_game_ingest_works_on_an_older_database_without_the_newer_columns(): void
+    {
+        $pdo = self::database(false);
+        $res = (new SqlitePositionCommentStore('', $pdo))->addBookGame(self::bookGame());
+        self::assertSame(2, $res['added']);
+    }
 }

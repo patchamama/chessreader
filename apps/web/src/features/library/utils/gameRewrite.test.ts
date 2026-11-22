@@ -169,3 +169,22 @@ describe('game containers (study-tools-round S6)', () => {
     expect(root.innerHTML).toBe(before)
   })
 })
+
+describe('applyGameRewrites — comments printed before the first move', () => {
+  it('replaces the given number of lines before the game\'s first move as well', () => {
+    const html = [
+      '<p>Intro of the chapter.</p>',
+      '<p>Game 1</p>',
+      '<p>Anderssen – Kieseritzky</p>',
+      '<p>A long opening remark that comes before the very first move of this game.</p>',
+      '<p>1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#</p>',
+    ].join('\n')
+    const games = recognizeGames(htmlToProseText(html), { algorithm: 2 })
+    const out = applyGameRewrites(html, games, { 0: { text: 'Un comentario inicial largo antes de la primera jugada de esta partida.\n1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#', leading: 1 } })
+    const text = htmlToProseText(out)
+    expect(text).toContain('Un comentario inicial largo')
+    expect(text).not.toContain('A long opening remark')
+    expect(text).toContain('Anderssen – Kieseritzky')
+    expect(text).toContain('Intro of the chapter.')
+  })
+})

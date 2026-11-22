@@ -12,7 +12,7 @@ vi.mock('../library/commentdb/commentLookup', () => ({
   }),
 }))
 
-import { clearCommentListCache, deleteComment, loadTopPositions, hideComment, restoreComment, loadCommentGame, loadCommentPage, loadCommentSources, moveLabel } from './commentsApi'
+import { saveBookGame, clearCommentListCache, deleteComment, loadTopPositions, hideComment, restoreComment, loadCommentGame, loadCommentPage, loadCommentSources, moveLabel } from './commentsApi'
 
 const sources = { 1: { kind: 'book', title: 'Invented Book', author: 'A. Writer', lang: 'es', priority: 1, book: 'invented-book' }, 2: { kind: 'lichess', title: 'Lichess studies', author: null, lang: 'en', priority: 2, book: null } }
 const entry = (id: number, source: number, text: string, lang = 'en', chapter: number | null = null) => ({
@@ -176,5 +176,30 @@ describe('the most commented positions (S23)', () => {
     const top = await loadTopPositions({ lang: 'es', kind: 'book', q: ' caballo ', hidden: true }, 20)
     expect(http.mock.calls[0][0]).toBe('/api/comments/top?limit=20&q=caballo&lang=es&kind=book')
     expect(top[0].count).toBe(2)
+  })
+})
+
+describe('saveBookGame (a translated game goes to the database)', () => {
+  const game = {
+    book: { title: 'Invented Book', author: 'A. Writer', lang: 'en' }, chapter: 3,
+    game: {
+      label: 'Game 1', pgn: '1. e4 e5 *',
+      comments: [{ hash: '0123456789abcdef', key: '8/8/8/8/8/8/8/K6k w - -', ply: 2, move: 1, san: 'e5', text: 'A solid reply.' }],
+      translations: { es: { pgn: '1. e4 e5 *', comments: ['Una respuesta sólida.'] } },
+    },
+  }
+
+  it('posts the book, its game, the comments and their translations in one request (admin)', async () => {
+    http.mockResolvedValue({ gameId: 'b1', sourceId: 4, added: 1, translated: 1 })
+    const r = await saveBookGame(game)
+    expect(http).toHaveBeenCalledWith('/api/comments/book-games', { method: 'POST', body: JSON.stringify(game) })
+    expect(r).toEqual({ gameId: 'b1', sourceId: 4, added: 1, translated: 1 })
+  })
+
+  it('refreshes the comment lists afterwards', async () => {
+    http.mockResolvedValue({ gameId: 'b1', sourceId: 4, added: 0, translated: 0 })
+    files.set('comments-index/meta.json', {})
+    await saveBookGame(game)
+    expect(http).toHaveBeenCalledTimes(1)
   })
 })

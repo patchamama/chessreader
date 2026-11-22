@@ -78,7 +78,115 @@ final class CommentsController
     public function game(ServerRequestInterface $request, ResponseInterface $response, string $id): ResponseInterface
     {
         $game = $this->store->game($id);
-        return $game === null ? $this->json($response, ['error' => 'not found'], 404) : $this->json($response, $game);
+        if ($game === null) {
+            return $this->json($response, ['error' => 'not found'], 404);
+        }
+        $game['translations'] = (object) $game['translations']; // {} rather than [] when there are none
+        return $this->json($response, $game);
+    }
+
+    /** PUT /api/comments/games/{id}/translations/{lang} {pgn}: saves the PGN of a game in a language; 404 unknown game, 409 read-only. */
+    public function setGameTranslation(ServerRequestInterface $request, ResponseInterface $response, string $id, string $lang): ResponseInterface
+    {
+        $body = $request->getParsedBody();
+        $pgn = is_array($body) && is_string($body['pgn'] ?? null) ? trim($body['pgn']) : '';
+        if (!preg_match('/^[a-z]{2,3}$/', $lang) || $pgn === '' || mb_strlen($pgn) > self::MAX_PGN) {
+            return $this->json($response, ['error' => 'lang is a language code and pgn is 1 to 400000 characters'], 400);
+        }
+        try {
+            $found = $this->store->setGameTranslation($id, $lang, $pgn);
+        } catch (CommentsReadOnly) {
+            return $this->json($response, ['error' => self::READ_ONLY], 409);
+        }
+        return $found ? $this->json($response, ['saved' => $id, 'lang' => $lang]) : $this->json($response, ['error' => 'not found'], 404);
+    }
+
+    /**
+     * POST /api/comments/book-games {book, chapter, game}: adds a book game with its comments and
+     * translations to the database (see PositionCommentStore::addBookGame); 400 invalid, 409 read-only.
+     */
+    public function addBookGame(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
+    {
+        $data = $this->validBookGame($request->getParsedBody());
+        if ($data === null) {
+            return $this->json($response, ['error' => 'invalid book game'], 400);
+        }
+        try {
+            return $this->json($response, $this->store->addBookGame($data));
+        } catch (CommentsReadOnly) {
+            return $this->json($response, ['error' => self::READ_ONLY], 409);
+        }
+    }
+
+    private const MAX_PGN = 400000;
+    private const MAX_TEXT = 20000;
+    private const MAX_COMMENTS = 500;
+    private const READ_ONLY = 'The comments database is read-only on this server; change the comment where it is built';
+
+    /** @return ?array<string, mixed> the cleaned body, or null when anything is off */
+    private function validBookGame(mixed $body): ?array
+    {
+        $str = static fn(mixed $v, int $min, int $max): ?string => is_string($v) && mb_strlen(trim($v)) >= $min && mb_strlen($v) <= $max ? trim($v) : null;
+        $optional = static fn(mixed $v): ?string => is_string($v) && trim($v) !== '' ? mb_substr(trim($v), 0, 300) : null;
+        if (!is_array($body) || !is_array($body['book'] ?? null) || !is_array($body['game'] ?? null)) {
+            return null;
+        }
+        $title = $str($body['book']['title'] ?? null, 1, 300);
+        $lang = $body['book']['lang'] ?? null;
+        $chapter = $body['chapter'] ?? null;
+        $g = $body['game'];
+        $pgn = $str($g['pgn'] ?? null, 1, self::MAX_PGN);
+        if ($title === null || !is_string($lang) || !preg_match('/^[a-z]{2,3}$/', $lang) || !is_int($chapter) || $chapter < 0 || $pgn === null
+            || !is_array($g['comments'] ?? null) || !array_is_list($g['comments']) || count($g['comments']) > self::MAX_COMMENTS) {
+            return null;
+        }
+        $comments = [];
+        foreach ($g['comments'] as $c) {
+            $text = is_array($c) ? $str($c['text'] ?? null, 1, self::MAX_TEXT) : null;
+            $key = is_array($c) ? $str($c['key'] ?? null, 1, 200) : null;
+            $san = is_array($c) ? $str($c['san'] ?? null, 1, 20) : null;
+            if ($text === null || $key === null || $san === null || !is_string($c['hash'] ?? null) || !preg_match('/^[0-9a-f]{16}$/', $c['hash'])
+                || !is_int($c['ply'] ?? null) || $c['ply'] < 0 || !is_int($c['move'] ?? null) || $c['move'] < 0) {
+                return null;
+            }
+            $comments[] = ['hash' => $c['hash'], 'key' => $key, 'ply' => $c['ply'], 'move' => $c['move'], 'san' => $san, 'text' => $text];
+        }
+        $translations = [];
+        $rawTranslations = $g['translations'] ?? [];
+        if (!is_array($rawTranslations)) {
+            return null;
+        }
+        foreach ($rawTranslations as $tl => $t) {
+            if (!is_string($tl) || !preg_match('/^[a-z]{2,3}$/', $tl) || !is_array($t)) {
+                return null;
+            }
+            $entry = [];
+            if (array_key_exists('pgn', $t)) {
+                $tp = $str($t['pgn'], 1, self::MAX_PGN);
+                if ($tp === null) {
+                    return null;
+                }
+                $entry['pgn'] = $tp;
+            }
+            if (array_key_exists('comments', $t)) {
+                if (!is_array($t['comments']) || !array_is_list($t['comments']) || count($t['comments']) !== count($comments)) {
+                    return null;
+                }
+                foreach ($t['comments'] as $text) {
+                    if (!is_string($text) || mb_strlen($text) > self::MAX_TEXT) {
+                        return null;
+                    }
+                    $entry['comments'][] = trim($text);
+                }
+            }
+            $translations[$tl] = $entry;
+        }
+        return [
+            'book' => ['title' => $title, 'author' => $optional($body['book']['author'] ?? null), 'lang' => $lang],
+            'chapter' => $chapter,
+            'game' => ['label' => $optional($g['label'] ?? null), 'white' => $optional($g['white'] ?? null), 'black' => $optional($g['black'] ?? null),
+                'pgn' => $pgn, 'comments' => $comments, 'translations' => $translations],
+        ];
     }
 
     /** DELETE /api/comments/{id}: hides a comment (it stays in the database); 404 unknown, 409 read-only database. */

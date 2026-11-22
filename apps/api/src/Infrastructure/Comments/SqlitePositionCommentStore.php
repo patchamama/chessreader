@@ -55,7 +55,16 @@ final class SqlitePositionCommentStore implements PositionCommentStore
         if (!$r) {
             return null;
         }
+        $translations = [];
+        if ($this->hasColumn('game_translations', 'pgn')) {
+            $t = $pdo->prepare('SELECT lang, pgn FROM game_translations WHERE game_id = :id ORDER BY lang');
+            $t->execute([':id' => $id]);
+            foreach ($t->fetchAll(\PDO::FETCH_ASSOC) as $row) {
+                $translations[(string) $row['lang']] = (string) $row['pgn'];
+            }
+        }
         return ['id' => $r['id'], 'label' => $r['label'], 'white' => $r['white'], 'black' => $r['black'], 'pgn' => $r['pgn'],
+            'translations' => $translations,
             'source' => ['title' => $r['title'], 'author' => $r['author'], 'kind' => $r['kind']]];
     }
 
@@ -274,6 +283,139 @@ final class SqlitePositionCommentStore implements PositionCommentStore
             }
             throw $e;
         }
+    }
+
+    private const GAME_TRANSLATIONS_DDL = 'CREATE TABLE IF NOT EXISTS game_translations (game_id TEXT NOT NULL, lang TEXT NOT NULL, pgn TEXT NOT NULL, PRIMARY KEY (game_id, lang))';
+    private const GAME_TRANSLATION_UPSERT = 'INSERT INTO game_translations (game_id, lang, pgn) VALUES (:id, :lang, :pgn) ON CONFLICT (game_id, lang) DO UPDATE SET pgn = excluded.pgn';
+
+    public function setGameTranslation(string $gameId, string $lang, string $pgn): bool
+    {
+        $pdo = $this->pdo();
+        if ($pdo === null) {
+            return false;
+        }
+        try {
+            $pdo->exec(self::GAME_TRANSLATIONS_DDL);
+            $exists = $pdo->prepare('SELECT 1 FROM comment_games WHERE id = :id');
+            $exists->execute([':id' => $gameId]);
+            if (!$exists->fetchColumn()) {
+                return false;
+            }
+            $pdo->prepare(self::GAME_TRANSLATION_UPSERT)->execute([':id' => $gameId, ':lang' => $lang, ':pgn' => $pgn]);
+            $this->columns = [];
+            return true;
+        } catch (\PDOException $e) {
+            throw $this->readOnlyOr($e);
+        }
+    }
+
+    public function addBookGame(array $data): array
+    {
+        $pdo = $this->pdo();
+        if ($pdo === null) {
+            throw new CommentsReadOnly('The comments database is not available');
+        }
+        $book = $data['book'];
+        $game = $data['game'];
+        $chapter = $data['chapter'];
+        try {
+            $pdo->beginTransaction();
+            try {
+                $this->ensureCommentTables($pdo);
+                $sourceId = $this->bookSource($pdo, $book);
+                $gameId = 'b' . substr(sha1($book['title'] . '|' . $chapter . '|' . $game['pgn']), 0, 12);
+                $pdo->prepare('INSERT OR IGNORE INTO comment_games (id, source_id, white, black, label, pgn) VALUES (:id, :source, :white, :black, :label, :pgn)')
+                    ->execute([':id' => $gameId, ':source' => $sourceId, ':white' => $game['white'] ?? null, ':black' => $game['black'] ?? null,
+                        ':label' => $game['label'] ?? null, ':pgn' => $game['pgn']]);
+
+                $withMove = $this->hasColumn('position_comments', 'move_number');
+                $withChapter = $this->hasColumn('position_comments', 'chapter');
+                $find = $pdo->prepare('SELECT id FROM position_comments WHERE game_id = :game AND hash = :hash AND text = :text');
+                $cols = ['hash', 'position', 'game_id', 'ply', 'san', 'lang', 'text'] + ($withMove ? [7 => 'move_number'] : []) + ($withChapter ? [8 => 'chapter'] : []);
+                $insert = $pdo->prepare('INSERT INTO position_comments (' . implode(', ', $cols) . ') VALUES (:' . implode(', :', $cols) . ')');
+                $added = 0;
+                $ids = [];
+                foreach ($game['comments'] as $i => $c) {
+                    $find->execute([':game' => $gameId, ':hash' => $c['hash'], ':text' => $c['text']]);
+                    $id = $find->fetchColumn();
+                    if ($id === false) {
+                        $params = [':hash' => $c['hash'], ':position' => $c['key'], ':game_id' => $gameId, ':ply' => $c['ply'], ':san' => $c['san'],
+                            ':lang' => $book['lang'], ':text' => $c['text']];
+                        if ($withMove) {
+                            $params[':move_number'] = $c['move'];
+                        }
+                        if ($withChapter) {
+                            $params[':chapter'] = $chapter;
+                        }
+                        $insert->execute($params);
+                        $id = $pdo->lastInsertId();
+                        $added++;
+                    }
+                    $ids[$i] = (int) $id;
+                }
+
+                $translated = 0;
+                $upsert = $pdo->prepare('INSERT INTO comment_translations (comment_id, lang, text) VALUES (:id, :lang, :text) ON CONFLICT (comment_id, lang) DO UPDATE SET text = excluded.text');
+                foreach ($game['translations'] ?? [] as $lang => $t) {
+                    if (isset($t['pgn'])) {
+                        $pdo->prepare(self::GAME_TRANSLATION_UPSERT)->execute([':id' => $gameId, ':lang' => (string) $lang, ':pgn' => $t['pgn']]);
+                    }
+                    foreach ($t['comments'] ?? [] as $i => $text) {
+                        if ($text !== '' && isset($ids[$i])) {
+                            $upsert->execute([':id' => $ids[$i], ':lang' => (string) $lang, ':text' => $text]);
+                            $translated++;
+                        }
+                    }
+                }
+                $pdo->commit();
+            } catch (\Throwable $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                throw $e;
+            }
+        } catch (\PDOException $e) {
+            throw $this->readOnlyOr($e);
+        } finally {
+            $this->columns = [];
+        }
+        return ['gameId' => $gameId, 'sourceId' => $sourceId, 'added' => $added, 'translated' => $translated];
+    }
+
+    /** Creates the tables of the commentary database that a fresh file lacks (the build script's schema). */
+    private function ensureCommentTables(\PDO $pdo): void
+    {
+        $pdo->exec('CREATE TABLE IF NOT EXISTS comment_sources (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL, author TEXT, lang TEXT NOT NULL, priority INTEGER NOT NULL)');
+        $pdo->exec('CREATE TABLE IF NOT EXISTS comment_games (id TEXT PRIMARY KEY, source_id INTEGER NOT NULL REFERENCES comment_sources(id), white TEXT, black TEXT, label TEXT, pgn TEXT NOT NULL)');
+        $pdo->exec('CREATE TABLE IF NOT EXISTS position_comments (id INTEGER PRIMARY KEY, hash TEXT NOT NULL, position TEXT NOT NULL, game_id TEXT NOT NULL REFERENCES comment_games(id), ply INTEGER NOT NULL, san TEXT NOT NULL, lang TEXT NOT NULL, text TEXT NOT NULL)');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_position_comments_hash ON position_comments(hash)');
+        $pdo->exec('CREATE TABLE IF NOT EXISTS comment_translations (comment_id INTEGER NOT NULL REFERENCES position_comments(id), lang TEXT NOT NULL, text TEXT NOT NULL, PRIMARY KEY (comment_id, lang))');
+        $pdo->exec(self::GAME_TRANSLATIONS_DDL);
+        $this->columns = [];
+    }
+
+    /** The id of the book source with this title, created (at the highest book priority in use, or 1) when absent. */
+    private function bookSource(\PDO $pdo, array $book): int
+    {
+        $st = $pdo->prepare("SELECT id FROM comment_sources WHERE kind = 'book' AND title = :title ORDER BY id LIMIT 1");
+        $st->execute([':title' => $book['title']]);
+        $id = $st->fetchColumn();
+        if ($id !== false) {
+            return (int) $id;
+        }
+        $priority = (int) ($pdo->query("SELECT MAX(priority) FROM comment_sources WHERE kind = 'book'")->fetchColumn() ?: 1);
+        $pdo->prepare("INSERT INTO comment_sources (kind, title, author, lang, priority) VALUES ('book', :title, :author, :lang, :priority)")
+            ->execute([':title' => $book['title'], ':author' => $book['author'] ?? null, ':lang' => $book['lang'], ':priority' => $priority]);
+        return (int) $pdo->lastInsertId();
+    }
+
+    private function readOnlyOr(\PDOException $e): \Throwable
+    {
+        $m = strtolower($e->getMessage());
+        if (str_contains($m, 'readonly') || str_contains($m, 'read-only') || str_contains($m, 'unable to open')) {
+            return new CommentsReadOnly('The comments database is read-only', 0, $e);
+        }
+        return $e;
     }
 
     /** Hides or restores one comment; its row and translations stay. The tombstone keeps "hidden" across rebuilds. */
