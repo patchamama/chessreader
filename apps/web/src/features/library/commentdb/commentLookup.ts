@@ -200,18 +200,26 @@ const lacksText = (c: HumanComment, lang: string) => !c.translations?.[lang] && 
  * For each position of a reviewed game that an author commented (after the
  * opening), the best remark: the preferred source first (books by default),
  * then in the reader's language. Keyed by ply (1-based), ready for
- * annotateGame's `human` option. With `translate`, a chosen remark without a
+ * annotateGame's `human` option. A remark from a source game is followed: while
+ * the next commented positions also have a remark of that same game (the games
+ * run together), that game keeps being the source, before any other preference,
+ * until it has none. With `translate`, a chosen remark without a
  * text in the reader's language is asked for, falling back to its own text.
  */
 export async function humanCommentsForGame(plies: Array<{ fenAfter: string }>, lang: Lang, max = 15, options: BorrowOptions = {}): Promise<Record<number, { text: string; source: string }>> {
   const priority = options.priority ?? useSettingsStore.getState().commentSourcePriority ?? 'books'
   const out: Record<number, { text: string; source: string }> = {}
+  // The database game the last remark came from: followed while it goes on commenting the same game.
+  let following: string | null = null
   for (let i = FIRST_PLY; i < plies.length && Object.keys(out).length < max; i++) {
     const found = await lookupPositionComments(plies[i].fenAfter)
     if (!found.length) continue
     const pool = candidates(found, priority)
-    // Normalized before raw; then in the reader's language (written or translated) before any other.
-    const best = [...pool].sort((x, y) => rank(x, lang) - rank(y, lang))[0]
+    // The followed game first; then normalized before raw, and in the reader's language (written or translated) before any other.
+    const byRank = (list: HumanComment[]) => [...list].sort((x, y) => rank(x, lang) - rank(y, lang))
+    const sameGame: HumanComment[] = following ? pool.filter((c) => c.gameId === following) : []
+    const best: HumanComment = (sameGame.length ? byRank(sameGame) : byRank(pool))[0]
+    following = best.gameId
     let text = commentTextFor(best, lang)
     const ask = options.translate && lacksText(best, lang) ? options.translate : !normalized(best) && !best.translations?.[lang] ? options.normalize : undefined
     if (ask) {

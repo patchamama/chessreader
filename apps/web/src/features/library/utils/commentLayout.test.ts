@@ -38,13 +38,19 @@ describe('study PGN: comments of a variation stay inside it, one line (Chess Fun
     expect(out).not.toContain('{')
   })
 
-  it('the main line goes on in a new line after the variation, before white\'s move number (7. Tc7)', () => {
+  it('the main line goes on in a new line after ANY variation that closes (6... Rb8, 7. Tc7)', () => {
     expect(bracesToParagraphs(A)).toBe([
-      '6. Rd6 (6. Rc6? the Black King will go back to 6... Rd8 and it will take much longer to mate.) 6... Rb8',
+      '6. Rd6 (6. Rc6? the Black King will go back to 6... Rd8 and it will take much longer to mate.)',
+      '6... Rb8',
       'If now the King moves back to d8, Ra8 mates at once.',
       '(6... Rd8 7. Ta8#)',
       '7. Tc7 Ra8 8. Rc6 Rb8 9. Rb6 Ra8 10. Tc8# *',
     ].join('\n'))
+  })
+
+  it('variations side by side stay together, and a black move after one also starts a line', () => {
+    expect(bracesToParagraphs('1. e4 { Good. } (1. d4 d5) (1. c4 e5) 1... e5 2. Nf3')).toBe('1. e4\nGood.\n(1. d4 d5) (1. c4 e5)\n1... e5 2. Nf3')
+    expect(bracesToParagraphs('1. e4 e5 (1... c5 { The Sicilian. } 2. Nf3) 2. Nf3 Nc6 { Fine. } 3. Bb5')).toBe('1. e4 e5 (1... c5 The Sicilian. 2. Nf3)\n2. Nf3 Nc6\nFine.\n3. Bb5')
   })
 
   it('a comment that opens with a comma or a period loses it; one inside a variation joins the move it follows', () => {

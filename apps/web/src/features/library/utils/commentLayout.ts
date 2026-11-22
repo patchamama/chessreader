@@ -32,8 +32,7 @@ const LEADING_PUNCTUATION = /^[,.;:]\s*/
  * Comments in braces → paragraphs after their move. Parentheses are variations:
  * their comments stay INSIDE them, on the same line, without braces ("(6. Rc6?
  * { the king goes back } 6... Rd8)" → "(6. Rc6? the king goes back 6... Rd8)"); the
- * main line goes on in a new line after a variation when white's move number
- * follows ("(6... Rd8 7. Ta8#)\n7. Tc7"), and a move number is only added where
+ * main line goes on in a new line after a variation ("(6... Rd8 7. Ta8#)\n7. Tc7"), and a move number is only added where
  * a black move continues a main line that a comment cut ("2... Nc6"), never in
  * front of a variation. A comment that opens with a comma or a period loses it.
  */
@@ -45,7 +44,6 @@ export function bracesToParagraphs(text: string): string {
   let depth = 0
   let cut = false // a comment cut the main line: its continuation may need a move number
   let afterVariation = false
-  let variationLine = false // the variation that just closed opened its own line
   const flush = () => { const t = cur.trim(); if (t) lines.push(t); cur = '' }
   const put = (chunk: string) => { cur += chunk; if (depth === 0) main += chunk }
   const space = () => { if (cur !== '' && !/[\s(]$/.test(cur)) cur += ' ' }
@@ -80,12 +78,12 @@ export function bracesToParagraphs(text: string): string {
     }
     if (afterVariation && depth === 0 && ch !== '(') {
       afterVariation = false
-      // The main line goes on in a new line after a variation that opened its own line, and always before
-      // white's move number: "(6... Rd8 7. Ta8#)\n7. Tc7". After a variation in mid-line it goes on in the line.
-      if (variationLine || /^\d{1,3}\.(?!\.)/.test(text.slice(i))) flush()
+      // The main line goes on in a new line after a variation that closes: "(6... Rd8 7. Ta8#)\n7. Tc7"
+      // (variations side by side stay together: only a "(" keeps the line).
+      flush()
     }
     if (ch === '(') depth++
-    else if (ch === ')' && depth > 0) { depth--; if (depth === 0) { afterVariation = true; variationLine = cur.trimStart().startsWith('(') } }
+    else if (ch === ')' && depth > 0) { depth--; if (depth === 0) afterVariation = true }
     put(ch)
     i++
   }

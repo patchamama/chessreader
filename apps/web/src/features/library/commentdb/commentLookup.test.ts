@@ -63,6 +63,47 @@ describe('humanCommentsForGame (S5)', () => {
   })
 })
 
+describe('comments of a commented game keep following the same source game', () => {
+  const F = ['8/8/8/8/8/8/8/K1k5 w - - 0 1', '8/8/8/8/8/8/8/K2k4 w - - 0 1', '8/8/8/8/8/8/8/K3k3 w - - 0 1', '8/8/8/8/8/8/8/K4k2 w - - 0 1']
+  const entry = (id: number, game: string, text: string, extra: object = {}) => ({ id, text, lang: 'es', game, ply: 20, san: 'Nf3', source: 3, label: game, ...extra })
+  const shard = {
+    [positionHash(F[0])]: [entry(1, 'g2', 'solo g2 en 10')],
+    [positionHash(F[1])]: [entry(2, 'g1', 'g1 en 11'), entry(3, 'g2', 'g2 en 11')],
+    [positionHash(F[2])]: [entry(4, 'g1', 'solo g1 en 12')],
+    [positionHash(F[3])]: [entry(5, 'g2', 'g2 en 13'), entry(6, 'g1', 'g1 en 13')],
+  }
+  const plies = Array.from({ length: 14 }, (_, i) => ({ fenAfter: i >= 9 && i <= 12 ? F[i - 9] : `8/8/8/8/8/8/8/k${i}K w - - 0 1` }))
+  const run = async (custom: object = shard) => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('index.json') ? INDEX : custom), { status: 200 })))
+    return humanCommentsForGame(plies, 'es')
+  }
+
+  it('once a remark comes from a source game, the next positions take the remark of that same game while it has one', async () => {
+    const human = await run()
+    expect(Object.fromEntries(Object.entries(human).map(([ply, c]) => [ply, c.text]))).toEqual({
+      10: 'solo g2 en 10',
+      11: 'g2 en 11', // g1 is listed first, but g2 is the game being followed
+      12: 'solo g1 en 12', // g2 has nothing here: the source changes
+      13: 'g1 en 13', // and now g1 is followed
+    })
+  })
+
+  it('the preferred kind of source still decides which remarks are candidates', async () => {
+    const lichessIndex = { ...INDEX, sources: { ...INDEX.sources, 3: { kind: 'lichess', title: 'Lichess studies', author: null, lang: 'es', priority: 2 } } }
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db', commentSourcePriority: 'books' })
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('index.json') ? lichessIndex : shard), { status: 200 })))
+    const human = await humanCommentsForGame(plies, 'es')
+    expect(human[11].text).toBe('g2 en 11')
+  })
+
+  it('a remark with a normalized text of its own game keeps beating nothing: without a followed game the usual preference applies', async () => {
+    const first = { [positionHash(F[0])]: [entry(7, 'g1', 'crudo g1 en 10'), entry(8, 'g2', 'normalizado g2 en 10', { translations: { es: 'normalizado g2 en 10' } })] }
+    const human = await run(first)
+    expect(human[10].text).toBe('normalizado g2 en 10')
+  })
+})
+
 describe('translated comments reach the reader (llm-assistant-round S3/S12)', () => {
   it('a comment translated into the reader\'s language is used in that language, keeping its source', async () => {
     useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
