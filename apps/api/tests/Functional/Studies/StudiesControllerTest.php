@@ -132,6 +132,18 @@ final class StudiesControllerTest extends TestCase
         self::assertSame('AAAAAAAA', $r['imported'][1]['groupId']);
     }
 
+    public function test_token_validation_on_import_and_user_listing(): void
+    {
+        [$app, $user] = $this->app();
+        self::assertSame(422, $this->call($app, 'POST', '/api/studies/import', $user, ['ref' => 'AAAAAAAA', 'token' => 'short'])->getStatusCode());
+        self::assertSame(422, $this->call($app, 'POST', '/api/studies/import', $user, ['ref' => 'AAAAAAAA', 'token' => str_repeat('a', 20) . '!'])->getStatusCode());
+        $ok = $this->call($app, 'POST', '/api/studies/import', $user, ['ref' => 'AAAAAAAA', 'token' => 'lip_' . str_repeat('a', 20)]);
+        self::assertSame(200, $ok->getStatusCode());
+        self::assertStringNotContainsString('lip_aaaa', (string) $ok->getBody());
+        self::assertSame(422, $this->call($app, 'GET', '/api/studies/lichess/user/alice?token=bad', $user)->getStatusCode());
+        self::assertSame(200, $this->call($app, 'GET', '/api/studies/lichess/user/alice?token=' . str_repeat('b', 24), $user)->getStatusCode());
+    }
+
     public function test_sync_comments_and_user_listing(): void
     {
         [$app, $user] = $this->app();

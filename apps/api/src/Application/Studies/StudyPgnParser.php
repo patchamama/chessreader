@@ -13,15 +13,15 @@ final class StudyPgnParser
     public function parse(string $pgn, string $id): array
     {
         $chapters = (int) preg_match_all('/^\[Event "/m', $pgn);
-        $name = preg_match('/^\[StudyName "([^"]*)"\]/m', $pgn, $m) ? trim($m[1]) : '';
+        $name = $this->tag($pgn, 'StudyName') ?? $this->tag($pgn, 'Event') ?? '';
 
         $authors = [];
-        if (preg_match_all('#^\[Annotator "https?://lichess\.org/@/([^"/]+)"\]#m', $pgn, $m)) {
+        if (preg_match_all('#^\[Annotator "https?://lichess\.org/@/([^"/\\\\]+)"\]#m', $pgn, $m)) {
             $authors = array_count_values($m[1]);
             arsort($authors);
         }
 
-        $chapterUrls = preg_match_all('/^\[ChapterURL "([^"]+)"\]/m', $pgn, $m) ? $m[1] : [];
+        $chapterUrls = preg_match_all('/^\[ChapterURL "((?:[^"\\\\]|\\\\.)+)"\]/m', $pgn, $m) ? array_map($this->unescape(...), $m[1]) : [];
 
         $links = [];
         $commentCount = 0;
@@ -56,5 +56,20 @@ final class StudyPgnParser
             'chapterUrls' => $chapterUrls,
             'updatedAt' => $updated,
         ];
+    }
+
+    /** The unescaped value of the first non-empty header of that name. */
+    private function tag(string $pgn, string $name): ?string
+    {
+        if (preg_match('/^\[' . $name . ' "((?:[^"\\\\]|\\\\.)*)"\]/m', $pgn, $m)) {
+            $v = trim($this->unescape($m[1]));
+            return $v === '' ? null : $v;
+        }
+        return null;
+    }
+
+    private function unescape(string $v): string
+    {
+        return preg_replace('/\\\\(["\\\\])/', '$1', $v) ?? $v;
     }
 }

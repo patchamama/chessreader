@@ -22,10 +22,10 @@ final class ImportStudiesHandler
 
     /**
      * @param list<string> $parts extra study refs appended to the group
-     * @return array{imported: list<array<string, mixed>>, skipped: list<array{id: string, reason: string}>, linked: list<string>, errors: list<array<string, mixed>>}
+     * @return array{imported: list<array<string, mixed>>, skipped: list<array{id: string, reason: string}>, linked: list<string>, errors: list<array<string, mixed>>, warnings: list<array{id: string, message: string}>}
      * @throws \InvalidArgumentException when a reference is not a study
      */
-    public function handle(string $ref, bool $follow, int $depth, int $max, array $parts, ?int $userId): array
+    public function handle(string $ref, bool $follow, int $depth, int $max, array $parts, ?int $userId, ?string $token = null): array
     {
         $root = StudyRef::id($ref) ?? throw new \InvalidArgumentException('ref must be a Lichess study URL or an 8-character study id');
         $partIds = [];
@@ -47,6 +47,7 @@ final class ImportStudiesHandler
         $skipped = [];
         $errors = [];
         $linked = [];
+        $warnings = [];
         $seen = [$root => true];
         $queue = [[$root, 0]];
         foreach ($partIds as $p) {
@@ -68,14 +69,27 @@ final class ImportStudiesHandler
                 $skipped[] = ['id' => $id, 'reason' => "not imported: the limit of {$max} studies was reached"];
                 continue;
             }
+            // Each study gets a fresh PHP time budget: a big export must not end in an HTML fatal.
+            if (function_exists('set_time_limit')) {
+                @set_time_limit(300);
+            }
             try {
-                $pgn = $this->source->exportPgn($id);
+                $pgn = $this->source->exportPgn($id, $token);
+                $info = $this->parser->parse($pgn, $id);
             } catch (LichessStudyException $e) {
-                $errors[] = ['id' => $id, 'message' => $e->getMessage()] + ($e->retryAfter !== null ? ['retryAfter' => $e->retryAfter] : []);
+                $errors[] = ['id' => $id, 'message' => $e->getMessage()]
+                    + ($e->retryAfter !== null ? ['retryAfter' => $e->retryAfter] : [])
+                    + ($e->needsToken ? ['needsToken' => true] : []);
                 $stopped = $e->status === 429;
                 continue;
+            } catch (\Throwable $e) {
+                error_log('study import failed for ' . $id . ': ' . get_class($e));
+                $errors[] = ['id' => $id, 'message' => "could not import study {$id}"];
+                continue;
             }
-            $info = $this->parser->parse($pgn, $id);
+            if ($info['author'] === null) {
+                $warnings[] = ['id' => $id, 'message' => 'the study has no Annotator header: its author is unknown'];
+            }
             $order++;
             $this->studies->save($info, $pgn, 'lichess', $grouped ? $root : null, $grouped ? $order : null, $grouped, $userId);
             $imported[] = $id;
@@ -116,6 +130,6 @@ final class ImportStudiesHandler
                 $studies[] = $row;
             }
         }
-        return ['imported' => $studies, 'skipped' => $skipped, 'linked' => array_keys($linked), 'errors' => $errors];
+        return ['imported' => $studies, 'skipped' => $skipped, 'linked' => array_keys($linked), 'errors' => $errors, 'warnings' => $warnings];
     }
 }

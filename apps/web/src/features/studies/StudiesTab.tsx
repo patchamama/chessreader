@@ -24,6 +24,21 @@ function LikesInput({ study, onSave }: { study: Study; onSave: (v: number | null
   )
 }
 
+const TOKEN_URL = 'https://lichess.org/account/oauth/token/create?scopes[]=study:read&description=Chess+ebook+studies'
+
+/** Optional Lichess token; lives in component state only. */
+function TokenField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+      <label className="flex items-center gap-1">Lichess token (optional — only for private studies you can open with your account; scope study:read)
+        <input type="password" autoComplete="off" aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className="w-56 rounded border border-slate-300 px-1" />
+      </label>
+      <a className="underline" href={TOKEN_URL} target="_blank" rel="noopener noreferrer">Create a token</a>
+      <button type="button" className="rounded border border-slate-300 px-2" onClick={() => onChange('')}>Forget</button>
+    </div>
+  )
+}
+
 /** Database → Studies: the imported Lichess studies, their import and opening as books. */
 export default function StudiesTab({ client = studiesApi }: { client?: StudiesClient }) {
   const navigate = useNavigate()
@@ -43,6 +58,9 @@ export default function StudiesTab({ client = studiesApi }: { client?: StudiesCl
   const [summary, setSummary] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const cancelled = useRef(false)
+  const [token, setToken] = useState('')
+  const [needToken, setNeedToken] = useState<string[]>([])
+  const tokenOpt = () => (token.trim() ? { token: token.trim() } : {})
   // author listing
   const [handle, setHandle] = useState('')
   const [userStudies, setUserStudies] = useState<UserStudy[] | null>(null)
@@ -95,16 +113,18 @@ export default function StudiesTab({ client = studiesApi }: { client?: StudiesCl
       case 'done': return [
         `✓ ${e.id}: imported ${plural(e.result.imported.length, 'study').replace(/study$/, 'study').replace('studys', 'studies')}`,
         ...e.result.skipped.map((s) => `skipped ${s.id}: ${s.reason}`),
-        ...e.result.errors.map((x) => `⚠ ${x.id}: ${x.message}`),
+        ...e.result.errors.map((x) => (x.needsToken ? `${x.id}: 🔒 private — add a Lichess token above and import again` : `⚠ ${x.id}: ${x.message}`)),
       ].join('; ')
     }
   }
 
-  const startImport = async (refs: string[], options: { follow?: boolean; parts?: string[] }) => {
+  const startImport = async (refs: string[], base: { follow?: boolean; parts?: string[] }) => {
     if (!refs.length || importing) return
     cancelled.current = false
-    setImporting(true); setLines([]); setSummary(null)
+    setImporting(true); setLines([]); setSummary(null); setNeedToken([])
+    const options = { ...base, ...tokenOpt() }
     const sum = await runImport(client, refs, options, (e) => {
+      if (e.type === 'done') { const ids = e.result.errors.filter((x) => x.needsToken).map((x) => x.id); if (ids.length) setNeedToken((cur) => [...cur, ...ids]) }
       const l = describe(e)
       if (l) setLines((cur) => (e.type === 'start' ? [...cur, l] : [...cur.slice(0, e.type === 'wait' ? cur.length : -1), l]))
     }, { isCancelled: () => cancelled.current })
@@ -121,7 +141,7 @@ export default function StudiesTab({ client = studiesApi }: { client?: StudiesCl
 
   const listUser = async () => {
     try {
-      const r = await client.listUser(handle.trim().replace(/^@/, ''))
+      const r = await client.listUser(handle.trim().replace(/^@/, ''), token.trim() || undefined)
       setUserStudies(r.studies); setPicked(new Set()); setError(null)
     } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
   }
@@ -146,6 +166,10 @@ export default function StudiesTab({ client = studiesApi }: { client?: StudiesCl
           <button className="rounded bg-blue-600 px-3 py-1 text-white disabled:opacity-50" disabled={importing || !parseRefs(links).length} onClick={importLinks}>Import</button>
           {importing && <button className="rounded border border-slate-300 px-2 py-1" onClick={() => { cancelled.current = true }}>Cancel</button>}
         </div>
+        <TokenField label="Lichess token for import" value={token} onChange={setToken} />
+        {needToken.length > 0 && !importing && (
+          <button className="mt-1 rounded border border-amber-400 px-2 py-0.5 text-xs" onClick={() => void startImport(needToken, {})}>Retry with token</button>
+        )}
         {(lines.length > 0 || summary) && (
           <div aria-live="polite" className="mt-2 text-xs">
             <ul>{lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
@@ -160,6 +184,7 @@ export default function StudiesTab({ client = studiesApi }: { client?: StudiesCl
           <input aria-label="Lichess handle" value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="handle" className="rounded border border-slate-300 px-1 py-0.5" />
           <button className="rounded border border-slate-300 px-2 py-0.5" disabled={!handle.trim()} onClick={() => void listUser()}>List studies</button>
         </div>
+        <TokenField label="Lichess token for author listing" value={token} onChange={setToken} />
         {userStudies && (
           <div className="mt-2">
             <table className="w-full text-xs">

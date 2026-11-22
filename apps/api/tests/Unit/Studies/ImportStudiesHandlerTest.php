@@ -110,6 +110,46 @@ final class ImportStudiesHandlerTest extends TestCase
         self::assertSame('ZZZZZZZZ', $r['errors'][0]['id']);
     }
 
+    public function test_anonymous_private_study_asks_for_a_token(): void
+    {
+        $r = $this->handler(['ZZZZZZZZ' => new LichessStudyException(403, 'study ZZZZZZZZ is private or not accessible without a Lichess token', null, true)])
+            ->handle('ZZZZZZZZ', false, 3, 40, [], 1);
+        self::assertTrue($r['errors'][0]['needsToken']);
+    }
+
+    public function test_the_token_reaches_the_source_and_is_not_echoed(): void
+    {
+        $h = $this->handler($this->book(), $source);
+        $r = $h->handle('AAAAAAAA', true, 2, 40, [], 1, 'tok_0123456789abcdefghij');
+        self::assertSame(array_fill(0, count($source->tokens), 'tok_0123456789abcdefghij'), $source->tokens);
+        self::assertStringNotContainsString('tok_0123456789', json_encode($r));
+    }
+
+    public function test_unexpected_failures_become_error_entries(): void
+    {
+        $source = new class () implements \App\Application\Studies\LichessStudySource {
+            public function exportPgn(string $id, ?string $token = null): string
+            {
+                throw new \RuntimeException('boom');
+            }
+            public function listUserStudies(string $handle, ?string $token = null): array
+            {
+                return [];
+            }
+        };
+        $r = (new ImportStudiesHandler($source, $this->repo, new StudyPgnParser()))->handle('AAAAAAAA', false, 3, 40, [], 1);
+        self::assertSame('AAAAAAAA', $r['errors'][0]['id']);
+        self::assertSame([], $r['imported']);
+    }
+
+    public function test_missing_annotator_is_reported_as_a_warning(): void
+    {
+        $r = $this->handler(['AAAAAAAA' => "[Event \"E\"]\n[StudyName \"S\"]\n\n1. e4 *\n"])->handle('AAAAAAAA', false, 3, 40, [], 1);
+        self::assertNull($r['imported'][0]['author']);
+        self::assertSame('AAAAAAAA', $r['warnings'][0]['id']);
+        self::assertStringContainsString('author', $r['warnings'][0]['message']);
+    }
+
     public function test_invalid_ref_is_rejected(): void
     {
         $this->expectException(\InvalidArgumentException::class);

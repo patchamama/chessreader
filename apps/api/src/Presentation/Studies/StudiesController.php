@@ -65,6 +65,10 @@ final class StudiesController
         if (!is_string($ref) || !is_array($parts) || !array_is_list($parts)) {
             return $this->json($response, ['error' => 'ref (a study URL or id) is required; parts must be a list'], 422);
         }
+        $token = $this->token($request, $body['token'] ?? null);
+        if ($token === false) {
+            return $this->json($response, ['error' => 'token must be a Lichess personal access token (20-100 letters, digits or underscores)'], 422);
+        }
         $int = static fn (mixed $v, int $default): int => is_int($v) ? $v : $default;
         try {
             $result = $this->import->handle(
@@ -74,9 +78,13 @@ final class StudiesController
                 $int($body['max'] ?? null, 40),
                 $parts,
                 $this->userId($request),
+                $token,
             );
         } catch (\InvalidArgumentException $e) {
             return $this->json($response, ['error' => $e->getMessage()], 422);
+        } catch (\Throwable) {
+            error_log('study import failed');
+            return $this->json($response, ['error' => 'the import failed unexpectedly'], 500);
         }
         return $this->json($response, $result);
     }
@@ -86,8 +94,13 @@ final class StudiesController
         if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,28}$/', $handle)) {
             return $this->json($response, ['error' => 'invalid Lichess handle'], 422);
         }
+        $q = $request->getQueryParams()['token'] ?? null;
+        $token = $this->token($request, $q);
+        if ($token === false) {
+            return $this->json($response, ['error' => 'token must be a Lichess personal access token (20-100 letters, digits or underscores)'], 422);
+        }
         try {
-            $list = $this->lichess->listUserStudies($handle);
+            $list = $this->lichess->listUserStudies($handle, $token);
         } catch (LichessStudyException $e) {
             return $this->lichessError($response, $e);
         }
@@ -137,6 +150,19 @@ final class StudiesController
         };
         $out = $this->json($response, ['error' => $e->getMessage()] + ($e->retryAfter !== null ? ['retryAfter' => $e->retryAfter] : []), $status);
         return $e->retryAfter !== null ? $out->withHeader('Retry-After', (string) $e->retryAfter) : $out;
+    }
+
+    /** The per-request Lichess token (header X-Lichess-Token or the given value): null when absent, false when malformed. */
+    private function token(ServerRequestInterface $request, mixed $given): string|false|null
+    {
+        $value = $request->getHeaderLine('X-Lichess-Token');
+        if ($value === '') {
+            $value = $given;
+        }
+        if ($value === null || $value === '') {
+            return null;
+        }
+        return is_string($value) && preg_match('/^[A-Za-z0-9_]{20,100}$/', $value) ? $value : false;
     }
 
     /** @return array<string, mixed>|null */

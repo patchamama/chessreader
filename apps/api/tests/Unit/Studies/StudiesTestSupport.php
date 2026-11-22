@@ -25,15 +25,18 @@ final class StudiesTestSupport
         return new class ($studies) implements LichessStudySource {
             /** @var list<string> */
             public array $calls = [];
+            /** @var list<?string> */
+            public array $tokens = [];
 
             /** @param array<string, string|LichessStudyException> $studies */
             public function __construct(private array $studies)
             {
             }
 
-            public function exportPgn(string $id): string
+            public function exportPgn(string $id, ?string $token = null): string
             {
                 $this->calls[] = $id;
+                $this->tokens[] = $token;
                 $r = $this->studies[$id] ?? new LichessStudyException(404, "study {$id} not found");
                 if ($r instanceof LichessStudyException) {
                     throw $r;
@@ -41,8 +44,9 @@ final class StudiesTestSupport
                 return $r;
             }
 
-            public function listUserStudies(string $handle): array
+            public function listUserStudies(string $handle, ?string $token = null): array
             {
+                $this->tokens[] = $token;
                 return [['id' => 'AAAAAAAA', 'name' => 'One', 'createdAt' => '2024-01-01T00:00:00Z', 'updatedAt' => '2024-01-02T00:00:00Z']];
             }
         };

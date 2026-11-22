@@ -33,6 +33,22 @@ final class StudyPgnParserTest extends TestCase
         self::assertSame('bob', (new StudyPgnParser())->parse($a . "\n" . $b, 'AAAAAAAA')['author']);
     }
 
+    public function test_escaped_quotes_in_tag_values_are_unescaped(): void
+    {
+        $pgn = "[Event \"Invented Guide: Chapter 1\"]\n[StudyName \"\\\"Invented Guide, by A. Writer\\\" (Part 1 of 3)\"]\n"
+            . "[Annotator \"https://lichess.org/@/zed\"]\n\n1. e4 *\n";
+        $info = (new StudyPgnParser())->parse($pgn, 'AAAAAAAA');
+        self::assertSame('"Invented Guide, by A. Writer" (Part 1 of 3)', $info['name']);
+    }
+
+    public function test_name_falls_back_to_the_first_event_before_the_id(): void
+    {
+        $pgn = "[Event \"Only Event\"]\n\n1. e4 *\n[Event \"Second\"]\n\n1. d4 *\n";
+        $info = (new StudyPgnParser())->parse($pgn, 'AAAAAAAA');
+        self::assertSame('Only Event', $info['name']);
+        self::assertNull($info['author']);
+    }
+
     public function test_empty_or_headerless_pgn_falls_back(): void
     {
         $info = (new StudyPgnParser())->parse('', 'AAAAAAAA');

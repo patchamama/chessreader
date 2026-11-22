@@ -71,7 +71,7 @@ final class LichessStudyClientTest extends TestCase
     public function test_404_and_403_are_clear_errors(): void
     {
         $c = $this->client([new Response(404), new Response(403)]);
-        foreach ([404 => 'not found', 403 => 'private'] as $status => $word) {
+        foreach ([404 => 'private or not accessible without a Lichess token', 403 => 'private or not accessible without a Lichess token'] as $status => $word) {
             try {
                 $c->exportPgn('AAAAAAAA');
                 self::fail('expected exception');
@@ -80,6 +80,42 @@ final class LichessStudyClientTest extends TestCase
                 self::assertStringContainsString($word, $e->getMessage());
             }
         }
+    }
+
+    public function test_anonymous_failures_ask_for_a_token_and_token_failures_do_not_leak_it(): void
+    {
+        $c = $this->client([new Response(403)]);
+        try {
+            $c->exportPgn('AAAAAAAA');
+            self::fail('expected exception');
+        } catch (LichessStudyException $e) {
+            self::assertTrue($e->needsToken);
+        }
+        $c = $this->client([new Response(403)]);
+        try {
+            $c->exportPgn('AAAAAAAA', 'per_request_token_0123456789');
+            self::fail('expected exception');
+        } catch (LichessStudyException $e) {
+            self::assertFalse($e->needsToken);
+            self::assertStringNotContainsString('per_request_token', $e->getMessage());
+        }
+    }
+
+    public function test_per_request_token_wins_over_the_env_token(): void
+    {
+        $c = $this->client([new Response(200, [], 'x'), new Response(200, [], 'y')], 'env_token');
+        $c->exportPgn('AAAAAAAA', 'per_request_token_0123456789');
+        self::assertSame('Bearer per_request_token_0123456789', $this->history[0]['request']->getHeaderLine('Authorization'));
+        $c->exportPgn('BBBBBBBB');
+        self::assertSame('Bearer env_token', $this->history[1]['request']->getHeaderLine('Authorization'));
+    }
+
+    public function test_http_timeouts_are_below_the_php_limit(): void
+    {
+        $c = $this->client([new Response(200, [], 'x')]);
+        $c->exportPgn('AAAAAAAA');
+        // options are not in the PSR request; the constants are the contract
+        self::assertLessThan(300, LichessStudyClient::TIMEOUT);
     }
 
     public function test_lists_user_studies_from_ndjson(): void
