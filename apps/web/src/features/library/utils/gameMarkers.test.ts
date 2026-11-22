@@ -90,3 +90,38 @@ describe('game headings in "Mis geniales predecesores I", Capítulo dos (S7)', (
     expect(text.slice(s.headingStart, s.headingStart + 10)).toBe(first)
   })
 })
+
+describe('the layout switch of a game that starts from a diagram with a hidden FEN line (Lichess studies)', () => {
+  const fen = '7k/8/8/8/8/8/8/R6K w - - 0 1'
+  const prepared = `<h2>Rook vs King</h2>
+<p><em>Study: Rook mates</em></p>
+<img class="diagram" src="data:image/svg+xml;charset=utf-8,x" alt="Diagram" data-fen="${fen}" data-text-fen="${fen}">
+<p class="epub-fen-hidden" aria-hidden="true">${fen}</p>
+<p>In this position the power of the Rook is demonstrated,</p>
+<p>1. Ra7</p>
+<p>which confines the King.</p>
+<p>1... Kg8 2. Kg2</p>
+<p>Then.</p>
+<p>2... Kf8 (2... Kh8 3. Ra8#)</p>
+<p>3. Kf3 *</p>`
+  const hiddenTexts = (html: string) => [...new DOMParser().parseFromString(html, 'text/html').querySelectorAll('.epub-fen-hidden')].map((p) => p.textContent)
+
+  it('keeps the text visible in braces: only the FEN line stays hidden', () => {
+    const braces = applyGameLayouts(prepared, games(prepared).games, { 0: 'braces' })
+    expect(braces).not.toBe(prepared)
+    expect(hiddenTexts(braces)).toEqual([fen])
+    const doc = new DOMParser().parseFromString(braces, 'text/html')
+    const visible = [...doc.querySelectorAll('p')].filter((p) => !p.classList.contains('epub-fen-hidden')).map((p) => p.textContent)
+    expect(visible.join(' ')).toContain('1. Ra7 { which confines the King. } 1... Kg8 2. Kg2 { Then. } 2... Kf8 (2... Kh8 3. Ra8#)')
+    expect(doc.querySelectorAll('img.diagram')).toHaveLength(1)
+  })
+
+  it('and back to paragraphs, the same: text visible, FEN hidden, one diagram', () => {
+    const braces = applyGameLayouts(prepared, games(prepared).games, { 0: 'braces' })
+    const back = applyGameLayouts(braces, games(braces).games, { 0: 'paragraphs' })
+    expect(hiddenTexts(back)).toEqual([fen])
+    const doc = new DOMParser().parseFromString(back, 'text/html')
+    expect([...doc.querySelectorAll('p')].filter((p) => !p.classList.contains('epub-fen-hidden')).map((p) => p.textContent)).toContain('which confines the King.')
+    expect(doc.querySelectorAll('img.diagram')).toHaveLength(1)
+  })
+})

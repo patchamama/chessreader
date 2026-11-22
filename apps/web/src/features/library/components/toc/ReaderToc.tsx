@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { recognizeGames } from '@chess-ebook/chess-shared'
 import { httpClient } from '../../../../shared/api/httpClient'
@@ -115,6 +115,11 @@ function ChapterGames({
 export function ReaderToc({ bookId, toc, currentChapter, currentGames, algorithm, onChapter, onGame }: ReaderTocProps) {
   const [tab, setTab] = useState<Tab>('chapters')
   const separator = useSettingsStore((s) => s.chapterTitleSeparator)
+  // The current chapter stays visible in the list when it changes (next/previous buttons, links).
+  const currentRef = useRef<HTMLButtonElement | null>(null)
+  useEffect(() => {
+    if (tab === 'chapters') currentRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+  }, [currentChapter, tab])
   const tabClass = (t: Tab) =>
     `flex-1 rounded-md px-3 py-1 text-xs font-semibold transition ${
       tab === t ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'
@@ -137,6 +142,7 @@ export function ReaderToc({ bookId, toc, currentChapter, currentGames, algorithm
                 <button
                   type="button"
                   onClick={() => onChapter(entry.order)}
+                  ref={entry.order === currentChapter ? currentRef : undefined}
                   aria-current={entry.order === currentChapter ? 'true' : undefined}
                   className={`w-full rounded-md px-3 py-1.5 text-left text-sm transition ${
                     entry.order === currentChapter ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-700 hover:bg-slate-50'

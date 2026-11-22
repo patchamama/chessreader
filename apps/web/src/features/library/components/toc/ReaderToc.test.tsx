@@ -38,3 +38,37 @@ describe('ReaderToc — chapter titles', () => {
     expect(screen.getByRole('button', { name: 'Capítulo uno · Wilhelm I' })).toBeInTheDocument()
   })
 })
+
+describe('ReaderToc — the current chapter stays visible', () => {
+  beforeEach(() => useSettingsStore.getState().reset())
+
+  it('scrolls the current chapter into view, and again when the chapter changes', () => {
+    const scrolled: string[] = []
+    const original = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this.textContent ?? '') }
+    try {
+      const props = {
+        bookId: 6,
+        toc: [
+          { order: 6, title: 'Chapter one' },
+          { order: 7, title: 'Chapter two' },
+        ],
+        currentGames: [],
+        algorithm: 2 as const,
+        onChapter: () => {},
+        onGame: () => {},
+      }
+      const ui = (current: number) => (
+        <QueryClientProvider client={new QueryClient()}>
+          <ReaderToc {...props} currentChapter={current} />
+        </QueryClientProvider>
+      )
+      const { rerender } = render(ui(6))
+      expect(scrolled).toContain('Chapter one')
+      rerender(ui(7))
+      expect(scrolled[scrolled.length - 1]).toBe('Chapter two')
+    } finally {
+      Element.prototype.scrollIntoView = original
+    }
+  })
+})

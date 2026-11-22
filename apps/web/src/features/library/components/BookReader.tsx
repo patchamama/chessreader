@@ -32,6 +32,7 @@ import { StudyBoard } from './StudyBoard'
 import { StudyPanelResizer } from './StudyPanelResizer'
 import { VariationChooser } from './VariationChooser'
 import { useStudyBoardStore } from '../store/studyBoardStore'
+import { revealStudyBoard } from '../utils/revealStudyBoard'
 import { getProgress, saveProgress, getChapterScroll, saveChapterScroll } from '../store/readingStore'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { successorOf, hasAlternativesAhead, variationLinesFrom } from '../utils/proseChess'
@@ -267,12 +268,8 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
       useStudyBoardStore.getState().commitPreview()
       loadStudyPosition(tree, node.id, !tree.mainline.includes(node.id))
       setShowStudy(true)
-      // Bring the board into view when it is off screen (S10).
-      const board = document.querySelector('[data-study-board]')
-      if (board) {
-        const r = board.getBoundingClientRect()
-        if (r.top < 0 || r.bottom > window.innerHeight) board.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
-      }
+      // Bring the board into view: the pane back to its top, the page if the board is off screen (S10).
+      revealStudyBoard()
     },
     [loadStudyPosition],
   )

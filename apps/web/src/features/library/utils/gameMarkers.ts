@@ -217,7 +217,9 @@ export function applyGameLayouts(
 
   for (const { blocks, lines } of edits) {
     const images = blocks.filter((b) => !/\S/.test(b.textContent ?? '') && (b.tagName === 'IMG' || b.querySelector('img, svg')))
-    const className = blocks.find((b) => b.tagName === 'P')?.getAttribute('class') ?? null
+    // The rewritten lines look like the game's own paragraphs, not like the hidden FEN line (epub-fen-hidden) a diagram may hold.
+    const className = blocks.find((b) => b.tagName === 'P' && !b.classList.contains('epub-fen-hidden'))?.getAttribute('class') ?? null
+    const hiddenFen = blocks.find((b) => b.classList.contains('epub-fen-hidden'))?.textContent?.trim() ?? null
     const first = blocks[0]
     const moved = new Set<Element>()
     for (const line of lines) {
@@ -228,7 +230,8 @@ export function applyGameLayouts(
         continue
       }
       const p = doc.createElement('p')
-      if (className) p.setAttribute('class', className)
+      if (hiddenFen && line.trim() === hiddenFen) { p.setAttribute('class', 'epub-fen-hidden'); p.setAttribute('aria-hidden', 'true') }
+      else if (className) p.setAttribute('class', className)
       p.textContent = line.trim()
       first.parentNode?.insertBefore(p, first)
     }

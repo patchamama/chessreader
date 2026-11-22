@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
+import { revealStudyBoard } from '../utils/revealStudyBoard'
 import { BoardModal } from './BoardModal'
 import { useStatusStore } from '../../../shared/layout/statusStore'
 import { Chess } from 'chess.js'
@@ -229,10 +230,10 @@ export function StudyBoard() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if (e.key === 'ArrowRight') {
         e.preventDefault()
-        if (nav.canNext) { nav.next(); playMoveSound() }
+        if (nav.canNext) { nav.next(); playMoveSound(); revealStudyBoard() }
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault()
-        if (nav.canPrev) { nav.prev(); playMoveSound() }
+        if (nav.canPrev) { nav.prev(); playMoveSound(); revealStudyBoard() }
       }
     }
     window.addEventListener('keydown', onKey)
