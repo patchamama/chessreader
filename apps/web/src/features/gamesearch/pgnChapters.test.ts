@@ -42,7 +42,9 @@ describe('pgnToChapters', () => {
     const html = chapters[0].html
     expect(html).not.toContain('%eval')
     expect(html).not.toContain('{  }')
-    expect(html).toContain('{ The Philidor &lt;Defence&gt;. }')
+    // Games open with the comments as paragraphs (the way books print them), not in braces.
+    expect(html).toContain('<p>The Philidor &lt;Defence&gt;.</p>')
+    expect(html).not.toContain('{')
     expect(html).toContain('Morphy, Paul — Duke &amp; Count')
   })
 
@@ -70,3 +72,29 @@ describe('games that start from a position (book fragments with a FEN)', () => {
     expect(g.tree.mainline.map((id) => g.tree.nodes.get(id)!.san)).toEqual(['g3', 'Ne4', 'Nxe4', 'Bxe4+'])
   })
 })
+
+describe('a game that starts from a position shows its diagram, not the FEN text', () => {
+  const fen = '7k/8/8/8/8/8/8/R6K w - - 0 1'
+  const pgn = `[Event "Study: Rook mates"]\n[ChapterName "Rook vs King"]\n[SetUp "1"]\n[FEN "${fen}"]\n\n{ In this position the power of the Rook is demonstrated by the first move, } 1. Ra7 { , which confines the Black King to the last rank. } 1... Kg8 *`
+
+  it('puts a diagram image with the FEN before the moves, and the FEN line right after it (the reader hides it and shows the FEN icon)', async () => {
+    const { prepareChapterHtml } = await import('../library/utils/epubContent')
+    const { chapters } = pgnToChapters(pgn, { fromPosition: true })
+    const doc = new DOMParser().parseFromString(prepareChapterHtml(chapters[0].html, -1), 'text/html')
+    const img = doc.querySelector('img.diagram')!
+    expect(img.getAttribute('data-fen')).toBe(fen)
+    expect(img.getAttribute('data-text-fen')).toBe(fen)
+    expect(doc.querySelector('.epub-fen-hidden')?.textContent).toBe(fen)
+  })
+
+  it('the game is still read from that position, the first comment opens the chapter and a leading comma is not shown', async () => {
+    const { chapters } = pgnToChapters(pgn, { fromPosition: true })
+    const text = htmlToProseText(chapters[0].html)
+    const [g] = recognizeGames(text, { algorithm: 2 })
+    expect(g.tree.startFen).toBe(fen)
+    expect(g.tree.mainline.map((id) => g.tree.nodes.get(id)!.san)).toEqual(['Ra7', 'Kg8'])
+    expect(chapters[0].html).toContain('<p>which confines the Black King to the last rank.</p>')
+    expect(chapters[0].html).not.toMatch(/<p>\s*[,.]/)
+  })
+})
+

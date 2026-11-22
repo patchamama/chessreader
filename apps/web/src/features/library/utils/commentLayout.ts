@@ -25,23 +25,72 @@ function nextMove(before: string): { n: number; black: boolean } | null {
   return seen ? (black ? { n: n + 1, black: false } : { n, black: true }) : null
 }
 
-/** Comments in braces → paragraphs after their move. */
+/** What opens a comment that continues the sentence before it ("{ , which … }"): not shown. */
+const LEADING_PUNCTUATION = /^[,.;:]\s*/
+
+/**
+ * Comments in braces → paragraphs after their move. Parentheses are variations:
+ * their comments stay INSIDE them, on the same line, without braces ("(6. Rc6?
+ * { the king goes back } 6... Rd8)" → "(6. Rc6? the king goes back 6... Rd8)"); the
+ * main line goes on in a new line after a variation when white's move number
+ * follows ("(6... Rd8 7. Ta8#)\n7. Tc7"), and a move number is only added where
+ * a black move continues a main line that a comment cut ("2... Nc6"), never in
+ * front of a variation. A comment that opens with a comma or a period loses it.
+ */
 export function bracesToParagraphs(text: string): string {
-  let out = ''
-  let rest = text
-  for (;;) {
-    const open = rest.indexOf('{')
-    if (open < 0) { out += rest; break }
-    const close = rest.indexOf('}', open)
-    if (close < 0) { out += rest; break }
-    const head = rest.slice(0, open).trimEnd()
-    const comment = rest.slice(open + 1, close).trim()
-    out += `${head}\n${comment}\n`
-    rest = rest.slice(close + 1).trimStart()
-    const next = nextMove(out)
-    if (rest && next && !NUMBERED.test(rest)) rest = `${next.n}${next.black ? '...' : '.'} ${rest}`
+  if (!text.includes('{')) return text
+  const lines: string[] = []
+  let cur = ''
+  let main = '' // the main line's moves so far (no comments, no variations): where the next number comes from
+  let depth = 0
+  let cut = false // a comment cut the main line: its continuation may need a move number
+  let afterVariation = false
+  let variationLine = false // the variation that just closed opened its own line
+  const flush = () => { const t = cur.trim(); if (t) lines.push(t); cur = '' }
+  const put = (chunk: string) => { cur += chunk; if (depth === 0) main += chunk }
+  const space = () => { if (cur !== '' && !/[\s(]$/.test(cur)) cur += ' ' }
+
+  for (let i = 0; i < text.length;) {
+    const ch = text[i]
+    if (ch === '{') {
+      const close = text.indexOf('}', i)
+      const comment = text.slice(i + 1, close < 0 ? text.length : close).replace(/\s+/g, ' ').trim()
+      i = close < 0 ? text.length : close + 1
+      if (depth > 0) {
+        const punct = /^([,.;:])\s*(.*)$/.exec(comment)
+        if (punct) { cur = cur.trimEnd() + punct[1]; if (punct[2]) cur += ` ${punct[2]}` } else if (comment) { space(); cur += comment }
+      } else {
+        flush()
+        const shown = comment.replace(LEADING_PUNCTUATION, '')
+        if (shown) lines.push(shown)
+        cut = true
+      }
+      continue
+    }
+    if (/\s/.test(ch)) {
+      if (ch === '\n' && depth === 0) flush()
+      else if (cur !== '' && !/\s$/.test(cur)) put(' ')
+      i++
+      continue
+    }
+    if (cut && depth === 0) {
+      cut = false
+      const next = nextMove(main)
+      if (ch !== '(' && !NUMBERED.test(text.slice(i)) && next) put(`${next.n}${next.black ? '...' : '.'} `)
+    }
+    if (afterVariation && depth === 0 && ch !== '(') {
+      afterVariation = false
+      // The main line goes on in a new line after a variation that opened its own line, and always before
+      // white's move number: "(6... Rd8 7. Ta8#)\n7. Tc7". After a variation in mid-line it goes on in the line.
+      if (variationLine || /^\d{1,3}\.(?!\.)/.test(text.slice(i))) flush()
+    }
+    if (ch === '(') depth++
+    else if (ch === ')' && depth > 0) { depth--; if (depth === 0) { afterVariation = true; variationLine = cur.trimStart().startsWith('(') } }
+    put(ch)
+    i++
   }
-  return out.replace(/\n{3,}/g, '\n\n').trim()
+  flush()
+  return lines.join('\n').replace(/\n{2,}/g, '\n').trim()
 }
 
 /** A line with words and no move number at its start is a comment. */

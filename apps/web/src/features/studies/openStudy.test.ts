@@ -14,15 +14,15 @@ describe('buildStudyBook', () => {
     expect(html.indexOf('First game')).toBeGreaterThan(-1)
     expect(html.indexOf('First game')).toBeLessThan(html.indexOf('Second game'))
     expect(html).toContain('<h2>First game</h2>')
-    expect(html).toContain('{ Comment one. }')
-    expect(html).toContain('{ Comment two. }')
+    expect(html).toContain('<p>Comment one.</p>')
+    expect(html).toContain('<p>Comment two.</p>')
     expect(b.chapters[0].toc).toEqual([{ order: 1, title: 'My Study' }])
   })
 
   it('per game: one chapter per study chapter, titled by ChapterName, with a table of contents', () => {
     const b = buildStudyBook([part('My Study')], 'per-game')
     expect(b.chapters.map((c) => c.title)).toEqual(['First game', 'Second game'])
-    expect(b.chapters[1].html).toContain('{ Comment two. }')
+    expect(b.chapters[1].html).toContain('<p>Comment two.</p>')
     expect(b.chapters[0].toc.map((t) => t.title)).toEqual(['First game', 'Second game'])
   })
 

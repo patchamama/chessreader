@@ -25,3 +25,47 @@ describe('comments in braces ⇄ comments as paragraphs (S19)', () => {
     )
   })
 })
+
+describe('study PGN: comments of a variation stay inside it, one line (Chess Fundamentals)', () => {
+  // Lichess study export: comments in braces, variations in parentheses, black moves without numbers.
+  const A = '6. Rd6 (6. Rc6? { the Black King will go back to } 6... Rd8 { and it will take much longer to mate. }) 6... Rb8 { If now the King moves back to d8, Ra8 mates at once. } (6... Rd8 7. Ta8#) 7. Tc7 Ra8 8. Rc6 Rb8 9. Rb6 Ra8 10. Tc8# *'
+  const B = '1. Re2 Rd5 2. Re3 { . As the Rook has not yet come into play, it is better to advance the King. If } 2... Re5 { the Rook drives it back by } (2... Re5 { the Rook drives it back by } 3. Th5+ { . On the other hand, if: }) (2... Rc4 { instead, then also } 3. Th5'
+
+  it('a variation with its comments is one line: no braces, no breaks, no move number in front', () => {
+    const out = bracesToParagraphs(A)
+    expect(out).toContain('(6. Rc6? the Black King will go back to 6... Rd8 and it will take much longer to mate.)')
+    expect(out).not.toMatch(/\d+\.\s*\(/)
+    expect(out).not.toContain('{')
+  })
+
+  it('the main line goes on in a new line after the variation, before white\'s move number (7. Tc7)', () => {
+    expect(bracesToParagraphs(A)).toBe([
+      '6. Rd6 (6. Rc6? the Black King will go back to 6... Rd8 and it will take much longer to mate.) 6... Rb8',
+      'If now the King moves back to d8, Ra8 mates at once.',
+      '(6... Rd8 7. Ta8#)',
+      '7. Tc7 Ra8 8. Rc6 Rb8 9. Rb6 Ra8 10. Tc8# *',
+    ].join('\n'))
+  })
+
+  it('a comment that opens with a comma or a period loses it; one inside a variation joins the move it follows', () => {
+    expect(bracesToParagraphs(B)).toBe([
+      '1. Re2 Rd5 2. Re3',
+      'As the Rook has not yet come into play, it is better to advance the King. If',
+      '2... Re5',
+      'the Rook drives it back by',
+      '(2... Re5 the Rook drives it back by 3. Th5+. On the other hand, if:) (2... Rc4 instead, then also 3. Th5',
+    ].join('\n'))
+    expect(bracesToParagraphs('1. Ta7 { , which immediately confines the King. } 1... Rg8')).toBe('1. Ta7\nwhich immediately confines the King.\n1... Rg8')
+    expect(bracesToParagraphs('1. e4 { . } 1... e5')).toBe('1. e4\n1... e5')
+  })
+
+  it('every move of the game is still read, in the main line and in the variations', () => {
+    const game = '1. e4 e5 2. Nf3 { The knight. } (2. Bc4 { The bishop. } 2... Nf6) 2... Nc6 3. Bb5 { The Spanish. } a6'
+    const [g] = recognizeGames(bracesToParagraphs(game), { algorithm: 2 })
+    const [h] = recognizeGames(game, { algorithm: 2 })
+    expect(g.tree.mainline.map((id) => g.tree.nodes.get(id)!.san)).toEqual(h.tree.mainline.map((id) => h.tree.nodes.get(id)!.san))
+    expect(g.tree.nodes.size).toBe(h.tree.nodes.size)
+    expect(g.tree.errors).toEqual([])
+  })
+})
+

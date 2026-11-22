@@ -274,7 +274,7 @@ describe('Database: reference, source and opened marks of the games (reader-anal
     expect(chapters[0].html).toContain('M. Tal – M. Botvinnik (1960) · Mis geniales predecesores III</h2>')
     expect(chapters[0].html).toMatch(/Database id: <code[^>]*>k3-7<\/code>/)
     // Still the book's remarks.
-    expect(chapters[0].html).toContain('{Tal.}')
+    expect(chapters[0].html).toContain('<p>Tal.</p>')
   })
 
   it('S8: at the end, the author and book with a link that opens the game in the book', async () => {
@@ -284,7 +284,7 @@ describe('Database: reference, source and opened marks of the games (reader-anal
     await openRow(/M\. Tal – M\. Botvinnik/, 'Open M. Tal – M. Botvinnik')
     const html = useExternalBookStore.getState().chapters[0].html
     expect(html).toContain('Source: Garry Kasparov, <cite>Mis geniales predecesores III</cite>')
-    expect(html.indexOf('{Tal.}')).toBeLessThan(html.indexOf('class="game-source"'))
+    expect(html.indexOf('<p>Tal.</p>')).toBeLessThan(html.indexOf('class="game-source"'))
     cleanup()
     // The reader shows that html; the database (kept mounted) opens the book on a click of its link.
     page()
