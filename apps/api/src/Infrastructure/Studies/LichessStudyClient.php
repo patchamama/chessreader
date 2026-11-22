@@ -99,9 +99,10 @@ final class LichessStudyClient implements LichessStudySource
                 continue;
             }
             return match (true) {
-                in_array($status, [401, 403, 404], true) && $bearer === '' => throw new LichessStudyException($status, "{$what} is private or not accessible without a Lichess token", null, true),
+                in_array($status, [401, 403, 404, 406], true) && $bearer === '' => throw new LichessStudyException($status, "{$what} is private or not accessible without a Lichess token", null, true),
                 $status === 404 => throw new LichessStudyException(404, "{$what} not found, or not accessible with this token"),
-                $status === 401, $status === 403 => throw new LichessStudyException($status, "{$what} is private or not accessible with this token"),
+                // 406: Lichess cannot answer a PGN request with its JSON "This study is now private" error, so it says Not Acceptable.
+                $status === 401, $status === 403, $status === 406 => throw new LichessStudyException($status, "{$what} is private or not accessible with this token"),
                 $status >= 400 => throw new LichessStudyException($status, "Lichess answered {$status} for {$what}"),
                 default => $res,
             };

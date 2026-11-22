@@ -68,6 +68,20 @@ final class LichessStudyClientTest extends TestCase
         }
     }
 
+    public function test_406_means_private_too_with_or_without_a_token(): void
+    {
+        $anonymous = $this->client([new Response(406)]);
+        try { $anonymous->exportPgn('aaaaaaaa'); self::fail('expected an exception'); } catch (LichessStudyException $e) {
+            self::assertStringContainsString('private or not accessible without a Lichess token', $e->getMessage());
+            self::assertTrue($e->needsToken);
+        }
+        $withToken = $this->client([new Response(406)]);
+        try { $withToken->exportPgn('aaaaaaaa', 'tk_0123456789abcdefghij'); self::fail('expected an exception'); } catch (LichessStudyException $e) {
+            self::assertStringContainsString('private or not accessible with this token', $e->getMessage());
+            self::assertFalse($e->needsToken);
+        }
+    }
+
     public function test_404_and_403_are_clear_errors(): void
     {
         $c = $this->client([new Response(404), new Response(403)]);
