@@ -16,6 +16,8 @@ export interface Book {
   description: string
   /** Lowercase 2-letter code ("en", "es"…); '' or missing when unknown. */
   language?: string
+  /** The latest request to add this book's comments to the commentary database; null when none. */
+  commentRequest?: 'pending' | 'done' | 'rejected' | null
 }
 
 export interface ChapterTocEntry {

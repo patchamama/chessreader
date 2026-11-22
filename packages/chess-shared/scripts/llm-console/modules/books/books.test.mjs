@@ -21,7 +21,9 @@ let dir
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'books-mod-')) })
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
-function makeLibrary(path = join(dir, 'lib.sqlite')) {
+const REQUESTS_TABLE = "CREATE TABLE book_comment_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, book_id INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', note TEXT NOT NULL DEFAULT '', requested_by INTEGER, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+
+function makeLibrary(path = join(dir, 'lib.sqlite'), { requests = false } = {}) {
   const db = new DatabaseSync(path)
   db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY)')
   db.exec(BOOKS_MIGRATION)
@@ -35,6 +37,13 @@ function makeLibrary(path = join(dir, 'lib.sqlite')) {
   ch.run(1, 1, 'One', CH1); ch.run(1, 2, 'Two', CH2); ch.run(1, 3, 'Empty', CH_EMPTY)
   ch.run(2, 1, 'Uno', CH1)
   ch.run(3, 1, 'Eins', CH1)
+  if (requests) {
+    db.exec(REQUESTS_TABLE)
+    const r = db.prepare('INSERT INTO book_comment_requests (book_id, status, note, requested_by, created_at, updated_at) VALUES (?,?,?,1,?,?)')
+    r.run(1, 'pending', 'old note', '2024-01-01', '2024-01-01') // book 1 already has comments: fulfilled
+    r.run(2, 'rejected', 'first', '2024-02-01', '2024-02-01')
+    r.run(2, 'pending', 'please add it', '2024-03-01', '2024-03-02') // latest of book 2
+  }
   db.close()
   return path
 }
@@ -85,7 +94,7 @@ function fakeSpawn(log, { code = 0, empty = false } = {}) {
 let seq = 0
 const setup = (extra = {}, opts = {}) => {
   seq++
-  const libraryDb = makeLibrary(join(dir, `lib${seq}.sqlite`))
+  const libraryDb = makeLibrary(join(dir, `lib${seq}.sqlite`), opts)
   const dbPath = makeComments(join(dir, `comments${seq}.sqlite`), opts)
   const spawnLog = []
   const svc = createService({ settings: () => ({ dbPath, libraryDb }), home: dir, spawn: fakeSpawn(spawnLog), ps: async () => '  1 node something\n', ...extra })
@@ -149,6 +158,29 @@ describe('listBooks', () => {
     const dbPath = makeComments(join(dir, 'c-b.sqlite'))
     const svc = createService({ settings: () => ({ dbPath, libraryDb: join(dir, 'nope.sqlite') }), home: dir })
     expect(svc.listBooks()).toMatchObject({ libraryConfigured: false, books: [] })
+  })
+})
+
+describe('listBooks requests', () => {
+  it('has request null for every book when the table does not exist (older database)', () => {
+    const { svc } = setup()
+    expect(svc.listBooks().books.map((b) => b.request)).toEqual([null, null, null])
+  })
+  it('returns the latest request of each book, read-only', () => {
+    const { svc, libraryDb } = setup({}, { requests: true })
+    const before = readFileSync(libraryDb)
+    const [b1, b2, b3] = svc.listBooks().books
+    expect(b1.request).toEqual({ id: 1, status: 'pending', note: 'old note', createdAt: '2024-01-01' })
+    expect(b2.request).toEqual({ id: 3, status: 'pending', note: 'please add it', createdAt: '2024-03-01' })
+    expect(b3.request).toBe(null)
+    expect(readFileSync(libraryDb).equals(before)).toBe(true)
+  })
+  it('does not write to the library database when adding', async () => {
+    const { svc, libraryDb } = setup({}, { requests: true })
+    const before = readFileSync(libraryDb)
+    await svc.add({ bookId: 2, confirm: true, lang: 'es' })
+    expect(readFileSync(libraryDb).equals(before)).toBe(true)
+    expect(rows(libraryDb, 'SELECT status FROM book_comment_requests WHERE book_id=2 ORDER BY id').map((r) => r.status)).toEqual(['rejected', 'pending'])
   })
 })
 

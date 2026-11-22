@@ -221,10 +221,26 @@ return [
         return new DbalBookRepository($c->get(Connection::class));
     },
 
+    \App\Domain\Library\CommentRequestRepository::class => function (ContainerInterface $c) {
+        return new \App\Infrastructure\Persistence\DbalCommentRequestRepository($c->get(Connection::class));
+    },
+
+    \App\Application\Library\CommentRequests::class => function (ContainerInterface $c) {
+        return new \App\Application\Library\CommentRequests(
+            $c->get(\App\Domain\Library\CommentRequestRepository::class),
+            $c->get(BookRepository::class),
+        );
+    },
+
+    \App\Presentation\Library\CommentRequestsController::class => function (ContainerInterface $c) {
+        return new \App\Presentation\Library\CommentRequestsController($c->get(\App\Application\Library\CommentRequests::class));
+    },
+
     ListBooksHandler::class => function (ContainerInterface $c) {
         return new ListBooksHandler(
             $c->get(BookRepository::class),
             $c->get('settings')['books_dir'] ?? dirname(__DIR__) . '/storage/books',
+            $c->get(\App\Domain\Library\CommentRequestRepository::class),
         );
     },
 

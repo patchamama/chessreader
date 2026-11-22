@@ -141,7 +141,15 @@ return function (App $app): void {
         $group->get('/books/{id:[0-9]+}/epub', [\App\Presentation\Suggestions\BookEpubController::class, 'download']);
         $group->get('/books/{id:[0-9]+}/images', [\App\Presentation\Suggestions\BookEpubController::class, 'images']);
         $group->post('/upload', [IngestionController::class, 'upload']);
+        // Requests to add a book's comments to the commentary database.
+        $group->post('/books/{id:[0-9]+}/comment-request', [\App\Presentation\Library\CommentRequestsController::class, 'create']);
+        $group->delete('/books/{id:[0-9]+}/comment-request', [\App\Presentation\Library\CommentRequestsController::class, 'cancel']);
+        $group->get('/comment-requests', [\App\Presentation\Library\CommentRequestsController::class, 'list']);
     })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
+
+    // Resolving a comment request changes the shared queue: admin only.
+    $app->patch('/api/library/comment-requests/{id:[0-9]+}', [\App\Presentation\Library\CommentRequestsController::class, 'setStatus'])
+        ->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
 
     // Per-book config WRITE — admin only.
     $app->group('/api/library', function (RouteCollectorProxy $group) {

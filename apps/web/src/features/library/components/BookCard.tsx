@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { queryClient } from '../../../app/queryClient'
 import { Link } from 'react-router-dom'
 import type { Book } from '../api/libraryApi'
 import BookEditModal from './BookEditModal'
@@ -88,7 +89,7 @@ export default function BookCard({ book, totalChapters, onHide }: Props) {
         </div>
       )}
 
-      {hasServerSession() && <BookStatsPanel bookId={book.id} title={book.title} />}
+      {hasServerSession() && <BookStatsPanel bookId={book.id} title={book.title} language={book.language} commentRequest={book.commentRequest} onRequestChanged={() => void queryClient.invalidateQueries({ queryKey: ['library', 'books'] })} />}
 
       <Link
         to={`/read/${book.id}`}

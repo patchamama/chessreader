@@ -97,7 +97,14 @@ export function createService({ settings, home, spawn = defaultSpawn, ps = defau
     const lib = libraryPath()
     if (!dbPath) return { configured: false, libraryConfigured: false, libraryDb: lib, books: [] }
     if (!existsSync(lib)) return { configured: true, libraryConfigured: false, libraryDb: lib, books: [] }
-    const books = withDb(lib, (db) => db.all('SELECT b.id, b.title, b.author, b.language, (SELECT COUNT(*) FROM chapters c WHERE c.book_id=b.id) AS chapters FROM books b ORDER BY b.id'))
+    const { books, requests } = withDb(lib, (db) => {
+      const books = db.all('SELECT b.id, b.title, b.author, b.language, (SELECT COUNT(*) FROM chapters c WHERE c.book_id=b.id) AS chapters FROM books b ORDER BY b.id')
+      const requests = new Map()
+      try { // the table is missing in older databases: no requests then
+        for (const r of db.all('SELECT id, book_id, status, note, created_at FROM book_comment_requests ORDER BY id')) requests.set(r.book_id, { id: r.id, status: r.status, note: r.note ?? '', createdAt: r.created_at })
+      } catch { /* no table */ }
+      return { books, requests }
+    })
     const { sources, counts } = existsSync(dbPath)
       ? withDb(dbPath, (db) => { const s = bookSources(db); return { sources: s, counts: new Map(s.map((x) => [x.id, countComments(db, x.id)])) } })
       : { sources: [], counts: new Map() }
@@ -105,7 +112,7 @@ export function createService({ settings, home, spawn = defaultSpawn, ps = defau
       configured: true, libraryConfigured: true, libraryDb: lib,
       books: books.map((b) => {
         const src = matchSource(b.title, sources)
-        return { id: b.id, title: b.title, author: b.author ?? '', language: cleanLang(b.language), chapters: b.chapters, source: src ? { id: src.id, title: src.title, lang: src.lang } : null, comments: src ? counts.get(src.id) : 0 }
+        return { id: b.id, title: b.title, author: b.author ?? '', language: cleanLang(b.language), chapters: b.chapters, source: src ? { id: src.id, title: src.title, lang: src.lang } : null, comments: src ? counts.get(src.id) : 0, request: requests.get(b.id) ?? null }
       }),
     }
   }

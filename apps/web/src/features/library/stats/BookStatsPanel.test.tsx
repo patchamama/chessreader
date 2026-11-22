@@ -65,3 +65,37 @@ describe('BookStatsPanel', () => {
     expect(link).toHaveAttribute('title', expect.stringContaining('Open'))
   })
 })
+
+describe('BookStatsPanel comment request', () => {
+  const REQ = 'Request adding the comments of this book to the commentary database'
+  const wrap = (ui: React.ReactElement) => render(ui)
+
+  it('offers the request button at 0 comments', async () => {
+    vi.mocked(stats.loadBookStats).mockResolvedValue({ ...S, comments: 0 })
+    wrap(<BookStatsPanel bookId={1} title="B" />)
+    await screen.findByLabelText('Comments: 0')
+    expect(screen.getByRole('button', { name: REQ })).toBeInTheDocument()
+  })
+
+  it('hides it above 0 comments', async () => {
+    vi.mocked(stats.loadBookStats).mockResolvedValue(S)
+    wrap(<BookStatsPanel bookId={1} title="B" />)
+    await screen.findByLabelText('Comments: 5')
+    expect(screen.queryByRole('button', { name: REQ })).toBeNull()
+  })
+
+  it('offers it even when the stats were never computed (count unknown)', async () => {
+    vi.mocked(stats.loadBookStats).mockResolvedValue(null)
+    wrap(<BookStatsPanel bookId={1} title="B" />)
+    expect(await screen.findByRole('button', { name: REQ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show book details' })).toBeInTheDocument()
+  })
+
+  it('shows the state of an existing request instead of the button', async () => {
+    vi.mocked(stats.loadBookStats).mockResolvedValue({ ...S, comments: 0 })
+    wrap(<BookStatsPanel bookId={1} title="B" commentRequest="pending" />)
+    await screen.findByLabelText('Comments: 0')
+    expect(screen.getByText('Requested ✓')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: REQ })).toBeNull()
+  })
+})
