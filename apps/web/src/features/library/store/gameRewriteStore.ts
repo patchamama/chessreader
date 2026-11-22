@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { CommentLayout } from '../utils/gameMarkers'
+import { EXTERNAL_BOOK_ID, useExternalBookStore } from '../../../shared/externalBook/externalBookStore'
 
 /**
  * Games whose commentary the reader regenerated (S3): the new text of each game
@@ -63,3 +64,16 @@ export const useGameRewriteStore = create<GameRewriteState>((set, get) => ({
     return removed
   },
 }))
+
+// The book opened from outside (-1) is a different book every time one is opened there:
+// what was rewritten in the previous one must not show up in the next.
+let externalVersion = useExternalBookStore.getState().version
+useExternalBookStore.subscribe((state) => {
+  if (state.version === externalVersion) return
+  externalVersion = state.version
+  const rewrites = Object.fromEntries(
+    Object.entries(useGameRewriteStore.getState().rewrites).filter(([key]) => !key.startsWith(`${EXTERNAL_BOOK_ID}:`)),
+  )
+  writeAll(rewrites)
+  useGameRewriteStore.setState({ rewrites })
+})
