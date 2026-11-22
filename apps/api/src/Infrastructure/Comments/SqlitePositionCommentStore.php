@@ -30,7 +30,7 @@ final class SqlitePositionCommentStore implements PositionCommentStore
         $st = $pdo->prepare(
             'SELECT p.id, p.text, p.lang, p.ply, p.san, g.id AS game_id, g.label, s.title, s.author, s.kind
              FROM position_comments p JOIN comment_games g ON g.id = p.game_id JOIN comment_sources s ON s.id = g.source_id
-             WHERE p.hash = :hash AND p.position = :key' . $this->visible('p', false) . ' ORDER BY s.priority, p.id LIMIT :limit'
+             WHERE p.hash = :hash AND p.position = :key AND p.san <> \'' . self::INTRO_SAN . '\'' . $this->visible('p', false) . ' ORDER BY s.priority, p.id LIMIT :limit'
         );
         $st->bindValue(':hash', $hash);
         $st->bindValue(':key', $key);
@@ -132,6 +132,9 @@ final class SqlitePositionCommentStore implements PositionCommentStore
             $where[] = 's.kind = :kind';
             $params[':kind'] = (string) $filters['kind'];
         }
+        if ($filters['noIntro'] ?? false) {
+            $where[] = "p.san <> '" . self::INTRO_SAN . "'";
+        }
         if ($this->hasColumn('position_comments', 'hidden_at')) {
             $where[] = ($filters['hidden'] ?? false) ? 'p.hidden_at IS NOT NULL' : 'p.hidden_at IS NULL';
         } elseif ($filters['hidden'] ?? false) {
@@ -150,7 +153,7 @@ final class SqlitePositionCommentStore implements PositionCommentStore
         if ($pdo === null) {
             return [];
         }
-        [$from, $params] = $this->filtered(['hidden' => false] + $filters + []);
+        [$from, $params] = $this->filtered(['hidden' => false, 'noIntro' => true] + $filters + []);
         $params2 = $params;
         $bind = static function (\PDOStatement $st, array $p): void {
             foreach ($p as $k => $v) {

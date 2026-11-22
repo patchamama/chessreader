@@ -40,7 +40,11 @@ interface IndexMeta { total: number; pages: number; pageSize: number; sources: R
 interface ServerComment { id: number; hash: string; fen: string; text: string; lang: string; ply: number; move_number: number; san: string; game_id: string; chapter: number | null; translations?: Record<string, string>; hidden_at?: string | null; source: CommentSource; game: CommentEntry['game'] }
 
 /** "12...Nb6" or "8. Nc3": white moves are on odd plies. */
-export const moveLabel = (c: Pick<CommentEntry, 'ply' | 'move' | 'san'>) => `${c.move}${c.ply % 2 === 1 ? '. ' : '...'}${c.san}`
+/** The `san` of a comment printed before the first move of its game (ply 0). */
+export const INTRO_SAN = '@intro'
+
+export const moveLabel = (c: Pick<CommentEntry, 'ply' | 'move' | 'san'>) =>
+  c.san === INTRO_SAN ? 'Start' : `${c.move}${c.ply % 2 === 1 ? '. ' : '...'}${c.san}`
 
 let meta: Promise<IndexMeta> | null = null
 const pages = new Map<number, Promise<IndexEntry[]>>()

@@ -83,7 +83,7 @@ export function TranslateChapterButton({ games, text, bookTitle, bookAuthor = nu
         if (result.comments.every((c) => c.translated === null)) continue
         onApplied(i, { text: result.text, leading: result.leading })
         if (!canSave) continue
-        const pairs = result.comments.filter((c) => c.ply > 0)
+        const pairs = result.comments
         try {
           await saveBookGame({
             book: { title: bookTitle, author: bookAuthor, lang: source }, chapter,

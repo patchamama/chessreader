@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { recognizeGames } from '@chess-ebook/chess-shared'
+import { pgnToChapters } from '../../gamesearch/pgnChapters'
+import { prepareChapterHtml } from './epubContent'
+import { applyGameRewrites, wrapGameContainers } from './gameRewrite'
 import { applyGameLayouts, clearGameDecorations, decorateGames, describeGames, gameStart } from './gameMarkers'
 import { extractProseText, htmlToProseText } from './proseText'
 
@@ -123,5 +126,50 @@ describe('the layout switch of a game that starts from a diagram with a hidden F
     const doc = new DOMParser().parseFromString(back, 'text/html')
     expect([...doc.querySelectorAll('p')].filter((p) => !p.classList.contains('epub-fen-hidden')).map((p) => p.textContent)).toContain('which confines the King.')
     expect(doc.querySelectorAll('img.diagram')).toHaveLength(1)
+  })
+})
+
+describe('the frame of a game never reaches the heading of the next one (Lichess studies)', () => {
+  const chapter = (n: number, fen: string) => `[Event "S"]\n[ChapterName "Ex.${n}: Simple Mates: Rook vs King #${n}"]\n[SetUp "1"]\n[FEN "${fen}"]\n\n{ In this position the power of the Rook is demonstrated, } 1. Ra7 Kg8 2. Kg2 Kf8 3. Kf3 Ke8 4. Ke4 Kd8 5. Kd5 Kc8 6. Kd6 Kb8 7. Rc7 Ka8 8. Kc6 Kb8 9. Kb6 Ka8 10. Rc8# *`
+  const html = prepareChapterHtml(pgnToChapters(`${chapter(1, '7k/8/8/8/8/8/8/R6K w - - 0 1')}\n\n${chapter(2, '8/8/8/4k3/8/8/4K3/R7 w - - 0 1')}`, { fromPosition: true }).chapters.map((c) => c.html).join('\n'), -1)
+
+  const framed = () => {
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const prose = extractProseText(doc.body)
+    const g = recognizeGames(prose.text, { algorithm: 2 })
+    decorateGames(doc.body, prose, g, describeGames(prose.text, g), { chapter: 1 })
+    wrapGameContainers(doc.body)
+    return doc
+  }
+
+  it('keeps the next game\'s title and date out of the frame and of the hidden region', () => {
+    const doc = framed()
+    const box = doc.querySelector('[data-game-container="0"]')!
+    expect(box).not.toBeNull()
+    expect(box.querySelector('h1, h2, h3')).toBeNull()
+    expect(box.textContent).not.toContain('Ex.2')
+    expect(doc.querySelectorAll('[data-game-container]')).toHaveLength(2)
+    expect(doc.querySelector('[data-game-container="1"]')!.textContent).not.toContain('Ex.1')
+  })
+
+  it('and the layout switch of the first game does not touch the second one\'s heading', () => {
+    const prose = htmlToProseText(html)
+    const g = recognizeGames(prose, { algorithm: 2 })
+    const out = applyGameLayouts(html, g, { 0: 'braces' })
+    const doc = new DOMParser().parseFromString(out, 'text/html')
+    expect([...doc.querySelectorAll('h2')].map((h) => h.textContent)).toEqual([expect.stringContaining('Ex.1'), expect.stringContaining('Ex.2')])
+  })
+
+  it('also after the first game was commented again (its text ends with a remark line)', () => {
+    const base = recognizeGames(htmlToProseText(html), { algorithm: 2 })
+    const rewrite = 'In this position the power of the Rook is demonstrated,\n\n1. Ra7?!\n\nAccuracy: White 92%, Black 83%.\n\nInaccuracy: gives away much of the advantage. Better was:\n\n(1. Rf1 Kg8 2. Kg2 Kg7 3. Rf2 Kg6)\n\n1... Kg8 2. Kg2 Kf8 3. Kf3 Ke8 4. Ke4 Kd8?!\n\nInaccuracy: leaves a lost game.\n\n5. Kd5 Kc8 6. Kd6 Kb8 7. Rc7 Ka8 8. Kc6 Kb8 9. Kb6 Ka8 10. Rc8#\n\nWhite mates in 1 · Stockfish 18 lite, depth 14'
+    const doc = new DOMParser().parseFromString(applyGameRewrites(html, base, { 0: { text: rewrite } }), 'text/html')
+    const prose = extractProseText(doc.body)
+    const g = recognizeGames(prose.text, { algorithm: 2 })
+    decorateGames(doc.body, prose, g, describeGames(prose.text, g), { chapter: 1 })
+    wrapGameContainers(doc.body)
+    const box = doc.querySelector('[data-game-container="0"]')!
+    expect(box.textContent).not.toContain('Ex.2')
+    expect(box.querySelector('h2')).toBeNull()
   })
 })

@@ -418,4 +418,20 @@ final class SqlitePositionCommentStoreTest extends TestCase
         $res = (new SqlitePositionCommentStore('', $pdo))->addBookGame(self::bookGame());
         self::assertSame(2, $res['added']);
     }
+
+    public function test_an_intro_comment_is_kept_with_its_game_and_listed_but_never_offered_for_its_position(): void
+    {
+        $pdo = self::database();
+        $store = new SqlitePositionCommentStore('', $pdo);
+        $intro = ['hash' => 'cccccccccccccccc', 'key' => 'start-key', 'ply' => 0, 'move' => 0, 'san' => '@intro', 'text' => 'Before the first move.'];
+        $res = $store->addBookGame(self::bookGame(['game' => ['comments' => [$intro]]]));
+        self::assertSame(2, $res['added']);
+        // listed (the comments tab, the book's own record)…
+        $texts = array_column($store->list(['source' => $res['sourceId']], 0, 50)['comments'], 'text');
+        self::assertContains('Before the first move.', $texts);
+        // …but a board on that position is not offered it as a remark on that position
+        self::assertSame([], $store->forPosition('cccccccccccccccc', 'start-key', 5));
+        // nor does it count as a popular position
+        self::assertSame([], array_filter($store->top([], 50), static fn(array $p): bool => $p['fen'] === 'start-key 0 1'));
+    }
 }

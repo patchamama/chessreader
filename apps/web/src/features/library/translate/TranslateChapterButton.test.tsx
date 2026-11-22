@@ -63,9 +63,10 @@ describe('TranslateChapterButton', () => {
     await waitFor(() => expect(api.saveBookGame).toHaveBeenCalledTimes(1))
     const sent = api.saveBookGame.mock.calls[0][0]
     expect(sent.book).toEqual({ title: 'Study', author: null, lang: 'en' })
-    expect(sent.game.comments.map((c: { text: string }) => c.text)).toEqual(['which confines the King to the last rank.'])
-    // the opening remark has no move to hang on: it lives in the game's PGN only
-    expect(sent.game.translations.es.comments).toEqual(['que confina al rey.'])
+    expect(sent.game.comments.map((c: { text: string }) => c.text)).toEqual(['In this position the power of the Rook is demonstrated,', 'which confines the King to the last rank.'])
+    // the remark before the first move is kept too, told by san "@intro" and ply 0
+    expect(sent.game.comments[0]).toMatchObject({ ply: 0, move: 0, san: '@intro' })
+    expect(sent.game.translations.es.comments).toEqual(['El poder de la torre,', 'que confina al rey.'])
     expect(sent.game.translations.es.pgn).toContain('{ El poder de la torre, }')
     expect(sent.game.pgn).toContain('{ In this position')
   })

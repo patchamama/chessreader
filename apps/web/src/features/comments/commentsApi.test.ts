@@ -203,3 +203,10 @@ describe('saveBookGame (a translated game goes to the database)', () => {
     expect(http).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('moveLabel of a comment printed before the first move', () => {
+  it('reads "Start" instead of a move', () => {
+    expect(moveLabel({ ply: 0, move: 0, san: '@intro' })).toBe('Start')
+    expect(moveLabel({ ply: 2, move: 1, san: 'e5' })).toBe('1...e5')
+  })
+})

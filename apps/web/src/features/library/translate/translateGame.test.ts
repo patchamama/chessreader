@@ -45,6 +45,7 @@ describe('translateGameText', () => {
     expect(complete.mock.calls[0][0].system).toContain('chess')
     expect(out.text).toBe('En esta posición se muestra el poder de la torre,\n1. Ra7 Kg8\nque confina al rey a la última fila.\n2. Kg2 Kf8 3. Kf3 *')
     expect(out.comments).toHaveLength(2)
+    expect(out.comments[0]).toMatchObject({ ply: 0, move: 0, san: '@intro' })
     expect(out.comments[1]).toMatchObject({ original: 'which confines the King to the last rank.', translated: 'que confina al rey a la última fila.', ply: 2, san: 'Kg8' })
     expect(out.problems).toEqual([])
   })

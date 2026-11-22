@@ -146,7 +146,9 @@ final class CommentsController
             $key = is_array($c) ? $str($c['key'] ?? null, 1, 200) : null;
             $san = is_array($c) ? $str($c['san'] ?? null, 1, 20) : null;
             if ($text === null || $key === null || $san === null || !is_string($c['hash'] ?? null) || !preg_match('/^[0-9a-f]{16}$/', $c['hash'])
-                || !is_int($c['ply'] ?? null) || $c['ply'] < 0 || !is_int($c['move'] ?? null) || $c['move'] < 0) {
+                || !is_int($c['ply'] ?? null) || $c['ply'] < 0 || !is_int($c['move'] ?? null) || $c['move'] < 0
+                // A comment printed before the first move is told by san "@intro" and ply 0, and only it has ply 0.
+                || (($san === PositionCommentStore::INTRO_SAN) !== ($c['ply'] === 0))) {
                 return null;
             }
             $comments[] = ['hash' => $c['hash'], 'key' => $key, 'ply' => $c['ply'], 'move' => $c['move'], 'san' => $san, 'text' => $text];

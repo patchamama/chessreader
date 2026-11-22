@@ -8,6 +8,12 @@ namespace App\Application\Comments\Port;
 interface PositionCommentStore
 {
     /**
+     * The `san` of a comment printed before a game's first move (ply 0): it belongs to its game and
+     * is listed, but it is never offered as a remark on its position nor counted among the popular ones.
+     */
+    public const INTRO_SAN = '@intro';
+
+    /**
      * Comments on a position (by its 16-hex hash and its key: FEN without move
      * counters), books before Lichess studies.
      *

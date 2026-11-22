@@ -16,6 +16,9 @@ export interface GameLine {
   san: string
 }
 
+/** The `san` the commentary database gives a comment printed before a game's first move (ply 0). */
+export const INTRO_SAN = '@intro'
+
 const STANDARD_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 
 /** A comment line is only a comment when it is real prose: this long at least. */
@@ -139,7 +142,7 @@ export async function translateGameText(
     out.push(translated ?? line.text)
     comments.push({
       original: line.text, translated, hash: positionHash(line.fen), key: positionKey(line.fen),
-      ply: line.ply, move: line.ply === 0 ? 0 : Math.ceil(line.ply / 2), san: line.san,
+      ply: line.ply, move: line.ply === 0 ? 0 : Math.ceil(line.ply / 2), san: line.ply === 0 ? INTRO_SAN : line.san,
     })
     options.onProgress?.(++done, total)
   }

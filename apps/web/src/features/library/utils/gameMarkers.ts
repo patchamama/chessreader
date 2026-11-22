@@ -160,6 +160,18 @@ function blocksBetween(prose: ProseText, root: Element, from: number, to: number
   return a && b ? siblingRange(a, b, root) : null
 }
 
+const HEADING = /^H[1-6]$/
+
+/**
+ * A game's blocks stop where a heading starts: the recognised end of a game can run on over the
+ * title and date of the next one (Lichess studies print a title before each game's position).
+ */
+function untilHeading(blocks: Element[] | null): Element[] | null {
+  if (!blocks) return blocks
+  const cut = blocks.findIndex((b, i) => i > 0 && (HEADING.test(b.tagName) || b.querySelector('h1, h2, h3, h4, h5, h6')))
+  return cut < 0 ? blocks : blocks.slice(0, cut)
+}
+
 const gameEnd = (g: RecognizedGame) => Math.max(g.charStart, g.charEnd - 1)
 
 /**
@@ -186,7 +198,7 @@ export function applyGameLayouts(
   const edits: { blocks: Element[]; lines: string[] }[] = []
   for (const { game, layout } of wanted) {
     const lineStart = prose.text.lastIndexOf('\n', gameStart(prose.text, game) - 1) + 1
-    const blocks = blocksBetween(prose, body, lineStart, gameEnd(game))
+    const blocks = untilHeading(blocksBetween(prose, body, lineStart, gameEnd(game)))
     if (!blocks || blocks.some((b) => CONTAINERS.has(b.tagName.toUpperCase()))) continue
     let s = -1
     let e = -1
@@ -290,7 +302,7 @@ export function decorateGames(
     const end = gameEnd(g)
 
     // Hidden frame around the moves (from the first move's line to the last move).
-    const moveBlocks = blocksBetween(prose, root, summary.moveLineStart, end)
+    const moveBlocks = untilHeading(blocksBetween(prose, root, summary.moveLineStart, end))
     let region: Element | null = null
     if (moveBlocks && !moveBlocks.some((b) => b.closest('[data-game-region]') || b.querySelector('[data-game-region]'))) {
       region = doc.createElement('div')
@@ -327,7 +339,9 @@ export function decorateGames(
     }
 
     const last = textNodeAt(prose, summary.moveLineStart, end, true)
-    const lastBlock = last ? blockOf(last, root) : null
+    const lastNatural = last ? blockOf(last, root) : null
+    // The frame ends with its last block, never at a heading it ran into.
+    const lastBlock = moveBlocks && lastNatural && !moveBlocks.some((b) => b === lastNatural || b.contains(lastNatural)) ? moveBlocks[moveBlocks.length - 1] : lastNatural
     if (lastBlock) {
       const after = region && region.contains(lastBlock) ? region : lastBlock
       after.after(marker(doc, 'end', 'end'))

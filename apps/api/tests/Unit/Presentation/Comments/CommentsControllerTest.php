@@ -198,10 +198,22 @@ final class CommentsControllerTest extends TestCase
         self::assertIsInt($body['sourceId']);
     }
 
+    public function test_add_book_game_accepts_the_intro_comment_of_a_game(): void
+    {
+        $body = self::validBookGame();
+        $body['game']['comments'][] = ['hash' => 'dddddddddddddddd', 'key' => 'k0', 'ply' => 0, 'move' => 0, 'san' => '@intro', 'text' => 'Before the first move.'];
+        $body['game']['translations']['es']['comments'][] = 'Antes de la primera jugada.';
+        $res = $this->postBookGame($body);
+        self::assertSame(200, $res->getStatusCode());
+        self::assertSame(2, json_decode((string) $res->getBody(), true)['added']);
+    }
+
     /** @return iterable<string, array{callable(array<string, mixed>): array<string, mixed>}> */
     public static function invalidBookGames(): iterable
     {
         yield 'no body' => [fn(array $b) => []];
+        yield 'intro with a ply' => [function (array $b) { $b['game']['comments'][0]['san'] = '@intro'; $b['game']['comments'][0]['ply'] = 3; return $b; }];
+        yield 'ply 0 that is no intro' => [function (array $b) { $b['game']['comments'][0]['ply'] = 0; return $b; }];
         yield 'empty title' => [function (array $b) { $b['book']['title'] = ''; return $b; }];
         yield 'long title' => [function (array $b) { $b['book']['title'] = str_repeat('t', 301); return $b; }];
         yield 'bad book lang' => [function (array $b) { $b['book']['lang'] = 'E'; return $b; }];
