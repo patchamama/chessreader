@@ -36,19 +36,28 @@ beforeEach(() => {
 })
 
 describe('ImageAiMenu', () => {
-  it('shows nothing without an AI model and without moves after the image', () => {
-    render(<ImageAiMenu src={SRC} alt="d" followingText="Just prose." />)
+  it('shows nothing for a known FEN without an AI model and without moves after the image', () => {
+    render(<ImageAiMenu src={SRC} alt="d" followingText="Just prose." fenKnown />)
     expect(screen.queryByRole('button', { name: 'AI actions for this image' })).toBeNull()
   })
 
-  it('without an AI model offers only the solver from the moves', async () => {
+  it('shows the control for an unknown FEN even without an AI model and without moves', async () => {
+    render(<ImageAiMenu src={SRC} alt="d" followingText="Just prose." />)
+    await open()
+    const menu = screen.getByRole('menu', { name: 'AI actions' })
+    expect(within(menu).getByRole('menuitem', { name: 'Read this diagram (learn from the book)' })).toBeEnabled()
+  })
+
+  it('without an AI model the model actions are disabled with a hint; the solver from the moves stays', async () => {
     render(<ImageAiMenu src={SRC} alt="d" followingText={MOVES} />)
     await open()
     const menu = screen.getByRole('menu', { name: 'AI actions' })
-    expect(within(menu).getByRole('menuitem', { name: 'Find the position from the moves' })).toBeInTheDocument()
-    expect(within(menu).getByRole('menuitem', { name: 'Find positions of all diagrams in this chapter' })).toBeInTheDocument()
-    expect(within(menu).queryByRole('menuitem', { name: /Describe/ })).toBeNull()
-    expect(within(menu).queryByRole('menuitem', { name: 'Find the position' })).toBeNull()
+    expect(within(menu).getByRole('menuitem', { name: 'Find the position from the moves' })).toBeEnabled()
+    expect(within(menu).getByRole('menuitem', { name: 'Find positions of all diagrams in this chapter' })).toBeEnabled()
+    for (const name of ['Describe / extract', 'Redraw clearly', 'Find the position']) {
+      expect(within(menu).getByRole('menuitem', { name })).toBeDisabled()
+    }
+    expect(within(menu).getByText('Set up an AI model in Settings to use the model actions.')).toBeInTheDocument()
   })
 
   it('with a vision model offers describe, redraw and find the position', async () => {

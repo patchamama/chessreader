@@ -96,8 +96,15 @@ function renumberFromFens(tokens: SanToken[]): void {
 }
 
 /** The recognition text: figurines and Spanish letters as English SAN, engine lines as comments (same length). */
+/**
+ * Cyrillic letters that look like a file letter ("5 ... а6": the "а" is U+0430, a typo some
+ * books carry) read as the Latin one when a rank digit follows. Same length, offsets kept.
+ */
+const CYRILLIC_FILES: Record<string, string> = { '\u0430': 'a', '\u0441': 'c', '\u0435': 'e' };
+const cyrillicSquares = (text: string): string => text.replace(/[\u0430\u0441\u0435](?=[1-8])/g, (c) => CYRILLIC_FILES[c]);
+
 function normaliseText(text: string): string {
-  return spanishToEnglish(figurineToAscii(text)).replace(ENGINE_LINE_RE, (line) =>
+  return spanishToEnglish(figurineToAscii(cyrillicSquares(text))).replace(ENGINE_LINE_RE, (line) =>
     line.replace(/^([ \t]*)[^\]]*\]/, (label, indent: string) => `${indent}{${' '.repeat(label.length - indent.length - 1)}`));
 }
 

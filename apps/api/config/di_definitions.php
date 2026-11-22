@@ -548,6 +548,25 @@ return [
         );
     },
 
+    // Studies library
+    \App\Domain\Studies\StudyRepository::class => fn (ContainerInterface $c) => new \App\Infrastructure\Studies\DbalStudyRepository($c->get(Connection::class)),
+    \App\Application\Studies\LichessStudySource::class => fn () => new \App\Infrastructure\Studies\LichessStudyClient(
+        new \GuzzleHttp\Client(['handler' => \GuzzleHttp\HandlerStack::create(new \GuzzleHttp\Handler\CurlHandler())]),
+        null,
+        (string) getenv('LICHESS_TOKEN'),
+    ),
+    \App\Application\Studies\CommentChapterSource::class => function (ContainerInterface $c) {
+        $storageDir = $c->get('settings')['storage_dir'] ?? dirname(__DIR__) . '/storage';
+        return new \App\Infrastructure\Studies\SqliteCommentChapterSource($storageDir . '/comments.sqlite');
+    },
+    \App\Presentation\Studies\StudiesController::class => fn (ContainerInterface $c) => new \App\Presentation\Studies\StudiesController(
+        new \App\Application\Studies\StudyCatalog($c->get(\App\Domain\Studies\StudyRepository::class)),
+        new \App\Application\Studies\ImportStudiesHandler($c->get(\App\Application\Studies\LichessStudySource::class), $c->get(\App\Domain\Studies\StudyRepository::class), new \App\Application\Studies\StudyPgnParser()),
+        new \App\Application\Studies\SyncCommentStudiesHandler($c->get(\App\Application\Studies\CommentChapterSource::class), $c->get(\App\Domain\Studies\StudyRepository::class), new \App\Application\Studies\StudyPgnParser()),
+        $c->get(\App\Application\Studies\LichessStudySource::class),
+        $c->get(\App\Domain\Studies\StudyRepository::class),
+    ),
+
     // The stored EPUBs: the same folder the uploads and the cover/images routes use.
     \App\Infrastructure\Epub\StoredEpubs::class => fn (ContainerInterface $c) => new \App\Infrastructure\Epub\StoredEpubs($c->get('settings')['books_dir'] ?? dirname(__DIR__) . '/storage/books'),
     \App\Application\Ingestion\Port\ChapterStore::class => fn (ContainerInterface $c) => new \App\Infrastructure\Suggestions\DbalChapterStore($c->get(Connection::class)),

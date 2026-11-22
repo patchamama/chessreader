@@ -98,6 +98,11 @@ function isEnumerationMarker(text: string, start: number, end: number, strayClos
   return /^[ \t]*$/.test(text.slice(lineStart, start));
 }
 
+/** "bxa8Q" / "c1Q+" (promotion without the "=" many English books print) → "bxa8=Q" / "c1=Q+". */
+function withPromotionSign(san: string): string {
+  return san.replace(/^((?:[a-h]x)?[a-h][18])([QRBN])/, '$1=$2');
+}
+
 export function tokenize(text: string): SanToken[] {
   const tokens: SanToken[] = [];
 
@@ -202,7 +207,7 @@ export function tokenize(text: string): SanToken[] {
     // right before a move ("1 d4 d5 2 c4"). A bare number before a word
     // ("en 2 partidas") is prose.
     // English books print Black's numbers with a space before the dots ("5 ... Kd8"): the ellipsis may follow spaces.
-    const re = /(?<!\$)\b(\d{1,3})(\.{1,3}|\u2026|[ \t]+(?:\.{2,3}|\u2026)|\s(?=(?:O-O|[KQRBN][a-h1-8]?x?[a-h][1-8]|[a-h]x[a-h][1-8]|[a-h][1-8])(?![a-zA-Z])))/g;
+    const re = /(?<!\$)\b(\d{1,3})(\.{1,3}|\u2026|[ \t]+(?:\.{2,3}|\u2026)|\s(?=(?:O-O|[KQRBN][a-h1-8]?x?[a-h][1-8]|[a-h]x[a-h][1-8](?:=?[QRBN])?|[a-h][1-8](?:=?[QRBN])?)(?![a-zA-Z])))/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
       const num = parseInt(m[1], 10);
@@ -251,7 +256,7 @@ export function tokenize(text: string): SanToken[] {
           raw: m[0],
           charStart: m.index,
           charEnd: m.index + m[0].length,
-          san: m[0],
+          san: withPromotionSign(m[0]),
         }
       });
     }

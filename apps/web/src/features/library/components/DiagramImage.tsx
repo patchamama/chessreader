@@ -194,7 +194,7 @@ export function DiagramImage({ src, alt, fen, withEval = false, textFen, fenKnow
       )}
 
       {/* The AI actions of this image, left of the other icons (S4, S7). */}
-      <ImageAiMenu src={src} alt={alt} followingText={followingText} fen={activeFen} />
+      <ImageAiMenu src={src} alt={alt} followingText={followingText} fen={activeFen} fenKnown={fenKnown} />
 
       {mode === 'original' ? (
         <img src={src} alt={alt} className="max-w-full h-auto" onError={onImageError} />

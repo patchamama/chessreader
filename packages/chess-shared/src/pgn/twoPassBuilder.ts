@@ -457,6 +457,20 @@ function insertVariations(
   const stack: VarFrame[] = [];
   let cur: VarFrame | null = null;
   let firstUnreferencedReported = false;
+  // One flag per open bracket: a move of that bracket was dropped, so the rest cannot be played.
+  const broken: boolean[] = [];
+  const noteUnplaced = (t: SanToken) => {
+    if (broken.length === 0 || t.charStart === undefined || t.charEnd === undefined) return;
+    const top = broken.length - 1;
+    tree.unplacedVariationMoves.push({
+      charStart: t.charStart,
+      charEnd: t.charEnd,
+      san: t.san!,
+      ...(t.rawSan ? { rawSan: t.rawSan } : {}),
+      reason: broken[top] ? 'after-illegal' : 'illegal',
+    });
+    broken[top] = true;
+  };
 
   const closeRun = () => { cur = null; };
 
@@ -471,6 +485,7 @@ function insertVariations(
       while (back >= 0 && tokens[back].type === 'paragraph-break') back--;
       if (back >= 0 && tokens[back].type === 'diagram') {
         stack.push(null as unknown as VarFrame);
+        broken.push(false);
         cur = null;
         continue;
       }
@@ -478,11 +493,13 @@ function insertVariations(
       // active, under the last mainline-ish node — handled when its first move
       // anchors). Push current frame; start a fresh nested frame lazily.
       stack.push(cur as VarFrame);
+      broken.push(false);
       cur = null;
       continue;
     }
     if (t.type === 'variation-close') {
       cur = stack.length > 0 ? stack.pop() ?? null : null;
+      broken.pop();
       continue;
     }
 
@@ -498,7 +515,10 @@ function insertVariations(
       if (iso) tree.isolatedMoves.push(iso);
       continue;
     }
-    if (t.moveNumber === undefined || !t.color) continue;
+    if (t.moveNumber === undefined || !t.color) {
+      if (broken[broken.length - 1]) noteUnplaced(t);
+      continue;
+    }
 
     if (cur === null) {
       // Start a new variation run: anchor it by NUMBER on the mainline.
@@ -508,6 +528,7 @@ function insertVariations(
       const anchor = (enclosing ? anchorInLine(t, enclosing.parentId) : null) ?? anchorFor(t);
       if (!anchor) {
         // No legal anchor for this numbered move → unreferenced (report first).
+        noteUnplaced(t);
         if (!firstUnreferencedReported) {
           firstUnreferencedReported = true;
           errors.push({
@@ -553,6 +574,7 @@ function insertVariations(
       });
       if (!repair) {
         // Illegal continuation of this variation → stop the run here.
+        noteUnplaced(t);
         cur = null;
         continue;
       }

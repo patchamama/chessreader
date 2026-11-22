@@ -60,6 +60,7 @@ import { useProblemStore } from '../problem/problemStore'
 import { TrackPlayer } from '../track/TrackPlayer'
 import { demoTrackFor } from '../../../demo/demoTracks'
 import { CorrectionWorkbench } from '../correction/CorrectionWorkbench'
+import { paintUnplacedMoves } from '../utils/unplacedMoves'
 import { extractProseText, htmlToProseText, planMoveTargets, piecesByTextNode, nodeBeforeOffset } from '../utils/proseText'
 import { playLine } from '../../../shared/chess/playLine'
 import { formatMoveSpans } from '../../../shared/chess/notation'
@@ -139,7 +140,7 @@ interface MoveTooltip {
  * The "game" of a move written in a fragment no game holds (no position to start
  * from, S3): no moves, so a mark of it only lights its square on the board.
  */
-const NO_GAME_TREE = { startFen: '', nodes: new Map(), mainline: [], variations: new Map(), isolatedMoves: [], errors: [] } as unknown as GameTree
+const NO_GAME_TREE = { startFen: '', nodes: new Map(), mainline: [], variations: new Map(), isolatedMoves: [], errors: [], unplacedVariationMoves: [] } as unknown as GameTree
 const EMPTY_BOARD_FEN = '8/8/8/8/8/8/8/8 w - - 0 1'
 
 /** The position the study board shows now (a fragment without a position is read against it). */
@@ -607,7 +608,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
     // Remove the game frames and previous markers (idempotent re-wrap).
     unwrapGameContainers(container)
     clearGameDecorations(container)
-    container.querySelectorAll('span[data-san], span[data-iso-square], span[data-ref-key]').forEach((el) => {
+    container.querySelectorAll('span[data-san], span[data-iso-square], span[data-ref-key], span[data-unplaced]').forEach((el) => {
       const parent = el.parentNode
       if (parent) {
         // The book's own spelling (S12: the span may show another notation).
@@ -730,6 +731,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
         textNode.parentNode?.replaceChild(frag, textNode)
       }
     }
+    paintUnplacedMoves(container, games)
     // Heading-like paragraphs of the EPUB (classes, its stylesheet, inline CSS) as headings (S8).
     detectHeadings(container)
   }, [shownHtml, games, plainText, gameSummaries, currentChapter, id, bookConfig.moveLineIndent.zeroIndent])
@@ -1496,6 +1498,8 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
             onPickMainline={() => pickChooser(chooser.successorId, false)}
             onPickLine={(i) => pickChooser(chooser.siblingLines[i][0], true)}
             onClose={() => setChooser(null)}
+            lang={notationLang}
+            style={notationStyle}
           />
         </div>
       )}

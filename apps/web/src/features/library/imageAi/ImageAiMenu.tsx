@@ -8,6 +8,7 @@ import { registeredDiagrams, type DiagramEntry } from './diagramRegistry'
 import { findPosition, visionReading } from './findPosition'
 import { imageDataUrl } from './imageData'
 import { aiTextToHtml, describePrompt, redrawPrompt } from './prompts'
+import { DiagramReader, type ReaderResult } from './DiagramReader'
 import { useSessionFenStore } from './sessionFens'
 import { saveImageSuggestion, savedMessage } from './suggest'
 import { templateReadings } from './templates'
@@ -21,12 +22,15 @@ interface Props {
   fen?: string
   /** A FEN accepted for this image. */
   onFen?: (fen: string) => void
+  /** The book (or the reader) gives this diagram's FEN: nothing to find. */
+  fenKnown?: boolean
 }
 
 type HtmlAction = 'describe' | 'redraw'
 type Panel =
   | { kind: 'html'; action: HtmlAction; status: 'loading' | 'done' | 'error'; html?: string; model?: string; error?: string }
   | { kind: 'fen'; status: 'loading' | 'done' | 'error'; solutions?: DiagramSolution[]; pick?: number; sources?: string[]; author?: 'ai' | 'user'; model?: string; error?: string }
+  | { kind: 'learn' }
   | { kind: 'batch'; status: 'loading' | 'done'; rows: BatchRow[] }
 
 interface BatchRow {
@@ -38,6 +42,7 @@ interface BatchRow {
   accepted?: boolean
 }
 
+const NO_MODEL_HINT = 'Set up an AI model in Settings to use the model actions.'
 const ACTION_LABEL: Record<HtmlAction, string> = { describe: 'Describe / extract', redraw: 'Redraw clearly' }
 
 /** The readings of a diagram from every reader there is: the book's templates, then the vision model. */
@@ -62,9 +67,10 @@ async function readDiagram(src: string, vision: ((image: string) => Promise<{ re
  * clearly, or find the position of a chess diagram (templates + vision +
  * the following moves through the solver), one by one or for the chapter.
  * Every result is previewed beside the original and only an Accept turns it
- * into a suggestion. Without a model, only the solver from the moves is offered.
+ * into a suggestion. Without a model, the learning reader (squares compared with
+ * the book's bank, asking the user about doubts) and the solver from the moves are offered.
  */
-export function ImageAiMenu({ src, alt, followingText, fen, onFen }: Props) {
+export function ImageAiMenu({ src, alt, followingText, fen, onFen, fenKnown = false }: Props) {
   const llm = useLlm()
   const setSessionFen = useSessionFenStore((s) => s.setFen)
   const rootRef = useRef<HTMLSpanElement>(null)
@@ -74,7 +80,8 @@ export function ImageAiMenu({ src, alt, followingText, fen, onFen }: Props) {
   const hasMoves = useMemo(() => !!parseFollowingMoves(followingText), [followingText])
   const vision = llm.available && llm.vision
 
-  if (!llm.available && !hasMoves) return null
+  // A diagram without a known FEN always has the reader (it needs no model); a known one only the model/moves actions.
+  if (fenKnown && !llm.available && !hasMoves) return null
 
   const report = (r: SaveSuggestionResult) =>
     setMessage(r.saved ? { text: savedMessage(r) } : { text: savedMessage(r), json: r.json, path: r.path })
@@ -140,6 +147,15 @@ export function ImageAiMenu({ src, alt, followingText, fen, onFen }: Props) {
     report(r)
   }
 
+  const acceptRead = async (r: ReaderResult) => {
+    const note = r.approximate ? 'approximate: some answers (side to move, castling or en passant) were not known' : undefined
+    setSessionFen(src, r.fen)
+    onFen?.(r.fen)
+    const res = await saveImageSuggestion({ kind: 'diagram-fen', src, element: rootRef.current, before: fen ? { fen } : null, after: { fen: r.fen, ...(note ? { note } : {}) }, author: r.author, model: r.model })
+    setPanel(null)
+    report(res)
+  }
+
   const acceptFen = async (imageSrc: string, element: Element | null, newFen: string, author: 'ai' | 'user', model?: string, before?: string) => {
     setSessionFen(imageSrc, newFen)
     if (imageSrc === src) onFen?.(newFen)
@@ -169,11 +185,20 @@ export function ImageAiMenu({ src, alt, followingText, fen, onFen }: Props) {
 
       {open && (
         <span role="menu" aria-label="AI actions" className="absolute right-0 top-0 z-30 flex flex-col rounded-md border border-slate-200 bg-white py-1 text-[11px] shadow-lg">
+          {!fenKnown && <MenuItem onClick={choose(() => setPanel({ kind: 'learn' }))}>Read this diagram (learn from the book)</MenuItem>}
           {vision && (
             <>
               <MenuItem onClick={choose(() => void runHtml('describe'))}>{ACTION_LABEL.describe}</MenuItem>
               <MenuItem onClick={choose(() => void runHtml('redraw'))}>{ACTION_LABEL.redraw}</MenuItem>
               <MenuItem onClick={choose(() => void runFen(true))}>Find the position</MenuItem>
+            </>
+          )}
+          {!llm.available && (
+            <>
+              <MenuItem disabled hint={NO_MODEL_HINT}>{ACTION_LABEL.describe}</MenuItem>
+              <MenuItem disabled hint={NO_MODEL_HINT}>{ACTION_LABEL.redraw}</MenuItem>
+              <MenuItem disabled hint={NO_MODEL_HINT}>Find the position</MenuItem>
+              <span className="px-3 py-0.5 text-[10px] text-slate-400">{NO_MODEL_HINT}</span>
             </>
           )}
           <MenuItem onClick={choose(() => void runFen(false))}>Find the position from the moves</MenuItem>
@@ -185,6 +210,15 @@ export function ImageAiMenu({ src, alt, followingText, fen, onFen }: Props) {
         <span className="absolute left-0 top-full z-30 mt-1 block w-[min(36rem,90vw)] rounded-md border border-slate-200 bg-white p-2 text-[11px] text-slate-700 shadow-lg">
           {panel.kind === 'html' && (
             <HtmlPanel panel={panel} src={src} alt={alt} onAccept={() => void acceptHtml(panel)} onReject={() => setPanel(null)} />
+          )}
+          {panel.kind === 'learn' && (
+            <DiagramReader
+              src={src}
+              followingText={followingText}
+              vision={vision ? async () => { const v = await visionOf(await imageDataUrl(src)); return { readings: v.readings, model: v.model } } : null}
+              onAccept={(r) => void acceptRead(r)}
+              onClose={() => setPanel(null)}
+            />
           )}
           {panel.kind === 'fen' && (
             <FenPanel
@@ -236,9 +270,9 @@ export function ImageAiMenu({ src, alt, followingText, fen, onFen }: Props) {
   )
 }
 
-function MenuItem({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function MenuItem({ onClick, children, disabled, hint }: { onClick?: () => void; children: React.ReactNode; disabled?: boolean; hint?: string }) {
   return (
-    <button type="button" role="menuitem" onClick={onClick} className="whitespace-nowrap px-3 py-1 text-left hover:bg-slate-50">
+    <button type="button" role="menuitem" onClick={onClick} disabled={disabled} title={hint} className="whitespace-nowrap px-3 py-1 text-left hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-transparent">
       {children}
     </button>
   )

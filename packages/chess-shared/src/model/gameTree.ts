@@ -108,6 +108,17 @@ export interface GameTree {
   isolatedMoves: IsolatedMove[];
   /** Recognition problems detected while building this tree (for the error panel). */
   errors: RecognitionError[];
+  /** Move tokens written inside a variation that could not be placed (display only; not counted as errors). */
+  unplacedVariationMoves: UnplacedVariationMove[];
+}
+
+export interface UnplacedVariationMove {
+  charStart: number;
+  charEnd: number;
+  san: string;
+  rawSan?: string;
+  /** 'illegal': not legal where it stands; 'after-illegal': follows such a move. */
+  reason: 'illegal' | 'after-illegal';
 }
 
 export function createGameTree(startFen: string): GameTree {
@@ -118,6 +129,7 @@ export function createGameTree(startFen: string): GameTree {
     variations: new Map(),
     isolatedMoves: [],
     errors: [],
+    unplacedVariationMoves: [],
   };
 }
 

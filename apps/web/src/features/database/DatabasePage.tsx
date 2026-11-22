@@ -16,8 +16,9 @@ import { gameName, withGameReference } from './gameReference'
 import { markVisited, useVisitedCheck } from '../../shared/visited/visitedStore'
 import { VisitedMark } from '../../shared/visited/VisitedMark'
 import CommentsTab from './CommentsTab'
+import StudiesTab from '../studies/StudiesTab'
 
-type Tab = 'books' | 'search' | 'openings' | 'players' | 'stats' | 'comments'
+type Tab = 'books' | 'search' | 'openings' | 'players' | 'stats' | 'comments' | 'studies'
 
 /** Horizontal bars, drawn by hand (no chart library). */
 export function BarChart({ data, label }: { data: { label: string; value: number; note?: string }[]; label: string }) {
@@ -309,7 +310,7 @@ export default function DatabasePage() {
     )
   }
 
-  const tabs: [Tab, string][] = [['books', 'Books'], ['search', 'Search'], ['openings', 'Openings'], ['players', 'Players'], ['stats', 'Statistics'], ['comments', 'Comments']]
+  const tabs: [Tab, string][] = [['books', 'Books'], ['search', 'Search'], ['openings', 'Openings'], ['players', 'Players'], ['stats', 'Statistics'], ['comments', 'Comments'], ['studies', 'Studies']]
   return (
     <div className={`mx-auto ${width} px-4 py-6`}>
       <h1 className="text-xl font-bold text-slate-800">Database</h1>
@@ -419,6 +420,7 @@ export default function DatabasePage() {
             )}
           </div>
         )}
+        {tab === 'studies' && <StudiesTab />}
         {tab === 'comments' && <CommentsTab books={books ?? []} initialBook={params.get('book') ?? undefined} />}
         {tab === 'stats' && (
           <div className="grid gap-6 md:grid-cols-2">

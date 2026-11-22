@@ -9,6 +9,7 @@ import { useExternalBookStore } from '../../shared/externalBook/externalBookStor
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 import { isVisited, resetVisited } from '../../shared/visited/visitedStore'
 import * as commentsApi from '../comments/commentsApi'
+import { studiesApi } from '../studies/studiesApi'
 
 beforeEach(() => {
   useSettingsStore.setState({ language: 'en', commentDbUrl: 'https://api.github.com/repos/me/chessreader-resources/contents', commentDbToken: 'ghp_test' })
@@ -353,5 +354,14 @@ describe('Database → Comments tab (S2)', () => {
     render(<MemoryRouter><DatabasePage /></MemoryRouter>)
     fireEvent.click(screen.getByRole('tab', { name: 'Comments' }))
     expect(await screen.findByText('An invented remark.')).toBeTruthy()
+  })
+})
+
+describe('Database → Studies tab', () => {
+  it('shows the imported Lichess studies in its own tab', async () => {
+    vi.spyOn(studiesApi, 'list').mockResolvedValue({ studies: [], authors: [] })
+    render(<MemoryRouter><DatabasePage /></MemoryRouter>)
+    fireEvent.click(screen.getByRole('tab', { name: 'Studies' }))
+    expect(await screen.findByText(/No studies yet/)).toBeTruthy()
   })
 })

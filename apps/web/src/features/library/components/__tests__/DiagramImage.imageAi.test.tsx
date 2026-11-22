@@ -23,9 +23,14 @@ describe('DiagramImage image AI', () => {
     expect(screen.getByRole('button', { name: 'AI actions for this image' })).toBeInTheDocument()
   })
 
-  it('shows no AI icon without a model and without moves after it', () => {
-    render(<DiagramImage src={SRC} alt="diagram" fen={FEN} followingText="Plain prose." />)
+  it('shows no AI icon for a diagram whose FEN is known, without a model and without moves', () => {
+    render(<DiagramImage src={SRC} alt="diagram" fen={FEN} fenKnown followingText="Plain prose." />)
     expect(screen.queryByRole('button', { name: 'AI actions for this image' })).toBeNull()
+  })
+
+  it('always shows the AI icon for a diagram whose FEN is not known, without a model and without moves', () => {
+    render(<DiagramImage src={SRC} alt="diagram" fen={FEN} followingText="Plain prose." />)
+    expect(screen.getByRole('button', { name: 'AI actions for this image' })).toBeInTheDocument()
   })
 
   it('takes the position accepted for its image this session', () => {

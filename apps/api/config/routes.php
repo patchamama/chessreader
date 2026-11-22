@@ -166,6 +166,18 @@ return function (App $app): void {
         $group->patch('/{id}', [\App\Presentation\Suggestions\SuggestionsController::class, 'updateStatus']);
     })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
 
+    // Studies library: Lichess studies kept in the app (require JWT + Approved)
+    $app->group('/api/studies', function (RouteCollectorProxy $group) {
+        $c = \App\Presentation\Studies\StudiesController::class;
+        $group->get('', [$c, 'list']);
+        $group->post('/import', [$c, 'import']);
+        $group->post('/sync-comments', [$c, 'syncComments']);
+        $group->get('/lichess/user/{handle}', [$c, 'lichessUser']);
+        $group->get('/{id:[A-Za-z0-9]{8}}', [$c, 'get']);
+        $group->put('/{id:[A-Za-z0-9]{8}}', [$c, 'update']);
+        $group->delete('/{id:[A-Za-z0-9]{8}}', [$c, 'delete']);
+    })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
+
     // Errata: corrected main lines of book games (require JWT + Approved)
     $app->group('/api/errata', function (RouteCollectorProxy $group) {
         $group->get('', [\App\Presentation\Errata\ErrataController::class, 'list']);

@@ -100,7 +100,7 @@ export function boardPatches(img: ImageLike): Float32Array[] {
   return patches
 }
 
-function boardRows(fen: string): string[][] | null {
+export function boardRows(fen: string): string[][] | null {
   const ranks = fen.trim().split(/\s+/)[0]?.split('/') ?? []
   if (ranks.length !== 8) return null
   const rows = ranks.map((r) => r.split('').flatMap((c) => (/\d/.test(c) ? Array<string>(Number(c)).fill('.') : [c])))
@@ -131,7 +131,7 @@ export function learnTemplates(samples: TemplateSample[]): Templates {
   return out
 }
 
-function distance(a: Float32Array, b: Float32Array): number {
+export function distance(a: Float32Array, b: Float32Array): number {
   let d = 0
   for (let i = 0; i < a.length; i++) { const x = a[i] - b[i]; d += x * x }
   return d

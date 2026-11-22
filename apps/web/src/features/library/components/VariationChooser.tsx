@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { GameTree } from '@chess-ebook/chess-shared'
+import { formatSan } from '../../../shared/chess/notation'
+import type { AppLanguage, NotationStyle } from '../../../shared/settings/settingsStore'
 
 interface VariationChooserProps {
   tree: GameTree
@@ -10,12 +12,17 @@ interface VariationChooserProps {
   onPickMainline: () => void
   onPickLine: (lineIndex: number) => void
   onClose: () => void
+  /** The notation of the viewer: the moves are shown with its piece letters (or figurines), whatever language the book used. */
+  lang?: AppLanguage
+  style?: NotationStyle
 }
 
-function label(tree: GameTree, nodeId: string): string {
+function label(tree: GameTree, nodeId: string, lang?: AppLanguage, style?: NotationStyle): string {
   const n = tree.nodes.get(nodeId)
   if (!n) return '?'
-  return `${n.moveNumber}${n.color === 'white' ? '.' : '...'}${n.rawSan ?? n.san}`
+  // `san` is the move in English letters whatever the book printed; only without a chosen notation is the book's spelling kept.
+  const move = lang && style ? formatSan(n.san, lang, style) : (n.rawSan ?? n.san)
+  return `${n.moveNumber}${n.color === 'white' ? '.' : '...'}${move}`
 }
 
 export function VariationChooser({
@@ -25,6 +32,8 @@ export function VariationChooser({
   onPickMainline,
   onPickLine,
   onClose,
+  lang,
+  style,
 }: VariationChooserProps) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -56,7 +65,7 @@ export function VariationChooser({
         className="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs hover:bg-blue-50"
       >
         <span className="font-semibold text-slate-700">Mainline</span>
-        <span className="font-mono text-slate-500">{label(tree, mainlineId)}</span>
+        <span className="font-mono text-slate-500">{label(tree, mainlineId, lang, style)}</span>
       </button>
       {siblingLines.map((line, i) => (
         <button
@@ -66,7 +75,7 @@ export function VariationChooser({
           className="flex w-full items-center justify-between px-3 py-1.5 text-left text-xs hover:bg-emerald-50"
         >
           <span className="text-slate-600">Variation {i + 1}</span>
-          <span className="font-mono text-slate-500">{label(tree, line[0])}</span>
+          <span className="font-mono text-slate-500">{label(tree, line[0], lang, style)}</span>
         </button>
       ))}
     </div>
