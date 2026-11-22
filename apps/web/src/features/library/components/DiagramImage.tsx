@@ -17,6 +17,7 @@ import { ImageAiMenu } from '../imageAi/ImageAiMenu'
 import { registerDiagram } from '../imageAi/diagramRegistry'
 import { useSessionFenStore } from '../imageAi/sessionFens'
 import { followingTextOf } from '../imageAi/followingText'
+import { useStudyBoardStore } from '../store/studyBoardStore'
 
 /** The value of the book style in the board theme menu. */
 const BOOK_OPTION = 'book'
@@ -153,6 +154,10 @@ export function DiagramImage({ src, alt, fen, withEval = false, textFen, fenKnow
     setEditingFen(false)
   }
 
+  // A diagram that holds a FEN (printed next to it, or really known): a click puts its position on the analysis board.
+  const holdsFen = fenKnown || !!textFen
+  const showOnBoard = () => { if (holdsFen) useStudyBoardStore.getState().showFen(activeFen) }
+
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault()
     setMenuOpen(true)
@@ -197,7 +202,7 @@ export function DiagramImage({ src, alt, fen, withEval = false, textFen, fenKnow
       <ImageAiMenu src={src} alt={alt} followingText={followingText} fen={activeFen} fenKnown={fenKnown} />
 
       {mode === 'original' ? (
-        <img src={src} alt={alt} className="max-w-full h-auto" onError={onImageError} />
+        <img src={src} alt={alt} className={`max-w-full h-auto${holdsFen ? ' cursor-pointer' : ''}`} title={holdsFen ? 'Show this position on the analysis board' : undefined} onClick={showOnBoard} onError={onImageError} />
       ) : (
         <span className="inline-block">
           <span
@@ -205,7 +210,8 @@ export function DiagramImage({ src, alt, fen, withEval = false, textFen, fenKnow
             role="img"
             aria-label={`${alt} (generated)`}
             onContextMenu={onContextMenu}
-            className="block"
+            className={`block${holdsFen ? ' cursor-pointer' : ''}`}
+            onClick={showOnBoard}
             dangerouslySetInnerHTML={{ __html: svg ?? '' }}
           />
           {loading && <span role="status" className="block text-[10px] text-slate-400">Generating…</span>}

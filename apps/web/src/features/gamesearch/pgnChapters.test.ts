@@ -98,3 +98,34 @@ describe('a game that starts from a position shows its diagram, not the FEN text
   })
 })
 
+describe('chapters of a study that are only text (a preface, an introduction)', () => {
+  const empty = '8/8/8/8/8/8/8/8 w - - 0 1'
+  const prefaceOnly = `[Event "Study: Preface"]\n[ChapterName "Preface"]\n[SetUp "1"]\n[FEN "${empty}"]\n\n{ Chess Fundamentals was written for the beginner. }\n{ Read the lessons twice. }\n*`
+
+  it('are shown, as paragraphs, with no diagram of an empty board and no FEN line', () => {
+    const { chapters, skipped } = pgnToChapters(prefaceOnly, { fromPosition: true })
+    expect(skipped).toBe(0)
+    expect(chapters).toHaveLength(1)
+    expect(chapters[0].title).toBe('Preface')
+    expect(chapters[0].html).toContain('<p>Chess Fundamentals was written for the beginner.</p>')
+    expect(chapters[0].html).toContain('<p>Read the lessons twice.</p>')
+    expect(chapters[0].html).not.toContain('<img')
+    expect(chapters[0].html).not.toContain(empty)
+  })
+
+  it('a text-only chapter with a position shows its diagram and the text', () => {
+    const fen = '7k/8/8/8/8/8/8/R6K w - - 0 1'
+    const { chapters } = pgnToChapters(`[Event "S"]\n[ChapterName "The position"]\n[SetUp "1"]\n[FEN "${fen}"]\n\n{ White to play and mate. }\n*`, { fromPosition: true })
+    expect(chapters[0].html).toContain('<img class="diagram"')
+    expect(chapters[0].html).toContain('<p>White to play and mate.</p>')
+  })
+
+  it('without fromPosition (game search), a game with no moves is still not a chapter', () => {
+    expect(pgnToChapters(`[Event "S"]\n[ChapterName "Preface"]\n\n{ Only words. }\n*`).chapters).toHaveLength(0)
+  })
+
+  it('a chapter with neither moves nor text is still dropped', () => {
+    expect(pgnToChapters(`[Event "S"]\n[SetUp "1"]\n[FEN "${empty}"]\n\n*`, { fromPosition: true }).chapters).toHaveLength(0)
+  })
+})
+

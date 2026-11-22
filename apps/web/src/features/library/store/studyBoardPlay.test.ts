@@ -77,3 +77,28 @@ describe('studyBoardStore — playable board', () => {
     expect(useStudyBoardStore.getState().playFen).toBeNull()
   })
 })
+
+describe('studyBoardStore — showFen (a book diagram that holds a FEN goes to the analysis board)', () => {
+  beforeEach(reset)
+
+  it('puts that position on the board, drops any selection and highlight, and completes a FEN without counters', () => {
+    useStudyBoardStore.getState().selectSquare('e2', START)
+    useStudyBoardStore.getState().setIsolatedHighlight({ square: 'e4', piece: 'p' })
+    useStudyBoardStore.getState().showFen('7k/8/8/8/8/8/8/R6K w - -')
+    const s = useStudyBoardStore.getState()
+    expect(s.playFen).toBe('7k/8/8/8/8/8/8/R6K w - - 0 1')
+    expect(s.selectedSquare).toBeNull()
+    expect(s.legalTargets).toEqual([])
+    expect(s.isolatedHighlight).toBeNull()
+  })
+
+  it('keeps a complete FEN as it is, ignores one that is not a position, and can be played from', () => {
+    const fen = '7k/8/8/8/8/8/8/R6K w - - 3 12'
+    useStudyBoardStore.getState().showFen(fen)
+    expect(useStudyBoardStore.getState().playFen).toBe(fen)
+    useStudyBoardStore.getState().selectSquare('a1', fen)
+    expect(useStudyBoardStore.getState().legalTargets).toContain('a7')
+    useStudyBoardStore.getState().showFen('not a fen')
+    expect(useStudyBoardStore.getState().playFen).toBe(fen)
+  })
+})

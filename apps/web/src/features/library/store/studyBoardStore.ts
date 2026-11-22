@@ -71,6 +71,8 @@ export interface StudyBoardState {
   playMove: (from: string, to: string, baseFen: string) => boolean
   /** Discard the free-play position and any selection. */
   resetPlay: () => void
+  /** Put a position on the board (a book diagram that holds a FEN): free play from it. A FEN that is not a position is ignored. */
+  showFen: (fen: string) => void
   /** Show an isolated prose move as a square overlay (null clears it). */
   setIsolatedHighlight: (h: StudyBoardState['isolatedHighlight']) => void
   /**
@@ -265,6 +267,14 @@ export const useStudyBoardStore = create<StudyBoardState>((set) => ({
   },
 
   resetPlay: () => set({ playFen: null, selectedSquare: null, legalTargets: [] }),
+
+  showFen: (fen) => {
+    const full = fen.trim().split(/\s+/).length >= 6 ? fen.trim() : `${fen.trim()} 0 1`
+    try { new Chess(full) } catch { return }
+    clearSequence()
+    useStudyBoardStore.getState().commitPreview()
+    set({ playFen: full, selectedSquare: null, legalTargets: [], isolatedHighlight: null })
+  },
 
   setIsolatedHighlight: (h) => { clearSequence(); set({ isolatedHighlight: h }) },
   playHighlightSequence: (base, squares, stepMs, instant) => {

@@ -26,7 +26,12 @@ export function pgnToChapters(pgn: string, { fromPosition = false }: { fromPosit
     const movetext = split >= 0 ? game.slice(split + 2) : ''
     const tag = (name: string) => new RegExp(`\\[${name} "([^"]*)"\\]`).exec(header)?.[1] ?? ''
     const fen = tag('FEN').trim()
-    if ((fen && !fromPosition) || !/\d+\./.test(movetext)) { skipped++; continue }
+    const hasMoves = /\d+\./.test(movetext)
+    // A chapter of a study that is only text (a preface, an introduction) is still a chapter to read.
+    const hasText = fromPosition && /\{[^}]*[A-Za-z]{2,}[^}]*\}/.test(movetext.replace(/\[%[^\]]*\]/g, ''))
+    if ((fen && !fromPosition) || (!hasMoves && !hasText)) { skipped++; continue }
+    // The board with no pieces ("8/8/8/8/8/8/8/8") is no position to show.
+    const emptyBoard = /^[1-8/]+$/.test(fen.split(' ')[0] ?? '')
     const players = [tag('White'), tag('Black')].filter((p) => p && p !== '?').join(' — ')
     const title = tag('ChapterName') || players || tag('Event') || 'Game'
     const where = [tag('Event'), tag('Site'), tag('Date').replace(/\.\?\?/g, '')]
@@ -41,8 +46,8 @@ export function pgnToChapters(pgn: string, { fromPosition = false }: { fromPosit
       html: [
         `<h2>${esc(title)}</h2>`,
         players || where ? `<p><em>${esc([players, where].filter(Boolean).join(', '))}</em></p>` : '',
-        fen ? `<img class="diagram" src="${boardSvgDataUrl(fen)}" alt="Diagram" data-fen="${esc(fen).replace(/"/g, '&quot;')}">` : '',
-        fen ? `<p>${esc(fen)}</p>` : '',
+        fen && !emptyBoard ? `<img class="diagram" src="${boardSvgDataUrl(fen)}" alt="Diagram" data-fen="${esc(fen).replace(/"/g, '&quot;')}">` : '',
+        fen && (hasMoves || !emptyBoard) ? `<p>${esc(fen)}</p>` : '',
         ...bracesToParagraphs(moves).split('\n').map((line) => `<p>${esc(line)}</p>`),
       ].join('\n'),
     })
