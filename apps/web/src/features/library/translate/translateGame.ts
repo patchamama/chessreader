@@ -66,6 +66,18 @@ export function gameTranslationUnits(
   return { lines, leading }
 }
 
+/** The game as a PGN: moves as they are, each comment in braces, the starting position when it is not the usual one. */
+function linesToPgn(parts: string[], lines: GameLine[], startFen: string): string {
+  const head = startFen && startFen !== STANDARD_FEN ? `[SetUp "1"]\n[FEN "${startFen}"]\n\n` : ''
+  return head + parts.map((p, i) => (lines[i]?.kind === 'moves' ? p : `{ ${p} }`)).join(' ')
+}
+
+/** The game as the book prints it, as a PGN: what identifies it in the commentary database. */
+export function originalGamePgn(text: string, game: RecognizedGame, startFen: string, after = 0): string {
+  const { lines } = gameTranslationUnits(text, game, startFen, after)
+  return linesToPgn(lines.map((l) => l.text), lines, startFen)
+}
+
 export interface TranslatedComment {
   original: string
   /** null when the model failed or lost a move: the original stays. */
@@ -131,12 +143,8 @@ export async function translateGameText(
     })
     options.onProgress?.(++done, total)
   }
-  const pgnOf = (parts: string[]) => {
-    const head = startFen && startFen !== STANDARD_FEN ? `[SetUp "1"]\n[FEN "${startFen}"]\n\n` : ''
-    return head + parts.map((p, i) => (lines[i]?.kind === 'moves' ? p : `{ ${p} }`)).join(' ')
-  }
   return {
     text: out.join('\n'), leading, comments, problems,
-    pgn: pgnOf(out), originalPgn: pgnOf(lines.map((l) => l.text)),
+    pgn: linesToPgn(out, lines, startFen), originalPgn: linesToPgn(lines.map((l) => l.text), lines, startFen),
   }
 }

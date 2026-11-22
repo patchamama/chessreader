@@ -15,6 +15,7 @@ import { applyGameLayouts, clearGameDecorations, decorateGames, describeGames, g
 import { detectHeadings } from '../utils/headingDetect'
 import { clearGameLayout, loadGameLayouts, saveGameLayout } from '../store/gameLayoutStore'
 import { rewriteKey, useGameRewriteStore } from '../store/gameRewriteStore'
+import { hasServerSession } from '../../../shared/api/serverSession'
 import { useReaderViewStore } from '../store/readerViewStore'
 import BookRemarkPanel from './BookRemarkPanel'
 import { mentionOrigins } from '../utils/mentionOrigin'
@@ -1287,6 +1288,8 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
           bookLanguage={libraryBook?.language ?? null}
           chapter={currentChapter}
           canSave={isAdmin}
+          serverSession={hasServerSession()}
+          isRewritten={(i) => !!useGameRewriteStore.getState().rewrites[rewriteKey(id, currentChapter)]?.[i]}
           onApplied={applyTranslation}
         />
 

@@ -128,14 +128,14 @@ export async function loadCommentSources(): Promise<CommentSource[]> {
   return Object.keys(m.sources).map(Number).sort((a, b) => a - b).map((id) => ({ ...sourceOf(m, id), ...(m.sources[String(id)].comments !== undefined ? { comments: m.sources[String(id)].comments } : {}) }))
 }
 
-export interface CommentGame { id: string; white: string | null; black: string | null; pgn: string }
+export interface CommentGame { id: string; white: string | null; black: string | null; pgn: string; /** The PGN in other languages (language → PGN), when the database keeps them. */ translations?: Record<string, string> }
 
 /** The whole game (PGN) a comment comes from. */
 export async function loadCommentGame(id: string): Promise<CommentGame> {
   const g = hasServerSession()
     ? await httpClient<CommentGame>(`/api/comments/games/${encodeURIComponent(id)}`, { method: 'GET' })
     : await getJson<CommentGame>(`g/${encodeURIComponent(id)}.json`)
-  return { id: g.id, white: g.white ?? null, black: g.black ?? null, pgn: g.pgn }
+  return { id: g.id, white: g.white ?? null, black: g.black ?? null, pgn: g.pgn, ...(g.translations && Object.keys(g.translations).length ? { translations: g.translations } : {}) }
 }
 
 /** Hides a comment: it stays in the server's database but is no longer listed or shown (admin). */
