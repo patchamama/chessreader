@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { isDevMode } from '../env/devMode'
 import { defaultBaseUrl, isLlmProvider, type LlmProvider } from '../llm/types'
 
 // Board color themes
@@ -165,6 +166,8 @@ export interface AppSettings {
   aiModel: string
   /** Whether the model read the probe image of the last Test (null = not tested). */
   aiVision: boolean | null
+  /** Show the compact narration actions (guides) next to the comments in the text (debug aid). */
+  debugActions: boolean
   /** Scroll the book so the move being played or narrated stays centred. */
   autoscroll: boolean
   /** Seconds of silence after each game move the narration says (live and in the MP3). */
@@ -307,6 +310,7 @@ const DEFAULT: AppSettings = {
   lichessPlayToken: '',
   commentLayout: 'split',
   autoscroll: true,
+  debugActions: isDevMode(),
   narrationMovePause: 0,
   commentDiagrams: true,
   commentDiagramEval: true,

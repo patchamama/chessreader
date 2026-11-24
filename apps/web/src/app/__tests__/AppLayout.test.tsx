@@ -12,6 +12,7 @@ import { openAnalysisBoard, useAnalysisBoards } from '../../features/library/ana
 
 vi.mock('../../shared/env/devMode', () => ({
   isLocalhostHost: vi.fn(() => false),
+  isDevMode: vi.fn(() => false),
 }))
 
 function renderLayout() {

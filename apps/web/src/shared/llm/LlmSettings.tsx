@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { PromptsModal } from './PromptsModal'
 import { useSettingsStore } from '../settings/settingsStore'
 import { hasServerSession } from '../api/serverSession'
 import { listModels, testLlm } from './llmClient'
@@ -17,6 +18,7 @@ export function LlmSettings() {
   const [models, setModels] = useState<string[] | null>(null)
   const [modelsStatus, setModelsStatus] = useState<Status>(null)
   const [testStatus, setTestStatus] = useState<Status>(null)
+  const [promptsOpen, setPromptsOpen] = useState(false)
   const provider = s.aiProvider
   // Load models and Test use what is typed, even before it is complete.
   const draft: LlmConfig | null = provider === 'none' ? null : {
@@ -113,6 +115,10 @@ export function LlmSettings() {
           </p>
         </>
       )}
+      <p className="mt-2 text-[11px] text-gray-300">
+        <button className={linkButton} onClick={() => setPromptsOpen(true)}>View all AI prompts</button>
+      </p>
+      {promptsOpen && <PromptsModal onClose={() => setPromptsOpen(false)} />}
     </>
   )
 }

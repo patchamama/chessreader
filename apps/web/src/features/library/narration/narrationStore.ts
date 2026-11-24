@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
-import { moveCue, detectLang, sanToSpeech, variationIntro, backToGame, RETURN_PAUSE } from '@chess-ebook/chess-shared'
+import { moveCue, detectLang, narrationWords, sanToSpeech, variationIntro, backToGame, RETURN_PAUSE } from '@chess-ebook/chess-shared'
 import { planSentence, type SentencePlan } from './sentencePlan'
 import type { BoardCue, GameTree, Lang, NarrationStep } from '@chess-ebook/chess-shared'
 import { useStudyBoardStore } from '../store/studyBoardStore'
@@ -62,6 +62,11 @@ interface NarrationState {
   repeatAfter: number
   /** Glossary concepts mentioned so far, in order of appearance. */
   concepts: string[]
+  /**
+   * The comment being narrated with a guide (compact actions) and the word it has reached
+   * (counted from 0 over the whole comment): the reader highlights the matching action and word.
+   */
+  narrated: { text: string; at: number } | null
 
   /**
    * Where the narration action list of a comment comes from (the comments database): given the
@@ -97,8 +102,8 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
   }
 
   /** Say a sentence while its marks appear as the narrator reaches their words. */
-  async function say(speech: string, lang: Lang, rate: number, plan: SentencePlan, alive: () => boolean) {
-    set({ cues: plan.base })
+  async function say(speech: string, lang: Lang, rate: number, plan: SentencePlan, alive: () => boolean, track?: { text: string; offset: number }) {
+    set({ cues: plan.base, ...(track ? { narrated: { text: track.text, at: track.offset } } : {}) })
     const speaking = runtime.speaker.speak(speech, lang, rate)
     let shown = plan.base
     let elapsed = 0
@@ -110,7 +115,7 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
       }
       if (!alive()) return
       shown = [...(reveal.clear ? [] : shown), ...reveal.cues]
-      set({ cues: shown })
+      set({ cues: shown, ...(track ? { narrated: { text: track.text, at: track.offset + reveal.at } } : {}) })
     }
     await speaking
   }
@@ -171,12 +176,15 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
         let actions: string | undefined
         try { actions = fen ? await get().actionsFor?.(texts.join(' '), fen) : undefined } catch { actions = undefined }
         if (!alive()) return
+        const wordsOf = (x: string) => narrationWords(x).length
+        const whole = texts.join(' ')
         for (const [i, sentence] of step.sentences.entries()) {
           set({ cues: sentence.cues, caption: sentence.text })
           addConcepts(sentence.cues)
           const quotes = simulate && sentence.parts.some((p) => p.moveId)
           if (!quotes) {
-            await say(sentence.speech, lang, rate, planSentence({ sentences: texts, index: i, fen, baseCues: sentence.cues, ...(actions ? { actions } : {}) }), alive)
+            const offset = texts.slice(0, i).reduce((n, x) => n + wordsOf(x), 0)
+            await say(sentence.speech, lang, rate, planSentence({ sentences: texts, index: i, fen, baseCues: sentence.cues, ...(actions ? { actions } : {}) }), alive, actions ? { text: whole, offset } : undefined)
             if (!alive()) return
             continue
           }
@@ -212,9 +220,9 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
           set({ cues: [] })
         }
       }
-      set({ stepIndex: get().stepIndex + 1 })
+      set({ stepIndex: get().stepIndex + 1, narrated: null })
     }
-    if (alive()) set({ status: 'finished', cues: [], caption: '', expected: null })
+    if (alive()) set({ status: 'finished', cues: [], caption: '', expected: null, narrated: null })
   }
 
   const halt = () => {
@@ -241,6 +249,7 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
     mismatch: null,
     repeatAfter: 5,
     concepts: [],
+    narrated: null,
     actionsFor: null,
     setActionsFor: (source) => set({ actionsFor: source }),
 
@@ -253,7 +262,7 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
       introCount = 0
       set({
         script, tree, stepIndex: 0, status: 'idle', cues: [], caption: '', expected: null, wrongAttempts: 0,
-        mismatch: null, concepts: [], lang: lang ?? detectLang(script.map((s) => s.sentences.map((x) => x.text).join(' ')).join(' ')),
+        mismatch: null, concepts: [], narrated: null, lang: lang ?? detectLang(script.map((s) => s.sentences.map((x) => x.text).join(' ')).join(' ')),
       })
     },
     play: () => {
@@ -281,7 +290,7 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
       halt()
       const { tree, status } = get()
       if (tree && status !== 'idle' && board().activeGame === tree) show(tree, null)
-      set({ status: 'idle', stepIndex: 0, cues: [], caption: '', expected: null, wrongAttempts: 0, mismatch: null })
+      set({ status: 'idle', stepIndex: 0, cues: [], caption: '', expected: null, wrongAttempts: 0, mismatch: null, narrated: null })
     },
     goTo: (stepIndex) => {
       const { script, tree, status } = get()

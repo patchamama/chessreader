@@ -8,7 +8,7 @@ import { useAuthStore } from '../../features/auth/store/authStore'
 import { useStatusStore } from '../../shared/layout/statusStore'
 import { useSettingsStore } from '../../shared/settings/settingsStore'
 
-vi.mock('../../shared/env/devMode', () => ({ isLocalhostHost: vi.fn(() => false) }))
+vi.mock('../../shared/env/devMode', () => ({ isLocalhostHost: vi.fn(() => false), isDevMode: vi.fn(() => false) }))
 
 let searchMounts = 0
 

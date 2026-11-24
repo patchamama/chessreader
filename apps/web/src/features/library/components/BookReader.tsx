@@ -21,7 +21,9 @@ import { useReaderViewStore } from '../store/readerViewStore'
 import BookRemarkPanel from './BookRemarkPanel'
 import { mentionOrigins } from '../utils/mentionOrigin'
 import { applyGameRewrites, cycleBookComment, setBookComment, pickBookComments, unwrapGameContainers, wrapGameContainers } from '../utils/gameRewrite'
-import { recommentGame } from '../review/recommentGame'
+import { commentOptionsFromPanel, recommentGame } from '../review/recommentGame'
+import { commentGameWithAi } from '../review/aiMoments'
+import { useLlm } from '../../../shared/llm'
 import { nextPaint, withBusy, withProgress } from '../../../shared/layout/busyStore'
 import { captureOffset, captureTopAnchor, restoreOffset, restoreTopAnchor, type ScrollAnchor } from '../../../shared/layout/scrollAnchor'
 import { flashElement } from '../../../shared/layout/flash'
@@ -36,6 +38,11 @@ import { VariationChooser } from './VariationChooser'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { revealStudyBoard } from '../utils/revealStudyBoard'
 import { TranslateChapterButton } from '../translate/TranslateChapterButton'
+import { AiToolsMenu } from '../ai/AiToolsMenu'
+import { DebugActionsToggle } from '../narration/DebugActionsToggle'
+import { useGuideChips } from '../narration/useGuideChips'
+import { GUIDE_CHIPS_CSS } from '../narration/guideChips'
+import { guideQuotes } from '../narration/guideTargets'
 import BookPgnButton from '../../generatedPgn/BookPgnButton'
 import { useLibraryBook } from '../translate/useLibraryBook'
 import { getProgress, saveProgress, getChapterScroll, saveChapterScroll } from '../store/readingStore'
@@ -239,11 +246,15 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
   // The recognition debug tooling shows for admins OR in any developer context
   // (Vite dev build / localhost), so you can use it without an admin login.
   const showDebugTools = isAdmin || isDevMode()
+  // The compact narration actions (guides) in the text: a debug aid (ai-narration-guides S1).
+  const debugActions = useSettingsStore((s) => s.debugActions)
+  const [guideRefresh, setGuideRefresh] = useState(0)
   const [showBookConfig, setShowBookConfig] = useState(false)
 
   const { data, isLoading } = useChapter(id, currentChapter)
   const bookTitle = useBookTitle(id)
   const libraryBook = useLibraryBook(id)
+  const llm = useLlm()
   const touchBook = useTouchBook()
   const contentRef = useRef<HTMLDivElement>(null)
 
@@ -400,7 +411,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
    * a second click on the same icon restores it exactly as it was. Both run
    * under the spinner, keeping the game where it was on screen (S6).
    */
-  const toggleRecomment = (gameIndex: number) => {
+  const toggleRecomment = (gameIndex: number, withAi = false) => {
     const store = useGameRewriteStore.getState()
     const book = id
     const chapter = currentChapter
@@ -408,7 +419,7 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
       saveBoardMemory(book, { chapter, gameIndex, nodeId: null, annotations: {} })
       useStudyBoardStore.getState().clearGame()
     }
-    if (store.rewrites[rewriteKey(book, chapter)]?.[gameIndex]) {
+    if (!withAi && store.rewrites[rewriteKey(book, chapter)]?.[gameIndex]) {
       markGameRefresh(gameIndex)
       void withBusy('Restoring the book\'s text', async () => {
         await nextPaint()
@@ -425,9 +436,11 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
     const text = plainText
     markGameRefresh(gameIndex)
     // The footer bar moves with each position the engine analyses (S5); it can be cancelled.
-    void withProgress('Commenting the game again', async (report, signal) => {
+    void withProgress(withAi ? 'Commenting the key moments with AI' : 'Commenting the game again', async (report, signal) => {
       await nextPaint()
-      const body = await recommentGame(chapterGames, gameIndex, text, undefined, { onProgress: report, signal })
+      const body = withAi
+        ? await commentGameWithAi({ games: chapterGames, gameIndex, text, complete: llm.complete, options: commentOptionsFromPanel(), onProgress: report, signal })
+        : await recommentGame(chapterGames, gameIndex, text, undefined, { onProgress: report, signal })
       if (!body.trim()) { pendingRefresh.current = null; return }
       // The layout chosen before is given back on restore; the new text shows as the panel writes it.
       const layoutBefore = loadGameLayouts(book, chapter)[gameIndex]
@@ -1204,10 +1217,13 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
     </svg>
   )
 
+  // Last of the hooks: its effects run after those that build the text, so the guide chips go on the final DOM.
+  useGuideChips({ rootRef: contentRef, enabled: showDebugTools && debugActions, bookId: id, chapter: currentChapter, games, content: shownHtml, refresh: guideRefresh })
+
   return (
     // Fills the height the app layout gives it (the window minus the banner and the status footer, S4).
     <div data-testid="book-reader" className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50">
-      <style dangerouslySetInnerHTML={{ __html: epubCss + PENDING_SUGGESTION_CSS }} />
+      <style dangerouslySetInnerHTML={{ __html: epubCss + PENDING_SUGGESTION_CSS + GUIDE_CHIPS_CSS }} />
 
       {/* ── Sticky nav bar ── */}
       <nav className="sticky top-0 z-30 flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur">
@@ -1285,6 +1301,26 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
           isRewritten={(i) => !!useGameRewriteStore.getState().rewrites[rewriteKey(id, currentChapter)]?.[i]}
           onApplied={applyTranslation}
         />
+
+        {/* The AI assistant's tools for the chapter (narration guides, ...). */}
+        <AiToolsMenu
+          games={games}
+          text={plainText}
+          bookId={id}
+          chapter={currentChapter}
+          isAdmin={isAdmin}
+          getQuotes={() => (contentRef.current ? guideQuotes(contentRef.current).map((q) => ({ text: q.text, fen: q.fen })) : [])}
+          onDone={() => setGuideRefresh((n) => n + 1)}
+          extraEntries={activeSummary ? [{
+            id: 'comment-moments',
+            label: 'Comment the key moments of the active game with AI',
+            hint: 'The engine finds the key moments; the AI comments them with the lines, the material and the sacrifices',
+            run: () => toggleRecomment(activeSummary.index, true),
+          }] : []}
+        />
+
+        {/* Show or hide the compact narration actions next to the comments (debug aid, S1). */}
+        {showDebugTools && <DebugActionsToggle />}
 
         {/* The book's games as PGN: download them or put them up for review (not for the in-memory book). */}
         {id !== EXTERNAL_BOOK_ID && (

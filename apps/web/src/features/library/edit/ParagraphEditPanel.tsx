@@ -7,11 +7,7 @@ import { textDiff } from '../../suggestions/textDiff'
 import { saveEdit } from './editSave'
 import { EditDialog } from './EditDialog'
 
-const SYSTEM = [
-  'You correct a paragraph of a chess book: typos, OCR errors (broken words, wrong letters, stray characters) and punctuation.',
-  'Keep every chess move exactly as written, keep the language, the meaning and the wording otherwise.',
-  'Answer with the corrected paragraph only, without quotes or explanations.',
-].join(' ')
+import { PARAGRAPH_EDIT_SYSTEM as SYSTEM } from './paragraphPrompt'
 
 const clean = (answer: string) => answer.trim().replace(/^```[a-z]*\n?|\n?```$/g, '').replace(/^["“](.*)["”]$/s, '$1').trim()
 

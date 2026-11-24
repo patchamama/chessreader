@@ -77,3 +77,13 @@ describe('storing the proposed actions with the comment', () => {
     expect(p.saved).toBe(false)
   })
 })
+
+describe('the context of the game around the comment (ai-narration-guides S2)', () => {
+  it('tells the model the moves before and after the comment, only when it has them', () => {
+    const user = actionsPrompt({ text: TEXT, fen: FEN, context: { previous: '1.e4 e5 2.Nf3 d6', next: '3.d4 Bg4' } }).messages[0].text
+    expect(user).toContain('just before the comment: 1.e4 e5 2.Nf3 d6')
+    expect(user).toContain('just after the comment: 3.d4 Bg4')
+    expect(user).toContain('Black to move')
+    expect(actionsPrompt({ text: TEXT, fen: FEN }).messages[0].text).not.toContain('just before')
+  })
+})

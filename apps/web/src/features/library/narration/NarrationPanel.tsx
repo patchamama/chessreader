@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { buildNarrationScript, CONCEPTS } from '@chess-ebook/chess-shared'
 import type { RecognizedGame, Lang } from '@chess-ebook/chess-shared'
 import { useNarrationStore, type ActionsSource } from './narrationStore'
-import { databaseActionsFor } from './commentActions'
+import { narratorActionsFor } from './commentActions'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { cuesToBoard, CUE_COLORS, CUE_LABELS } from './cueStyles'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
@@ -56,7 +56,7 @@ const T: Record<Lang, Record<string, string>> = {
  * Narrates a game of the chapter: a voice reads the moves and the comments
  * while the board plays the moves and lights up what is being said.
  */
-export function NarrationPanel({ games, text, actionsFor = databaseActionsFor }: NarrationPanelProps) {
+export function NarrationPanel({ games, text, actionsFor = narratorActionsFor }: NarrationPanelProps) {
   const activeGame = useStudyBoardStore((s) => s.activeGame)
   const [picked, setPicked] = useState<number | null>(null)
   const activeIndex = games.findIndex((g) => g.tree === activeGame)

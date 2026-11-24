@@ -17,6 +17,8 @@ export interface ActionsInput {
   fen: string
   /** Stockfish lines or evaluations, as text (optional). */
   evals?: string[]
+  /** The moves of the game around the comment (text, e.g. "11.Nf3 Nc6 12.Bb5"). */
+  context?: { previous?: string; next?: string }
 }
 
 const NAMES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' } as const
@@ -50,6 +52,8 @@ export function actionsPrompt(input: ActionsInput): LlmRequest {
     `Comment, numbered words:\n${words}`,
     `What each piece can reach (legal moves; the other side as if it were to move):\n${factsText(positionFacts(input.fen))}`,
   ]
+  if (input.context?.previous) parts.push(`Moves played just before the comment: ${input.context.previous}`)
+  if (input.context?.next) parts.push(`Moves played just after the comment: ${input.context.next}`)
   if (input.evals?.length) parts.push(`Stockfish evaluations:\n${input.evals.join('\n')}`)
   return { system: SYSTEM, messages: [{ role: 'user', text: parts.join('\n\n') }], json: true }
 }

@@ -5,6 +5,10 @@ import { LlmError, type LlmErrorCode } from './errors'
 import { completeOpenAi, listOpenAiModels } from './openAiProvider'
 import type { LlmConfig, LlmRequest, LlmResult, LlmTestResult } from './types'
 
+/** The messages of the Settings "Test" button: a plain reply check, then a tiny image the model must name. */
+export const TEST_PROMPT = 'Reply with OK and nothing else.'
+export const VISION_PROBE_PROMPT = 'What colour is this image? Answer with one word.'
+
 export { LlmError } from './errors'
 
 /**
@@ -69,7 +73,7 @@ export async function testLlm(config: LlmConfig, options: { vision?: boolean; tr
   let result: LlmResult
   try {
     // No token limit: a reasoning model may spend a small one before it answers.
-    result = await complete(config, { messages: [{ role: 'user', text: 'Reply with OK and nothing else.' }] }, options.transport)
+    result = await complete(config, { messages: [{ role: 'user', text: TEST_PROMPT }] }, options.transport)
   } catch (error) {
     return { ok: false, model: config.model, latencyMs: Date.now() - started, vision: null, error: (error as Error).message }
   }
@@ -78,7 +82,7 @@ export async function testLlm(config: LlmConfig, options: { vision?: boolean; tr
   if (options.vision) {
     try {
       const seen = await complete(config, {
-        messages: [{ role: 'user', text: 'What colour is this image? Answer with one word.', images: [VISION_PROBE_PNG] }],
+        messages: [{ role: 'user', text: VISION_PROBE_PROMPT, images: [VISION_PROBE_PNG] }],
       }, options.transport)
       vision = /red/i.test(seen.text)
     } catch {

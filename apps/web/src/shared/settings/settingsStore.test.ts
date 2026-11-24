@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useSettingsStore, mergeWithDefaults, migrateSettings } from './settingsStore'
+import { isDevMode } from '../env/devMode'
 
 describe('settingsStore — persistence migration', () => {
   it('fills missing new keys from defaults (old persisted state lacks showEngineArrow)', () => {
@@ -246,5 +247,15 @@ describe('settingsStore — normalize while commenting', () => {
     expect(useSettingsStore.getState().normalizeWhileCommenting).toBe(true)
     expect(migrateSettings({}, 6).normalizeWhileCommenting).toBe(true)
     expect(migrateSettings({ normalizeWhileCommenting: false }, 6).normalizeWhileCommenting).toBe(false)
+  })
+})
+
+describe('settingsStore — debugActions (ai-narration-guides S1)', () => {
+  it('defaults to the developer context (local on, deploy off) and survives older saved state', () => {
+    useSettingsStore.getState().reset()
+    expect(useSettingsStore.getState().debugActions).toBe(isDevMode())
+    const merged = mergeWithDefaults(useSettingsStore.getState(), { fontSize: 18 })
+    expect(merged.debugActions).toBe(isDevMode())
+    expect(mergeWithDefaults(useSettingsStore.getState(), { debugActions: !isDevMode() }).debugActions).toBe(!isDevMode())
   })
 })

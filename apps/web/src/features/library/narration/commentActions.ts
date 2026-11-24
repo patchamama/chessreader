@@ -1,3 +1,4 @@
+import { localActionsFor } from './guideStore'
 import { hasCommentSource, lookupPositionComments, type HumanComment } from '../commentdb/commentLookup'
 
 const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase()
@@ -21,4 +22,9 @@ export async function databaseActionsFor(commentText: string, fen: string): Prom
   } catch {
     return undefined
   }
+}
+
+/** The narrator's source: the comments database first, then the guides kept in this browser (ai-narration-guides S2). */
+export async function narratorActionsFor(commentText: string, fen: string): Promise<string | undefined> {
+  return (await databaseActionsFor(commentText, fen)) ?? localActionsFor(commentText, fen)
 }

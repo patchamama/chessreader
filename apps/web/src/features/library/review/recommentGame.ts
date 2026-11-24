@@ -55,6 +55,8 @@ export async function commentedGameText(
   index: number,
   text: string,
   options: Omit<CommentOptions, 'depth' | 'sfUrl'>,
+  /** Remarks written elsewhere (the AI), per ply (1-based): they replace the template wording of that move. */
+  remarks?: Record<number, string>,
 ): Promise<string> {
   const game = games[index]
   const players = playersOf(games, index, text)
@@ -69,7 +71,7 @@ export async function commentedGameText(
     : undefined
   const annotated = annotateGame(reviewed.plies, reviewed.review, {
     level: options.level, lang: options.lang, white: players.white, black: players.black,
-    layout: options.layout, diagrams, ...(human ? { human } : {}),
+    layout: options.layout, diagrams, ...(human ? { human } : {}), ...(remarks ? { remarks } : {}),
   })
   const { start, end } = gameLineRange(text, game)
   // The annotated text opens with a title line: the chapter already names the game.
