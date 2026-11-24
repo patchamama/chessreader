@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Chess } from 'chess.js'
 import ChessBoard from '../../shared/chess/ChessBoard'
-import { legalTargets } from '../training/captured'
+import { legalTargets } from '../../shared/chess/captured'
 import { numberMoves } from './pgnNormalize'
 import { replayLine } from './positionInput'
 import { accumulatedView, analyseMoves, legalMoves, perMoveView, type MapResult, type SquareCount } from './commentMap'

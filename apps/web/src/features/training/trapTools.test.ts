@@ -5,7 +5,7 @@ import { filterTraps, loadTraps, type Trap } from './traps'
 import { figurinesOn, localSan, wrongMoveText } from './trapNotation'
 import { ideaSegments } from './trapText'
 import { firstMoves, trapContinuations } from './trapExplorer'
-import { capturedPieces } from './captured'
+import { capturedPieces } from '../../shared/chess/captured'
 import { cachedJson } from './offline'
 import { levelPuzzle } from './levelPuzzles'
 

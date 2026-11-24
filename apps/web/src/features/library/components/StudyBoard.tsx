@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
+import { CapturedPieces } from '../../../shared/chess/CapturedPieces'
 import { revealStudyBoard } from '../utils/revealStudyBoard'
 import { BoardModal } from './BoardModal'
 import { useStatusStore } from '../../../shared/layout/statusStore'
@@ -339,6 +340,7 @@ export function StudyBoard() {
 
   const boardWrapper = (
     <div className="relative w-full" data-study-board>
+      <CapturedPieces fen={fen} side={orientation === 'white' ? 'black' : 'white'} />
       <ChessBoard
         arrowColor={arrowColor}
         fen={fen}
@@ -355,6 +357,7 @@ export function StudyBoard() {
         legalTargets={playMode ? legalTargets : []}
       />
       <PenCanvas />
+      <CapturedPieces fen={fen} side={orientation} />
     </div>
   )
 

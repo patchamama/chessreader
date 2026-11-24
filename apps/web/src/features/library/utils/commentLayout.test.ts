@@ -75,3 +75,26 @@ describe('study PGN: comments of a variation stay inside it, one line (Chess Fun
   })
 })
 
+
+describe('bracesToParagraphs — comments that close and open again', () => {
+  it('joins "} {" and "}{" into one comment: "if:" and its continuation are one paragraph', () => {
+    expect(bracesToParagraphs('3. Rh5+ { if: } { (3... Rg6 then it ends.) } *')).toBe('3. Rh5+\nif: 3... Rg6 then it ends.\n*')
+    expect(bracesToParagraphs('3. Rh5+ { if: }{ (3... Rg6 then it ends.) } *')).toBe('3. Rh5+\nif: 3... Rg6 then it ends.\n*')
+  })
+
+  it('takes the parentheses off a comment that is a parenthesised remark, but not off a variation', () => {
+    expect(bracesToParagraphs('3. Rh5+ { (3... Rg6 then it ends.) } 3... Kf8')).toBe('3. Rh5+\n3... Rg6 then it ends.\n3... Kf8')
+    expect(bracesToParagraphs('3. Rh5+ (3. Rh4 Kf8) 3... Kf8 { A remark. }')).toContain('(3. Rh4 Kf8)')
+  })
+
+  it('does not invent a move number before the result: "{ … } *" ends the game', () => {
+    expect(bracesToParagraphs('3. Rh5+ { .\nOn the other hand, if: } *')).toBe('3. Rh5+\nOn the other hand, if:\n*')
+    expect(bracesToParagraphs('3. Rh5+ { Mate. } 1-0')).toBe('3. Rh5+\nMate.\n1-0')
+    expect(bracesToParagraphs('3. Rh5+ { Draw. } 1/2-1/2')).toBe('3. Rh5+\nDraw.\n1/2-1/2')
+    expect(bracesToParagraphs('3. Rh5+ { Time. } 0-1')).toBe('3. Rh5+\nTime.\n0-1')
+  })
+
+  it('still numbers a black move that continues the main line after a comment', () => {
+    expect(bracesToParagraphs('1. e4 { King pawn. } e5')).toBe('1. e4\nKing pawn.\n1... e5')
+  })
+})

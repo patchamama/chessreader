@@ -25,6 +25,32 @@ function nextMove(before: string): { n: number; black: boolean } | null {
   return seen ? (black ? { n: n + 1, black: false } : { n, black: true }) : null
 }
 
+/** A game result: it ends the game, no move follows it. */
+const RESULT = /^(?:1-0|0-1|1\/2-1\/2|\*)(?![\w/-])/
+
+/** Whether `text` is one balanced "( … )" group from end to end. */
+function wholeParens(text: string): boolean {
+  if (!text.startsWith('(') || !text.endsWith(')')) return false
+  let depth = 0
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '(') depth++
+    else if (text[i] === ')' && --depth === 0 && i < text.length - 1) return false
+  }
+  return depth === 0
+}
+
+/**
+ * A comment of the main line, tidied: when it is, or ends with, a parenthesised remark
+ * ("(3... Rg6 then it ends.)", "if: (3... Rg6 then it ends.)") the parentheses go — a comment is
+ * already set apart, so they only add noise. Variations (the parentheses of the move text) are not touched.
+ */
+function tidyComment(comment: string): string {
+  if (wholeParens(comment)) return comment.slice(1, -1).trim()
+  const tail = /^(.*?[:;,]\s+)(\(.*\))$/.exec(comment)
+  if (tail && wholeParens(tail[2])) return `${tail[1]}${tail[2].slice(1, -1).trim()}`
+  return comment
+}
+
 /** What opens a comment that continues the sentence before it ("{ , which … }"): not shown. */
 const LEADING_PUNCTUATION = /^[,.;:]\s*/
 
@@ -36,8 +62,10 @@ const LEADING_PUNCTUATION = /^[,.;:]\s*/
  * a black move continues a main line that a comment cut ("2... Nc6"), never in
  * front of a variation. A comment that opens with a comma or a period loses it.
  */
-export function bracesToParagraphs(text: string): string {
-  if (!text.includes('{')) return text
+export function bracesToParagraphs(input: string): string {
+  if (!input.includes('{')) return input
+  // A comment that closes and another that opens right away ("} {", "}{") are one comment.
+  const text = input.replace(/\}\s*\{/g, ' ')
   const lines: string[] = []
   let cur = ''
   let main = '' // the main line's moves so far (no comments, no variations): where the next number comes from
@@ -59,7 +87,7 @@ export function bracesToParagraphs(text: string): string {
         if (punct) { cur = cur.trimEnd() + punct[1]; if (punct[2]) cur += ` ${punct[2]}` } else if (comment) { space(); cur += comment }
       } else {
         flush()
-        const shown = comment.replace(LEADING_PUNCTUATION, '')
+        const shown = tidyComment(comment.replace(LEADING_PUNCTUATION, ''))
         if (shown) lines.push(shown)
         cut = true
       }
@@ -74,7 +102,7 @@ export function bracesToParagraphs(text: string): string {
     if (cut && depth === 0) {
       cut = false
       const next = nextMove(main)
-      if (ch !== '(' && !NUMBERED.test(text.slice(i)) && next) put(`${next.n}${next.black ? '...' : '.'} `)
+      if (ch !== '(' && !NUMBERED.test(text.slice(i)) && !RESULT.test(text.slice(i)) && next) put(`${next.n}${next.black ? '...' : '.'} `)
     }
     if (afterVariation && depth === 0 && ch !== '(') {
       afterVariation = false

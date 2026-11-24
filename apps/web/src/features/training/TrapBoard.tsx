@@ -1,6 +1,7 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import ChessBoard from '../../shared/chess/ChessBoard'
-import { capturedPieces, legalTargets, pieceGlyph } from './captured'
+import { legalTargets } from '../../shared/chess/captured'
+import { CapturedPieces } from '../../shared/chess/CapturedPieces'
 import { useTrainingPrefs } from './trainingPrefs'
 import { TrainingEvalBar, TrainingEvalLine } from './TrainingEval'
 import { useTrainingEngine } from './trainingEngine'
@@ -9,14 +10,6 @@ export interface BoardArrow { startSquare: string; endSquare: string; color: str
 
 const MARK: CSSProperties = { backgroundColor: 'rgba(250, 204, 21, 0.45)', boxShadow: 'inset 0 0 0 3px rgba(202, 138, 4, 0.85)' }
 const EXPECTED: CSSProperties = { backgroundColor: 'rgba(22, 163, 74, 0.45)' }
-
-function Captured({ pieces, testId }: { pieces: string[]; testId: string }) {
-  return (
-    <div data-testid={testId} className="flex h-4 flex-wrap items-center gap-px text-sm leading-none text-slate-600" aria-label="Captured pieces">
-      {pieces.map((p, i) => <span key={i} className={p === p.toUpperCase() ? 'text-slate-400' : 'text-slate-800'}>{pieceGlyph(p)}</span>)}
-    </div>
-  )
-}
 
 /**
  * The training board in its own square, top-aligned box (a tall column or more
@@ -45,7 +38,6 @@ export function TrapBoard({ fen, orientation: side, lastMove, arrows = [], marke
   const styles: Record<string, CSSProperties> = {}
   for (const sq of marked) styles[sq] = MARK
   for (const sq of expected) styles[sq] = { ...styles[sq], ...EXPECTED }
-  const taken = capturedPieces(fen)
   const top = orientation === 'white' ? 'black' : 'white'
   const bottom = orientation
   const click = (square: string) => {
@@ -64,7 +56,7 @@ export function TrapBoard({ fen, orientation: side, lastMove, arrows = [], marke
   return (
     // The box keeps the board at up to 420px (plus the bar when shown), whatever the column beside it holds.
     <div data-testid={testId} className={`w-full shrink-0 self-start ${showEval ? 'max-w-[438px]' : 'max-w-[420px]'}`}>
-      <Captured pieces={taken[top]} testId={`captured-${top}`} />
+      <CapturedPieces fen={fen} side={top} />
       <div data-testid={`${testId}-row`} className="flex items-start gap-1.5">
         <div data-testid={`${testId}-square`} className="aspect-square min-w-0 flex-1">
           <ChessBoard fen={fen} orientation={orientation} lastMove={lastMove ?? null} arrows={arrows}
@@ -74,7 +66,7 @@ export function TrapBoard({ fen, orientation: side, lastMove, arrows = [], marke
         </div>
         {showEval && <TrainingEvalBar fen={fen} result={evaluation} />}
       </div>
-      <Captured pieces={taken[bottom]} testId={`captured-${bottom}`} />
+      <CapturedPieces fen={fen} side={bottom} />
       <div className="mt-1 flex flex-wrap items-center gap-2">
         <button type="button" className={tool} aria-label="Flip board" title="Flip board" onClick={() => setFlipped((f) => !f)}>⇅ Flip</button>
         <label className="flex items-center gap-1 text-xs text-slate-700">
