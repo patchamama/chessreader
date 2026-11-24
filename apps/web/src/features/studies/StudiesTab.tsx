@@ -4,6 +4,7 @@ import { withBusy } from '../../shared/layout/busyStore'
 import RatingStars from './RatingStars'
 import { parseRefs, runImport, type ImportEvent } from './importRunner'
 import { openStudyBook, type OpenMode, type StudyPart } from './openStudy'
+import StudyToBookModal from './toBook/StudyToBookModal'
 import { filterStudies, nextSort, sortedRows, type SortDir, type SortKey } from './studiesList'
 import { studiesApi, type StudiesClient, type Study, type StudyAuthor, type UserStudy } from './studiesApi'
 
@@ -65,6 +66,9 @@ export default function StudiesTab({ client = studiesApi }: { client?: StudiesCl
   const [handle, setHandle] = useState('')
   const [userStudies, setUserStudies] = useState<UserStudy[] | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
+  // "Add to library as a book"
+  const [converting, setConverting] = useState<{ study: Study; parts: StudyPart[] } | null>(null)
+  const [bookMsg, setBookMsg] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     try {
@@ -87,6 +91,15 @@ export default function StudiesTab({ client = studiesApi }: { client?: StudiesCl
       for (const m of members) loaded.push({ name: m.name, pgn: (await client.get(m.id)).pgn })
       navigate(openStudyBook(loaded, mode, name))
       setError(null)
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+  })
+
+  const startConvert = (s: Study, parts?: Study[]) => withBusy('Loading the study', async () => {
+    try {
+      const members = parts && parts.length > 1 ? parts : [s]
+      const loaded: StudyPart[] = []
+      for (const m of members) loaded.push({ name: m.name, pgn: (await client.get(m.id)).pgn })
+      setBookMsg(null); setError(null); setConverting({ study: s, parts: loaded })
     } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
   })
 
@@ -155,6 +168,8 @@ export default function StudiesTab({ client = studiesApi }: { client?: StudiesCl
   return (
     <div className="space-y-4 text-sm">
       {error && <p role="alert" className="rounded bg-red-50 p-2 text-red-700">{error}</p>}
+      {bookMsg && <p role="status" className="rounded bg-green-50 p-2 text-green-800">{bookMsg}</p>}
+      {converting && <StudyToBookModal study={converting.study} parts={converting.parts} onClose={() => setConverting(null)} onAdded={setBookMsg} />}
 
       <section aria-label="Import studies" className="rounded border border-slate-200 p-3">
         <h2 className="font-semibold text-slate-700">Import studies</h2>
@@ -249,6 +264,7 @@ export default function StudiesTab({ client = studiesApi }: { client?: StudiesCl
                     <td className="whitespace-nowrap">
                       <button className="rounded border border-slate-300 px-1" aria-label={`Open ${s.name} as a continuous book`} onClick={() => void open(s.id, s.name, 'continuous', grouped ? parts : undefined)}>Open as book</button>{' '}
                       <button className="rounded border border-slate-300 px-1" aria-label={`Open ${s.name} with one chapter per game`} onClick={() => void open(s.id, s.name, 'per-game', grouped ? parts : undefined)}>One chapter per game</button>{' '}
+                      <button className="rounded border border-slate-300 px-1" aria-label={`Add ${s.name} to the library as a book`} title="Convert the study into an EPUB and add it to your library" onClick={() => void startConvert(s, grouped ? parts : undefined)}>Add to library</button>{' '}
                       <button className="rounded border border-red-300 px-1 text-red-700" aria-label={`Delete ${s.name}`} onClick={() => void remove(s, parts)}>Delete</button>
                     </td>
                   </tr>

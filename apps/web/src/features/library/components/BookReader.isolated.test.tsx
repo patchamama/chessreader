@@ -79,7 +79,9 @@ describe('BookReader isolated prose moves', () => {
       fireEvent.click(iso!)
     })
     const hl = useStudyBoardStore.getState().isolatedHighlight
-    expect(hl).toEqual({ square: 'd5', piece: 'p' })
+    // The pawn that can really make the move is shown too (its origin square and an arrow to d5).
+    expect(hl).toMatchObject({ square: 'd5', piece: 'p' })
+    expect(hl?.arrows?.map((a) => a[1])).toEqual(hl?.from?.map(() => 'd5'))
   })
 
   it('exposes a FEN on each real move span for the hover tooltip', async () => {

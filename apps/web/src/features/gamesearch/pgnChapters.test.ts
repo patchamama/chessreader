@@ -107,8 +107,8 @@ describe('chapters of a study that are only text (a preface, an introduction)', 
     expect(skipped).toBe(0)
     expect(chapters).toHaveLength(1)
     expect(chapters[0].title).toBe('Preface')
-    expect(chapters[0].html).toContain('<p>Chess Fundamentals was written for the beginner.</p>')
-    expect(chapters[0].html).toContain('<p>Read the lessons twice.</p>')
+    // two comments in a row ("} {") are one comment
+    expect(chapters[0].html).toContain('<p>Chess Fundamentals was written for the beginner. Read the lessons twice.</p>')
     expect(chapters[0].html).not.toContain('<img')
     expect(chapters[0].html).not.toContain(empty)
   })

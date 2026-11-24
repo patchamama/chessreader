@@ -583,6 +583,9 @@ return [
         $c->get(\App\Domain\Studies\StudyRepository::class),
     ),
 
+    \App\Presentation\Studies\StudyBookController::class => fn (ContainerInterface $c) => new \App\Presentation\Studies\StudyBookController(
+        new \App\Infrastructure\Epub\StudyEpubBuilder(), $c->get(ProcessEpubHandler::class)),
+
     // The stored EPUBs: the same folder the uploads and the cover/images routes use.
     \App\Infrastructure\Epub\StoredEpubs::class => fn (ContainerInterface $c) => new \App\Infrastructure\Epub\StoredEpubs($c->get('settings')['books_dir'] ?? dirname(__DIR__) . '/storage/books'),
     \App\Application\Ingestion\Port\ChapterStore::class => fn (ContainerInterface $c) => new \App\Infrastructure\Suggestions\DbalChapterStore($c->get(Connection::class)),
@@ -603,4 +606,16 @@ return [
     \App\Presentation\Errata\ErrataController::class => function (ContainerInterface $c) {
         return new \App\Presentation\Errata\ErrataController($c->get(\App\Application\Errata\ErrataRepository::class));
     },
+
+    // Generated PGN (PGN made from the games of library books)
+    \App\Application\GeneratedPgn\GeneratedPgnRepository::class => fn (ContainerInterface $c) => new \App\Infrastructure\GeneratedPgn\DbalGeneratedPgnRepository($c->get(Connection::class)),
+    \App\Application\GeneratedPgn\LichessStudyImporter::class => fn () => new \App\Infrastructure\GeneratedPgn\LichessPgnImporter(
+        new \GuzzleHttp\Client(['handler' => \GuzzleHttp\HandlerStack::create(new \GuzzleHttp\Handler\CurlHandler())]),
+    ),
+    \App\Presentation\GeneratedPgn\GeneratedPgnController::class => fn (ContainerInterface $c) => new \App\Presentation\GeneratedPgn\GeneratedPgnController(
+        new \App\Application\GeneratedPgn\GeneratedPgnService(
+            $c->get(\App\Application\GeneratedPgn\GeneratedPgnRepository::class),
+            $c->get(\App\Application\GeneratedPgn\LichessStudyImporter::class),
+        ),
+    ),
 ];

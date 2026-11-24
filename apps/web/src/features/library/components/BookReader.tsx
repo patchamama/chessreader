@@ -5,7 +5,7 @@ import { formatChapterTitle, prepareChapterHtml } from '../utils/epubContent'
 import { useParams } from 'react-router-dom'
 import { useBookTitle, useChapter, useTouchBook, type Book } from '../api/libraryApi'
 import { useQueryClient } from '@tanstack/react-query'
-import { findProseReferences, numberLine, PROSE_REVEAL_STEP_MS, recognizeGames, unanchoredMoves } from '@chess-ebook/chess-shared'
+import { findProseReferences, isolatedMoveOrigins, numberLine, PROSE_REVEAL_STEP_MS, recognizeGames, unanchoredMoves } from '@chess-ebook/chess-shared'
 import type { GameTree, GameNode, IsolatedMove, ProseReference } from '@chess-ebook/chess-shared'
 import { MoveTooltipCard } from './MoveTooltipCard'
 import { loadBoardMemory, saveBoardMemory } from '../store/boardMemory'
@@ -16,6 +16,7 @@ import { detectHeadings } from '../utils/headingDetect'
 import { clearGameLayout, loadGameLayouts, saveGameLayout } from '../store/gameLayoutStore'
 import { rewriteKey, useGameRewriteStore } from '../store/gameRewriteStore'
 import { hasServerSession } from '../../../shared/api/serverSession'
+import { EXTERNAL_BOOK_ID } from '../../../shared/externalBook/externalBookStore'
 import { useReaderViewStore } from '../store/readerViewStore'
 import BookRemarkPanel from './BookRemarkPanel'
 import { mentionOrigins } from '../utils/mentionOrigin'
@@ -35,6 +36,7 @@ import { VariationChooser } from './VariationChooser'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { revealStudyBoard } from '../utils/revealStudyBoard'
 import { TranslateChapterButton } from '../translate/TranslateChapterButton'
+import BookPgnButton from '../../generatedPgn/BookPgnButton'
 import { useLibraryBook } from '../translate/useLibraryBook'
 import { getProgress, saveProgress, getChapterScroll, saveChapterScroll } from '../store/readingStore'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
@@ -160,7 +162,10 @@ function shownBoardFen(): string {
 function mentionMark(iso: IsolatedMove, fen?: string | null) {
   const pair = dashedPair(iso.rawSan ?? '')
   const line = pair ? squareLine(pair.from, pair.to) : null
-  const from = !pair && fen ? mentionOrigins(fen, iso.piece, iso.square) : []
+  // The legal origin for the side to move (pawns too: a bare "a6" is the pawn a7-a6); else what merely reaches the square.
+  const written = /^[KQRBN]?([a-h1-8])?(x)?[a-h][1-8]/.exec(iso.san)
+  const legal = !pair && fen ? isolatedMoveOrigins(fen, iso.piece, iso.square, written?.[1] ?? '', !!written?.[2]).from : []
+  const from = pair || !fen ? [] : legal.length ? legal : mentionOrigins(fen, iso.piece, iso.square)
   return {
     square: iso.square, piece: iso.piece,
     ...(from.length ? { from, arrows: from.map((f): [string, string] => [f, iso.square]) } : {}),
@@ -1267,18 +1272,6 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
         <WidthControl onBeforeChange={captureWidthAnchor} />
         <TextZoom zoom={textZoom.zoom} onZoomIn={textZoom.zoomIn} onZoomOut={textZoom.zoomOut} onReset={textZoom.reset} />
 
-        {/* Comment layout of the active game: braces ⇄ paragraphs (S7). */}
-        {activeSummary && (
-          <button
-            onClick={() => toggleLayout(activeSummary.index)}
-            title={layoutToggleLabel(activeSummary, false)}
-            aria-label={layoutToggleLabel(activeSummary, false)}
-            className="flex h-9 min-w-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
-          >
-            <span aria-hidden="true">{activeSummary.braces ? '¶' : '{ }'}</span>
-          </button>
-        )}
-
         {/* The comments in another language than the interface's: translate them with AI, one by one. */}
         <TranslateChapterButton
           games={baseGames}
@@ -1292,6 +1285,23 @@ export default function BookReader({ bookId: bookIdProp }: { bookId?: number } =
           isRewritten={(i) => !!useGameRewriteStore.getState().rewrites[rewriteKey(id, currentChapter)]?.[i]}
           onApplied={applyTranslation}
         />
+
+        {/* The book's games as PGN: download them or put them up for review (not for the in-memory book). */}
+        {id !== EXTERNAL_BOOK_ID && (
+          <BookPgnButton bookId={id} bookTitle={bookTitle ?? ''} chapter={currentChapter} chapters={bookChapters} titleSeparator={titleSeparator} algorithm={recognitionAlgorithm} />
+        )}
+
+        {/* Comment layout of the active game: braces ⇄ paragraphs (S7). */}
+        {activeSummary && (
+          <button
+            onClick={() => toggleLayout(activeSummary.index)}
+            title={layoutToggleLabel(activeSummary, false)}
+            aria-label={layoutToggleLabel(activeSummary, false)}
+            className="flex h-9 min-w-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+          >
+            <span aria-hidden="true">{activeSummary.braces ? '¶' : '{ }'}</span>
+          </button>
+        )}
 
         {/* Book comments in the text, shown or hidden: just before the board button (S4). */}
         <BookCommentsToggle />

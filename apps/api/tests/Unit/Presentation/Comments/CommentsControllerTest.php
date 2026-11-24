@@ -250,4 +250,32 @@ final class CommentsControllerTest extends TestCase
         unset($b['game']['translations']);
         self::assertSame(200, $this->postBookGame($b)->getStatusCode());
     }
+
+    private function actions(int $id, mixed $body): ResponseInterface
+    {
+        $request = (new ServerRequestFactory())->createServerRequest('PUT', "/api/comments/{$id}/actions")->withParsedBody($body);
+        return $this->controller->setActions($request, (new ResponseFactory())->createResponse(), $id);
+    }
+
+    public function test_set_actions_saves_them_and_shows_them_in_the_list(): void
+    {
+        $res = $this->actions(2, ['actions' => ' 0Diagonal:c8-h3, 1Arrow:f7-f5 ']);
+        self::assertSame(200, $res->getStatusCode());
+        self::assertSame(['saved' => 2], json_decode((string) $res->getBody(), true));
+        [, $body] = $this->call('list', '/api/comments');
+        $row = array_values(array_filter($body['comments'], fn ($c) => $c['id'] === 2))[0];
+        self::assertSame('0Diagonal:c8-h3, 1Arrow:f7-f5', $row['actions']);
+        self::assertSame(200, $this->actions(2, ['actions' => ''])->getStatusCode());
+    }
+
+    public function test_set_actions_rejects_a_malformed_list_a_missing_field_and_unknown_comments(): void
+    {
+        self::assertSame(400, $this->actions(2, ['actions' => '0Fly:c8-h3'])->getStatusCode());
+        self::assertSame(400, $this->actions(2, ['actions' => 'Arrow:f7-f5'])->getStatusCode());
+        self::assertSame(400, $this->actions(2, ['actions' => '0Arrow:z9-f5'])->getStatusCode());
+        self::assertSame(400, $this->actions(2, ['actions' => str_repeat('0Clear, ', 600)])->getStatusCode());
+        self::assertSame(400, $this->actions(2, ['other' => 'x'])->getStatusCode());
+        self::assertSame(400, $this->actions(2, null)->getStatusCode());
+        self::assertSame(404, $this->actions(99, ['actions' => '0Clear'])->getStatusCode());
+    }
 }

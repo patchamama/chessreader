@@ -57,6 +57,14 @@ interface PositionCommentStore
     public function setTranslation(int $id, string $lang, string $text): bool;
 
     /**
+     * Sets the narration actions of a comment (the compact "0Diagonal:c8-h3, 1Arrow:f7-f5" list), replacing
+     * the ones there; an empty string clears them. False when the id is unknown.
+     *
+     * @throws CommentsReadOnly when the database cannot be written
+     */
+    public function setActions(int $id, string $actions): bool;
+
+    /**
      * Sets the PGN of a game in a language (language => pgn), replacing the one there. False when
      * the game id is unknown.
      *

@@ -81,6 +81,8 @@ describe('BookReader isolated moves do not steal real nodes', () => {
     })
     // Pawn → piece 'p'; StudyBoard must NOT overlay a pawn for bare pawn moves.
     const hl = useStudyBoardStore.getState().isolatedHighlight
-    expect(hl).toEqual({ square: 'e4', piece: 'p' })
+    // The pawn that can really make the move is shown too (its origin square and an arrow to e4).
+    expect(hl).toMatchObject({ square: 'e4', piece: 'p' })
+    expect(hl?.arrows?.map((a) => a[1])).toEqual(hl?.from?.map(() => 'e4'))
   })
 })

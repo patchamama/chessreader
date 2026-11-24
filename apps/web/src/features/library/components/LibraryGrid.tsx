@@ -18,6 +18,7 @@ import { downloadEpub } from '../../suggestions/epubApi'
 import BookCoverDialog from './BookCoverDialog'
 import BookStatsPanel from '../stats/BookStatsPanel'
 import { canWriteResources } from '../../suggestions/suggestionsApi'
+import BookPgnButton from '../../generatedPgn/BookPgnButton'
 import { LanguageBadge, LanguageFilter, useLanguageChoice } from './BookLanguage'
 
 const visitedCard = 'rounded-lg ring-2 ring-violet-300'
@@ -79,6 +80,7 @@ export default function LibraryGrid() {
                   <div className="mt-1 flex gap-3 px-1 text-xs">
                     <button type="button" className="text-blue-600 hover:underline" aria-label={`Download EPUB of ${book.title}`} onClick={() => download(book)}>Download EPUB</button>
                     <button type="button" className="text-blue-600 hover:underline" aria-label={`Cover of ${book.title}…`} onClick={() => setCoverOf({ id: book.id, title: book.title })}>Cover…</button>
+                    <BookPgnButton bookId={book.id} bookTitle={book.title} author={book.author} chapter={1} variant="link" />
                   </div>
                 )}
               </div>

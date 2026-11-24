@@ -24,3 +24,6 @@ export * from './commentdb/positionComments.js';
 export * from './diagram/moveConstraints.js';
 export * from './diagram/solveDiagram.js';
 export * from './pgn/wrongMoveFinder.js';
+export * from './narration/actions.js';
+export * from './narration/positionFacts.js';
+export * from './narration/proseMoves.js';

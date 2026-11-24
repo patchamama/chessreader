@@ -102,6 +102,7 @@ return function (App $app): void {
     $app->delete('/api/comments/{id:[0-9]+}', [CommentsController::class, 'delete'])->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
     $app->put('/api/comments/{id:[0-9]+}/translations/{lang:[a-z]{2,3}}', [CommentsController::class, 'setTranslation'])->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
     $app->put('/api/comments/games/{id}/translations/{lang:[a-z]{2,3}}', [CommentsController::class, 'setGameTranslation'])->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
+    $app->put('/api/comments/{id:[0-9]+}/actions', [CommentsController::class, 'setActions'])->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
     $app->post('/api/comments/book-games', [CommentsController::class, 'addBookGame'])->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
     $app->post('/api/comments/{id:[0-9]+}/restore', [CommentsController::class, 'restore'])->add(RequireAdminMiddleware::class)->add(AuthMiddleware::class);
 
@@ -182,10 +183,23 @@ return function (App $app): void {
         $group->get('', [$c, 'list']);
         $group->post('/import', [$c, 'import']);
         $group->post('/sync-comments', [$c, 'syncComments']);
+        // A study as a book of the library (structured chapters + images + cover → EPUB → ingestion).
+        $group->post('/to-book', [\App\Presentation\Studies\StudyBookController::class, 'create']);
         $group->get('/lichess/user/{handle}', [$c, 'lichessUser']);
         $group->get('/{id:[A-Za-z0-9]{8}}', [$c, 'get']);
         $group->put('/{id:[A-Za-z0-9]{8}}', [$c, 'update']);
         $group->delete('/{id:[A-Za-z0-9]{8}}', [$c, 'delete']);
+    })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
+
+    // Generated PGN: PGN made from the games of library books, kept for review (require JWT + Approved)
+    $app->group('/api/generated-pgn', function (RouteCollectorProxy $group) {
+        $c = \App\Presentation\GeneratedPgn\GeneratedPgnController::class;
+        $group->get('', [$c, 'list']);
+        $group->post('', [$c, 'create']);
+        $group->get('/{id:[0-9]+}', [$c, 'get']);
+        $group->put('/{id:[0-9]+}', [$c, 'update']);
+        $group->delete('/{id:[0-9]+}', [$c, 'delete']);
+        $group->post('/{id:[0-9]+}/lichess', [$c, 'lichess']);
     })->add(RequireApprovedMiddleware::class)->add(AuthMiddleware::class);
 
     // Errata: corrected main lines of book games (require JWT + Approved)

@@ -12,7 +12,7 @@ vi.mock('../library/commentdb/commentLookup', () => ({
   }),
 }))
 
-import { saveBookGame, clearCommentListCache, deleteComment, loadTopPositions, hideComment, restoreComment, loadCommentGame, loadCommentPage, loadCommentSources, moveLabel } from './commentsApi'
+import { saveBookGame, setCommentActions, clearCommentListCache, deleteComment, loadTopPositions, hideComment, restoreComment, loadCommentGame, loadCommentPage, loadCommentSources, moveLabel } from './commentsApi'
 
 const sources = { 1: { kind: 'book', title: 'Invented Book', author: 'A. Writer', lang: 'es', priority: 1, book: 'invented-book' }, 2: { kind: 'lichess', title: 'Lichess studies', author: null, lang: 'en', priority: 2, book: null } }
 const entry = (id: number, source: number, text: string, lang = 'en', chapter: number | null = null) => ({
@@ -208,5 +208,23 @@ describe('moveLabel of a comment printed before the first move', () => {
   it('reads "Start" instead of a move', () => {
     expect(moveLabel({ ply: 0, move: 0, san: '@intro' })).toBe('Start')
     expect(moveLabel({ ply: 2, move: 1, san: 'e5' })).toBe('1...e5')
+  })
+})
+
+describe('narration actions of a comment (studies-epub-pgn-narration S6)', () => {
+  it('setCommentActions PUTs them and forgets the cached pages', async () => {
+    http.mockResolvedValue({ saved: 2 })
+    await setCommentActions(2, '0Diagonal:c8-h3, 1Arrow:f7-f5')
+    expect(http).toHaveBeenCalledWith('/api/comments/2/actions', { method: 'PUT', body: JSON.stringify({ actions: '0Diagonal:c8-h3, 1Arrow:f7-f5' }) })
+  })
+
+  it('a listed comment carries its actions from the server and from the static index', async () => {
+    session.on = true
+    http.mockResolvedValue({ total: 1, comments: [{ id: 2, hash: 'h', fen: 'f', text: 't', lang: 'es', ply: 2, move_number: 1, san: 'e5', game_id: 'g', chapter: null, actions: '0Clear', source: { id: 1, title: 'B', author: null, kind: 'book', lang: 'es', book: null }, game: { white: null, black: null, label: null } }] })
+    expect((await loadCommentPage({}, 0, 10)).comments[0].actions).toBe('0Clear')
+    session.on = false
+    clearCommentListCache()
+    files.set('comments-index/0.json', { page: 0, comments: [{ ...entry(1, 1, 'x', 'es'), actions: '1Piece:c8' }] })
+    expect((await loadCommentPage({ q: 'x' }, 0, 10)).comments[0].actions).toBe('1Piece:c8')
   })
 })

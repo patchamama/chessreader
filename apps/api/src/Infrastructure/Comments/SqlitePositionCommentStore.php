@@ -27,10 +27,11 @@ final class SqlitePositionCommentStore implements PositionCommentStore
         if ($pdo === null || !preg_match('/^[0-9a-f]{16}$/', $hash)) {
             return [];
         }
+        $actions = $this->hasColumn('position_comments', 'actions') ? 'p.actions' : 'NULL';
         $st = $pdo->prepare(
-            'SELECT p.id, p.text, p.lang, p.ply, p.san, g.id AS game_id, g.label, s.title, s.author, s.kind
+            "SELECT p.id, p.text, p.lang, p.ply, p.san, {$actions} AS actions, g.id AS game_id, g.label, s.title, s.author, s.kind
              FROM position_comments p JOIN comment_games g ON g.id = p.game_id JOIN comment_sources s ON s.id = g.source_id
-             WHERE p.hash = :hash AND p.position = :key AND p.san <> \'' . self::INTRO_SAN . '\'' . $this->visible('p', false) . ' ORDER BY s.priority, p.id LIMIT :limit'
+             WHERE p.hash = :hash AND p.position = :key AND p.san <> '" . self::INTRO_SAN . "'" . $this->visible('p', false) . ' ORDER BY s.priority, p.id LIMIT :limit'
         );
         $st->bindValue(':hash', $hash);
         $st->bindValue(':key', $key);
@@ -40,7 +41,7 @@ final class SqlitePositionCommentStore implements PositionCommentStore
             'id' => (int) $r['id'], 'text' => $r['text'], 'lang' => $r['lang'], 'ply' => (int) $r['ply'], 'san' => $r['san'],
             'game' => ['id' => $r['game_id'], 'label' => $r['label']],
             'source' => ['title' => $r['title'], 'author' => $r['author'], 'kind' => $r['kind']],
-        ], $st->fetchAll(\PDO::FETCH_ASSOC)));
+        ] + $this->actionsOf($r), $st->fetchAll(\PDO::FETCH_ASSOC)));
     }
 
     public function game(string $id): ?array
@@ -85,8 +86,9 @@ final class SqlitePositionCommentStore implements PositionCommentStore
         $move = $this->hasColumn('position_comments', 'move_number') ? 'p.move_number' : '(p.ply + 1) / 2';
         $chapter = $this->hasColumn('position_comments', 'chapter') ? 'p.chapter' : 'NULL';
         $book = $this->hasColumn('comment_sources', 'book_id') ? 's.book_id' : 'NULL';
+        $actions = $this->hasColumn('position_comments', 'actions') ? 'p.actions' : 'NULL';
         $st = $pdo->prepare(
-            "SELECT p.id, p.hash, p.position, p.text, p.lang, p.ply, {$move} AS move_number, p.san, p.game_id, {$chapter} AS chapter,
+            "SELECT p.id, p.hash, p.position, p.text, p.lang, p.ply, {$move} AS move_number, p.san, p.game_id, {$chapter} AS chapter, {$actions} AS actions,
                     s.id AS source_id, s.title, s.author, s.kind, s.lang AS source_lang, {$book} AS book_id, g.white, g.black, g.label
              {$from} ORDER BY p.id LIMIT :limit OFFSET :offset"
         );
@@ -102,7 +104,7 @@ final class SqlitePositionCommentStore implements PositionCommentStore
             'san' => $r['san'], 'game_id' => $r['game_id'], 'chapter' => $r['chapter'] === null ? null : (int) $r['chapter'],
             'source' => ['id' => (int) $r['source_id'], 'title' => $r['title'], 'author' => $r['author'], 'kind' => $r['kind'], 'lang' => $r['source_lang'], 'book' => $r['book_id']],
             'game' => ['white' => $r['white'], 'black' => $r['black'], 'label' => $r['label']],
-        ], $st->fetchAll(\PDO::FETCH_ASSOC));
+        ] + $this->actionsOf($r), $st->fetchAll(\PDO::FETCH_ASSOC));
         return ['total' => $total, 'comments' => $this->withTranslations($pdo, $comments)];
     }
 
@@ -285,6 +287,37 @@ final class SqlitePositionCommentStore implements PositionCommentStore
                 throw new CommentsReadOnly('The comments database is read-only', 0, $e);
             }
             throw $e;
+        }
+    }
+
+    /** `actions` of a comment row, only when it has some (the key is absent otherwise). @param array<string, mixed> $row @return array<string, string> */
+    private function actionsOf(array $row): array
+    {
+        $a = $row['actions'] ?? null;
+        return is_string($a) && $a !== '' ? ['actions' => $a] : [];
+    }
+
+    public function setActions(int $id, string $actions): bool
+    {
+        $pdo = $this->pdo();
+        if ($pdo === null) {
+            return false;
+        }
+        try {
+            $exists = $pdo->prepare('SELECT 1 FROM position_comments WHERE id = :id');
+            $exists->execute([':id' => $id]);
+            if (!$exists->fetchColumn()) {
+                return false;
+            }
+            if (!$this->hasColumn('position_comments', 'actions')) {
+                $pdo->exec('ALTER TABLE position_comments ADD COLUMN actions TEXT');
+                $this->columns = [];
+            }
+            $pdo->prepare('UPDATE position_comments SET actions = :actions WHERE id = :id')
+                ->execute([':actions' => $actions === '' ? null : $actions, ':id' => $id]);
+            return true;
+        } catch (\PDOException $e) {
+            throw $this->readOnlyOr($e);
         }
     }
 

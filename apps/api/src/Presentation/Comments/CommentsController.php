@@ -219,6 +219,27 @@ final class CommentsController
         return $found ? $this->json($response, ['saved' => $id, 'lang' => $lang]) : $this->json($response, ['error' => 'not found'], 404);
     }
 
+    /** One narration action: "<token index><Action>[:args]", see the web `narration/actions` module. */
+    private const ACTION = '(?:\d{1,4})(?:Square:[a-h][1-8]|Squares:[a-h][1-8](?:\|[a-h][1-8])*|Arrow:[a-h][1-8]-[a-h][1-8]|Diagonal:[a-h][1-8]-[a-h][1-8]|Line:[a-h][1-8]-[a-h][1-8]|Piece:[a-h][1-8]|Clear)';
+
+    /** PUT /api/comments/{id}/actions {actions}: saves the narration actions of a comment ("" clears them). */
+    public function setActions(ServerRequestInterface $request, ResponseInterface $response, int $id): ResponseInterface
+    {
+        $body = $request->getParsedBody();
+        $actions = is_array($body) && is_string($body['actions'] ?? null) ? trim($body['actions']) : null;
+        if ($actions === null || strlen($actions) > 2000
+            || ($actions !== '' && !preg_match('/^' . self::ACTION . '(?:\s*,\s*' . self::ACTION . ')*$/', $actions))) {
+            return $this->json($response, ['error' => 'actions is a list like "0Diagonal:c8-h3, 1Arrow:f7-f5" of at most 2000 characters'], 400);
+        }
+        $actions = $actions === '' ? '' : (string) preg_replace('/\s*,\s*/', ', ', $actions);
+        try {
+            $found = $this->store->setActions($id, $actions);
+        } catch (CommentsReadOnly) {
+            return $this->json($response, ['error' => 'The comments database is read-only on this server; change the comment where it is built'], 409);
+        }
+        return $found ? $this->json($response, ['saved' => $id]) : $this->json($response, ['error' => 'not found'], 404);
+    }
+
     private function toggle(ResponseInterface $response, int $id, bool $hide): ResponseInterface
     {
         try {

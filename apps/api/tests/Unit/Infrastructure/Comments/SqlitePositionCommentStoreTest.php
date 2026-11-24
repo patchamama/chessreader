@@ -434,4 +434,27 @@ final class SqlitePositionCommentStoreTest extends TestCase
         // nor does it count as a popular position
         self::assertSame([], array_filter($store->top([], 50), static fn(array $p): bool => $p['fen'] === 'start-key 0 1'));
     }
+
+    public function test_set_actions_adds_the_column_lazily_and_lists_them_with_the_comment(): void
+    {
+        $store = new SqlitePositionCommentStore('', self::database());
+        self::assertArrayNotHasKey('actions', $store->list([], 0, 50)['comments'][0]);
+        self::assertTrue($store->setActions(1, '0Diagonal:c8-h3, 1Arrow:f7-f5'));
+        $page = $store->list([], 0, 50);
+        self::assertSame('0Diagonal:c8-h3, 1Arrow:f7-f5', $page['comments'][0]['actions']);
+        self::assertArrayNotHasKey('actions', $page['comments'][1]);
+        $near = $store->forPosition('0123456789abcdef', self::KEY, 5);
+        self::assertSame('0Diagonal:c8-h3, 1Arrow:f7-f5', $near[0]['actions']);
+    }
+
+    public function test_set_actions_replaces_clears_and_ignores_unknown_comments(): void
+    {
+        $store = new SqlitePositionCommentStore('', self::database());
+        self::assertTrue($store->setActions(1, '0Piece:c8'));
+        self::assertTrue($store->setActions(1, '2Clear'));
+        self::assertSame('2Clear', $store->list([], 0, 50)['comments'][0]['actions']);
+        self::assertTrue($store->setActions(1, ''));
+        self::assertArrayNotHasKey('actions', $store->list([], 0, 50)['comments'][0]);
+        self::assertFalse($store->setActions(99, '0Piece:c8'));
+    }
 }

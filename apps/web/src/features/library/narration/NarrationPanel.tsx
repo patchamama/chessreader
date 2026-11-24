@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { buildNarrationScript, CONCEPTS } from '@chess-ebook/chess-shared'
 import type { RecognizedGame, Lang } from '@chess-ebook/chess-shared'
-import { useNarrationStore } from './narrationStore'
+import { useNarrationStore, type ActionsSource } from './narrationStore'
+import { databaseActionsFor } from './commentActions'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { cuesToBoard, CUE_COLORS, CUE_LABELS } from './cueStyles'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
@@ -11,6 +12,8 @@ interface NarrationPanelProps {
   /** The games recognised in the chapter and the text they were read from. */
   games: RecognizedGame[]
   text: string
+  /** Where the narration actions of a comment come from (default: the comments database). */
+  actionsFor?: ActionsSource
 }
 
 const T: Record<Lang, Record<string, string>> = {
@@ -53,7 +56,7 @@ const T: Record<Lang, Record<string, string>> = {
  * Narrates a game of the chapter: a voice reads the moves and the comments
  * while the board plays the moves and lights up what is being said.
  */
-export function NarrationPanel({ games, text }: NarrationPanelProps) {
+export function NarrationPanel({ games, text, actionsFor = databaseActionsFor }: NarrationPanelProps) {
   const activeGame = useStudyBoardStore((s) => s.activeGame)
   const [picked, setPicked] = useState<number | null>(null)
   const activeIndex = games.findIndex((g) => g.tree === activeGame)
@@ -79,6 +82,11 @@ export function NarrationPanel({ games, text }: NarrationPanelProps) {
   const n = useNarrationStore()
   const { load, stop, setOption } = n
   useEffect(() => setOption({ repeatAfter: repeatSeconds }), [repeatSeconds, setOption])
+  const setActionsFor = useNarrationStore((s) => s.setActionsFor)
+  useEffect(() => {
+    setActionsFor(actionsFor)
+    return () => setActionsFor(null)
+  }, [actionsFor, setActionsFor])
   // (Re)load whenever the chapter, the algorithm or the chosen game changes.
   useEffect(() => {
     const game = games[gameIndex]

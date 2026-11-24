@@ -312,3 +312,42 @@ describe('the pause after each move, chosen in the settings (S32)', () => {
     useSettingsStore.setState({ narrationMovePause: 0 })
   })
 })
+
+describe('the moves written in a comment are shown as the narration reaches them (studies-epub-pgn-narration S5)', () => {
+  const PROSE = [
+    'Partida de prueba',
+    '1. e4 e5 2. Cf3 Cc6 3. Ab5 a6',
+    'Las blancas pueden jugar con c3, con idea de d4, o con d3, más pasiva.',
+    '4. Aa4 Cf6',
+  ].join('\n')
+  const [g] = recognizeGames(PROSE, { algorithm: 2 })
+  const steps = buildNarrationScript(PROSE, g, { from: 0, to: PROSE.length })
+
+  /** The arrows on the board each time the cues change while the comment is said. */
+  async function arrowsWhileSaid(actionsFor?: (text: string, fen: string) => string | undefined) {
+    const seen: string[][] = []
+    const unsub = useNarrationStore.subscribe((s, prev) => {
+      if (s.cues !== prev.cues) seen.push(s.cues.flatMap((c) => c.arrows.map((a) => `${a.from}${a.to}`)))
+    })
+    useNarrationStore.getState().setActionsFor(actionsFor ?? null)
+    const n = useNarrationStore.getState()
+    n.load(steps, g.tree)
+    n.setOption({ simulate: false })
+    n.play()
+    await settle(() => useNarrationStore.getState().status === 'finished')
+    unsub()
+    return seen
+  }
+
+  it('c3, d4 and d3 get their pawn arrows one after another', async () => {
+    const seen = await arrowsWhileSaid()
+    const inComment = seen.find((s) => s.includes('c2c3'))
+    expect(inComment).toBeDefined()
+    expect(seen.filter((s) => s.length > 0 && s.every((a) => ['c2c3', 'd2d4', 'd2d3'].includes(a)))).toEqual([['c2c3'], ['c2c3', 'd2d4'], ['c2c3', 'd2d4', 'd2d3']])
+  })
+
+  it('the actions of the comment replace those guesses and are performed in sync', async () => {
+    const seen = await arrowsWhileSaid((text) => (text.includes('Las blancas pueden') ? '0Arrow:e1-e2, 5Clear, 6Arrow:f3-e5' : undefined))
+    expect(seen.filter((s) => s.includes('e1e2') || s.includes('f3e5'))).toEqual([['e1e2'], ['f3e5']])
+  })
+})

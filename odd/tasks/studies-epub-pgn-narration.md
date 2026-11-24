@@ -12,11 +12,11 @@ Objective: Lichess study -> library EPUB (with a conversion modal), the reverse 
 - S8 "corrije que cada vez que se abra una partida o estudio de lichess, debe de abrirse en un nuevo tab del board de análisis y no siempre en el mismo board, pues se está abriendo en el mismo board."
 
 ## Tasks (routes: parent inline, writers delegated per unit with disjoint surfaces)
-- [ ] T1 S3 S4 PGN/comment fixes — parent
-- [ ] T2 S7 captured pieces, S8 new tab per opened game/study — parent
-- [ ] T3 S1 study -> EPUB + library (modal, cover, diagrams, eval, translate) — writer C
-- [ ] T4 S2 book -> PGNs, generated-PGN area (DB), download, Lichess upload — writer D
-- [ ] T5 S5 S6 narration: Spanish isolated moves, side-to-move highlighting, AI actions field — writer E
+- [x] T1 S3 S4 PGN/comment fixes — parent
+- [~] T2 (S7 done v0.144.1; S8 new tab per opened game: open) S7 captured pieces, S8 new tab per opened game/study — parent
+- [x] T3 S1 study -> EPUB + library (modal, cover, diagrams, eval, translate) — writer C
+- [x] T4 S2 book -> PGNs, generated-PGN area (DB), download, Lichess upload — writer D
+- [x] T5 S5 S6 narration: Spanish isolated moves, side-to-move highlighting, AI actions field — writer E
 
 ## Log
 - L1 2026-11-24 user: (the whole message; the specs above quote its exact strings) ... "puedes continuar con todo lo pendiente"

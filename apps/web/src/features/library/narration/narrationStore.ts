@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { useSettingsStore } from '../../../shared/settings/settingsStore'
 import { moveCue, detectLang, sanToSpeech, variationIntro, backToGame, RETURN_PAUSE } from '@chess-ebook/chess-shared'
+import { planSentence, type SentencePlan } from './sentencePlan'
 import type { BoardCue, GameTree, Lang, NarrationStep } from '@chess-ebook/chess-shared'
 import { useStudyBoardStore } from '../store/studyBoardStore'
 import { browserSpeaker, type Speaker } from './speaker'
@@ -32,6 +33,11 @@ export function setNarrationRuntime(next: Partial<Runtime>) {
   runtime = { ...runtime, ...next }
 }
 
+export type ActionsSource = (commentText: string, fen: string) => string | undefined | Promise<string | undefined>
+
+/** Time one word takes to be said at normal speed (about 150 words a minute). */
+const WORD_MS = 400
+
 interface NarrationState {
   script: NarrationStep[]
   tree: GameTree | null
@@ -57,6 +63,13 @@ interface NarrationState {
   /** Glossary concepts mentioned so far, in order of appearance. */
   concepts: string[]
 
+  /**
+   * Where the narration action list of a comment comes from (the comments database): given the
+   * comment as one text and the position it is about. Null = none (the moves written in the text are read instead).
+   */
+  actionsFor: ActionsSource | null
+  setActionsFor: (source: ActionsSource | null) => void
+
   load: (script: NarrationStep[], tree: GameTree, lang?: Lang) => void
   /** Drop the pieces moved by hand and show the position the narration expects. */
   restorePosition: () => void
@@ -81,6 +94,25 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
   const addConcepts = (cues: BoardCue[]) => {
     const fresh = cues.map((c) => c.concept).filter((c): c is string => !!c && !get().concepts.includes(c))
     if (fresh.length) set({ concepts: [...get().concepts, ...new Set(fresh)] })
+  }
+
+  /** Say a sentence while its marks appear as the narrator reaches their words. */
+  async function say(speech: string, lang: Lang, rate: number, plan: SentencePlan, alive: () => boolean) {
+    set({ cues: plan.base })
+    const speaking = runtime.speaker.speak(speech, lang, rate)
+    let shown = plan.base
+    let elapsed = 0
+    for (const reveal of plan.reveals) {
+      const due = (reveal.at * WORD_MS) / rate
+      if (due > elapsed) {
+        await Promise.race([runtime.delay(due - elapsed), speaking])
+        elapsed = due
+      }
+      if (!alive()) return
+      shown = [...(reveal.clear ? [] : shown), ...reveal.cues]
+      set({ cues: shown })
+    }
+    await speaking
   }
 
   async function run(token: number) {
@@ -134,12 +166,17 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
         addConcepts(sentence.cues)
       } else {
         show(tree, step.nodeId)
-        for (const sentence of step.sentences) {
+        const texts = step.sentences.map((x) => x.text)
+        const fen = (step.nodeId ? tree.nodes.get(step.nodeId)?.fen : tree.startFen) ?? null
+        let actions: string | undefined
+        try { actions = fen ? await get().actionsFor?.(texts.join(' '), fen) : undefined } catch { actions = undefined }
+        if (!alive()) return
+        for (const [i, sentence] of step.sentences.entries()) {
           set({ cues: sentence.cues, caption: sentence.text })
           addConcepts(sentence.cues)
           const quotes = simulate && sentence.parts.some((p) => p.moveId)
           if (!quotes) {
-            await runtime.speaker.speak(sentence.speech, lang, rate)
+            await say(sentence.speech, lang, rate, planSentence({ sentences: texts, index: i, fen, baseCues: sentence.cues, ...(actions ? { actions } : {}) }), alive)
             if (!alive()) return
             continue
           }
@@ -204,6 +241,8 @@ export const useNarrationStore = create<NarrationState>((set, get) => {
     mismatch: null,
     repeatAfter: 5,
     concepts: [],
+    actionsFor: null,
+    setActionsFor: (source) => set({ actionsFor: source }),
 
     restorePosition: () => {
       board().resetPlay()

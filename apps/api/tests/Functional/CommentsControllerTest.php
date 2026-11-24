@@ -123,6 +123,17 @@ final class CommentsControllerTest extends TestCase
         self::assertSame([], $game['translations']);
     }
 
+    public function test_only_an_admin_saves_comment_actions_and_readers_get_them_with_the_comment(): void
+    {
+        self::assertSame(401, $this->send('PUT', '/api/comments/2/actions', ['actions' => '0Clear'], null)[0]);
+        self::assertSame(403, $this->send('PUT', '/api/comments/2/actions', ['actions' => '0Clear'], Role::User)[0]);
+        [$status, $body] = $this->send('PUT', '/api/comments/2/actions', ['actions' => '0Diagonal:c8-h3, 1Arrow:f7-f5'], Role::Admin);
+        self::assertSame(200, $status);
+        self::assertSame(['saved' => 2], $body);
+        [, $page] = $this->get('/api/comments/position?hash=' . self::HASH . '&fen=' . rawurlencode(self::FEN));
+        self::assertSame('0Diagonal:c8-h3, 1Arrow:f7-f5', $page['comments'][0]['actions']);
+    }
+
     /** @return array<string, mixed> */
     private static function bookGame(): array
     {

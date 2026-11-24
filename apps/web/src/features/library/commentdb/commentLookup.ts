@@ -16,9 +16,11 @@ export interface HumanComment {
   source: { kind: string; title: string; author: string | null }
   /** The comment in other languages (AI translations accepted into the database). */
   translations?: Record<string, string>
+  /** Narration actions ("0Diagonal:c8-h3, 1Arrow:f7-f5"), when the comment has some. */
+  actions?: string
 }
 
-interface ShardEntry { id: number; text: string; lang: string; game: string; ply: number; san: string; source: number; label: string | null; translations?: Record<string, string> }
+interface ShardEntry { id: number; text: string; lang: string; game: string; ply: number; san: string; source: number; label: string | null; translations?: Record<string, string>; actions?: string }
 interface Index { sources: Record<string, { kind: string; title: string; author: string | null; priority: number }> }
 
 const shards = new Map<string, Promise<Record<string, ShardEntry[]>>>()
@@ -139,6 +141,7 @@ async function lookupAll(fen: string): Promise<HumanComment[]> {
         id: e.id, text: e.text, lang: e.lang, ply: e.ply, san: e.san, gameId: e.game, label: e.label,
         source: { kind: s.kind, title: s.title, author: s.author },
         ...(e.translations ? { translations: e.translations } : {}),
+        ...(e.actions ? { actions: e.actions } : {}),
       }))
   } catch {
     index = null

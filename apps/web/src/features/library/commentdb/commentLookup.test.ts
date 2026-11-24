@@ -283,3 +283,14 @@ describe('normalized comments first', () => {
     expect((await humanCommentsForGame(plies, 'es', 15, { normalize: async () => { throw new Error('x') } }))[10].text).toBe('Raw es.')
   })
 })
+
+describe('narration actions reach the reader (studies-epub-pgn-narration S6)', () => {
+  it('a static comment keeps its actions', async () => {
+    useSettingsStore.setState({ commentDbUrl: 'https://example.org/db' })
+    const shard = { [HASH]: [{ id: 2, text: 'A study remark.', lang: 'en', game: '18-1', ply: 4, san: 'Nc6', source: 18, label: 'A – B', actions: '0Diagonal:c8-h3' }] }
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('index.json') ? INDEX : shard), { status: 200 })))
+    clearCommentCache()
+    const found = await lookupPositionComments(FEN)
+    expect(found[0].actions).toBe('0Diagonal:c8-h3')
+  })
+})
