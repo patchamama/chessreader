@@ -27,7 +27,7 @@ beforeEach(() => {
   mounts.length = 0
   live = 0
   useAnalysisBoards.setState({ boards: [], active: null, scratch: null })
-  useReaderTabs.setState({ books: [], selected: { type: 'current' } })
+  useReaderTabs.setState({ books: [], externals: [], activeExternal: null, selected: { type: 'current' } })
 })
 
 describe('books as tabs of the Analysis board (S10)', () => {
@@ -61,5 +61,29 @@ describe('books as tabs of the Analysis board (S10)', () => {
     expect(screen.getByTestId('reader')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Line' }))
     expect(screen.queryByTestId('reader')).not.toBeInTheDocument()
+  })
+})
+
+describe('books opened from outside are tabs of their own', () => {
+  it('two openings show two tabs, one reader at a time, and the tab chosen gets its own book back', async () => {
+    const { useExternalBookStore } = await import('../../../shared/externalBook/externalBookStore')
+    const { openExternalTab } = await import('./readerTabs')
+    useReaderTabs.setState({ books: [], externals: [], activeExternal: null, selected: { type: 'current' } })
+    useExternalBookStore.setState({ title: '', chapters: [], source: null, version: 0 })
+    render(<AnalysisPage />)
+    act(() => {
+      useExternalBookStore.getState().open('Study one', [])
+      openExternalTab()
+      useExternalBookStore.getState().open('Study two', [])
+      openExternalTab()
+    })
+    expect(screen.getByRole('tab', { name: 'Study one' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Study two' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getAllByTestId('reader')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('tab', { name: 'Study one' }))
+    expect(screen.getByRole('tab', { name: 'Study one' })).toHaveAttribute('aria-selected', 'true')
+    expect(useExternalBookStore.getState().title).toBe('Study one')
+    fireEvent.click(screen.getByRole('button', { name: /Close.*Study one/i }))
+    expect(screen.queryByRole('tab', { name: 'Study one' })).toBeNull()
   })
 })

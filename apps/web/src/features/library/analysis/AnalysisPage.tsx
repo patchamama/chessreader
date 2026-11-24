@@ -12,7 +12,8 @@ import {
 import { lineOfBoard } from './analysisGame'
 import { AnalysisMoveList } from './AnalysisMoveList'
 import { AnalysisCommentsOption, AnalysisWorkspace, EMPTY_WORK } from './AnalysisWorkspace'
-import { closeBookTab, selectTab, useReaderTabs } from './readerTabs'
+import { EXTERNAL_BOOK_ID } from '../../../shared/externalBook/externalBookStore'
+import { closeBookTab, closeExternalTab, selectTab, useReaderTabs, type ExternalTab } from './readerTabs'
 import { useStudyNavigation } from '../hooks/useStudyNavigation'
 
 const T: Record<AppLanguage, { title: string; current: string; close: string; moves: string; add: string; analysis: string; book: string }> = {
@@ -44,6 +45,21 @@ function BookTab({ bookId, on, label, closeLabel, tab, box }: { bookId: number; 
         className="px-1.5 text-xs text-slate-400 hover:text-red-600"
         onClick={() => closeBookTab(bookId)}
       >
+        ✕
+      </button>
+    </span>
+  )
+}
+
+/** The tab of a game or study opened from outside: the title of its book, with a ✕ that closes it. */
+function ExternalTabButton({ ext, on, closeLabel, tab, box }: { ext: ExternalTab; on: boolean; closeLabel: string; tab: string; box: string }) {
+  const title = ext.snapshot.title || 'Game'
+  return (
+    <span className={box}>
+      <button type="button" role="tab" aria-selected={on} title={title} className={tab} onClick={() => selectTab({ type: 'external', tabId: ext.tabId })}>
+        {title}
+      </button>
+      <button type="button" aria-label={`${closeLabel} ${title}`} className="px-1.5 text-xs text-slate-400 hover:text-red-600" onClick={() => closeExternalTab(ext.tabId)}>
         ✕
       </button>
     </span>
@@ -93,7 +109,7 @@ export default function AnalysisPage() {
   const studyGame = useStudyBoardStore((s) => s.activeGame)
   const lang = useSettingsStore((s) => s.language)
   const t = T[lang] ?? T.en
-  const { books, selected } = useReaderTabs()
+  const { books, externals, selected } = useReaderTabs()
   // A board just opened (or brought to the front elsewhere) is the one shown,
   // unless a book is being read: its own boards open in the floating panel.
   const lastActive = useRef(active)
@@ -102,7 +118,8 @@ export default function AnalysisPage() {
     lastActive.current = active
     if (active !== null && useReaderTabs.getState().selected.type !== 'book') selectTab({ type: 'board', id: active })
   }, [active])
-  const bookId = selected.type === 'book' ? selected.bookId : null
+  const bookId = selected.type === 'book' ? selected.bookId : selected.type === 'external' ? EXTERNAL_BOOK_ID : null
+  const readerKey = selected.type === 'external' ? `external-${selected.tabId}` : String(bookId)
   const board = selected.type === 'board' ? boards.find((b) => b.id === selected.id) ?? null : null
   const tab = 'max-w-[14rem] truncate px-3 py-1.5 text-sm font-medium text-slate-700'
   const tabBox = (on: boolean) => `flex shrink-0 items-center rounded-t border-b-2 ${on ? 'border-emerald-600 bg-emerald-50' : 'border-transparent hover:bg-slate-50'}`
@@ -137,6 +154,10 @@ export default function AnalysisPage() {
             </button>
           </span>
         ))}
+        {externals.map((ext) => {
+          const on = selected.type === 'external' && selected.tabId === ext.tabId
+          return <ExternalTabButton key={`external-${ext.tabId}`} ext={ext} on={on} closeLabel={t.close} tab={tab} box={tabBox(on)} />
+        })}
         {books.map((b) => (
           <BookTab key={`book-${b.bookId}`} bookId={b.bookId} on={bookId === b.bookId} label={t.book} closeLabel={t.close} tab={tab} box={tabBox(bookId === b.bookId)} />
         ))}
@@ -158,7 +179,7 @@ export default function AnalysisPage() {
       <div role="tabpanel" className={bookId !== null ? 'flex min-h-0 flex-1 flex-col' : undefined}>
         {bookId !== null ? (
           // Only the shown book keeps a reader mounted: they share the study board.
-          <BookReader key={bookId} bookId={bookId} />
+          <BookReader key={readerKey} bookId={bookId} />
         ) : board ? (
           <AnalysisWorkspace
             key={board.id}

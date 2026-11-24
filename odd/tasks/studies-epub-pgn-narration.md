@@ -13,7 +13,7 @@ Objective: Lichess study -> library EPUB (with a conversion modal), the reverse 
 
 ## Tasks (routes: parent inline, writers delegated per unit with disjoint surfaces)
 - [x] T1 S3 S4 PGN/comment fixes — parent
-- [~] T2 (S7 done v0.144.1; S8 new tab per opened game: open) S7 captured pieces, S8 new tab per opened game/study — parent
+- [x] T2 (S7 v0.144.1; S8 v0.145.1: external tabs in readerTabs.ts, one per opening) S7 captured pieces, S8 new tab per opened game/study — parent
 - [x] T3 S1 study -> EPUB + library (modal, cover, diagrams, eval, translate) — writer C
 - [x] T4 S2 book -> PGNs, generated-PGN area (DB), download, Lichess upload — writer D
 - [x] T5 S5 S6 narration: Spanish isolated moves, side-to-move highlighting, AI actions field — writer E
