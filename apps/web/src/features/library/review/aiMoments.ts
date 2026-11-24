@@ -37,6 +37,8 @@ export const MOMENT_COMMENT_SYSTEM = [
   'You write one short remark about a key moment of a chess game, for a chess book.',
   'You are given the position, the move played, the engine evaluations and lines, what was actually played next with the material count, and the pattern detected (sacrifice, blunder, capture sequence, mating attack).',
   'Say what the move means: when a piece is sacrificed, say what it buys; when it is a blunder, say what it gives away; when material is won, how.',
+  'A sacrifice is judged over the whole exchange sequence that the key move opens (the group of plies given), comparing the material and the evaluation at its start with those at its end, never over one move: a piece may be offered with a quiet move and taken at once, and the result shows only some plies later.',
+  'Terms, to be used only when the facts name them: a forced move is a reply with no real choice (the only legal move, or the only way out of a check); a forcing move is a check, a capture or a threat that limits the replies; zugzwang is a position where every move worsens the position of the side to move; sacrificing the exchange is giving a rook for a minor piece; a queen sacrifice gives the queen for less.',
   'Use only the facts given. Never invent moves, evaluations, material figures or variations that are not in the facts.',
   'Answer with JSON only, exactly {"comment": "<the remark>"}, and nothing else.',
 ].join('\n')
@@ -52,7 +54,7 @@ const sideName = (c: 'white' | 'black') => (c === 'white' ? 'White' : 'Black')
 const PIECE = { p: 'a pawn', n: 'a knight', b: 'a bishop', r: 'a rook', q: 'a queen' }
 
 function stepText(step: PlayedStep): string {
-  const taken = step.captured ? `takes ${PIECE[step.captured]}` : ''
+  const taken = [step.captured ? `takes ${PIECE[step.captured]}` : '', step.forced ? `forced: ${step.forced}` : ''].filter(Boolean).join(', ')
   const promo = step.promotion ? `promotes to ${PIECE[step.promotion].slice(2)}` : ''
   const note = [taken, promo].filter(Boolean).join(', ')
   const lead = step.lead > 0 ? `+${step.lead}` : step.lead < 0 ? `−${-step.lead}` : '0'
@@ -70,6 +72,11 @@ export function momentFactsText(f: MomentFacts): string {
     `Engine evaluation for ${who} (the side that moved): before the move ${f.evalBeforeText}, after it ${f.evalAfterText}.`,
     `Material before the move: White ${f.materialBefore.white}, Black ${f.materialBefore.black} (${who} lead: ${f.leadBefore >= 0 ? '+' : '−'}${Math.abs(f.leadBefore)}); after it: White ${f.materialAfter.white}, Black ${f.materialAfter.black}.`,
   ]
+  const g = f.group
+  const lead = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0')
+  lines.push(
+    `Exchange sequence opened by the move (${g.plies} ${g.plies === 1 ? 'ply' : 'plies'}, until the captures and checks stop): material at the start White ${g.materialStart.white}, Black ${g.materialStart.black}; at the end White ${g.materialEnd.white}, Black ${g.materialEnd.black}; lead of ${who} ${lead(g.leadStart)} → ${lead(g.leadEnd)}; evaluation for ${who} ${g.evalStartText} → ${g.evalEndText}.`,
+  )
   const played = f.san.replace(/[+#!?]+$/, '')
   if (f.best) {
     lines.push(f.best.san.replace(/[+#!?]+$/, '') === played

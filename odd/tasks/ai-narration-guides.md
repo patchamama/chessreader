@@ -15,3 +15,5 @@ Objective: AI narration guides (compact actions) shown only in debug mode and re
 
 ## Log
 - L1 2026-11-24 user: (the message; the specs quote its exact strings)
+
+- L2 2026-11-24 user: sacrifices are judged over the whole exchange group (start vs end material and evaluation), with the piece offered "to the slaughter", exchange/queen sacrifices, forced moves and zugzwang. Done in v0.146.1 (momentFacts.ts group logic).

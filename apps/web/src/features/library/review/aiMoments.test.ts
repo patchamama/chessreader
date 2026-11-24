@@ -33,7 +33,7 @@ function fakeEngine(cps: Record<number, number> = WHITE_CP) {
 const request = (text: string): LlmRequest => ({ messages: [{ role: 'user', text }] })
 
 describe('the prompt of a key moment (S5)', () => {
-  const evals = flat(SANS.length, 30, { 11: { cp: 150 }, 12: { cp: 180 } })
+  const evals = flat(SANS.length, 30, { 11: { cp: 150 }, 12: { cp: 180 }, 13: { cp: 180 }, 14: { cp: 150 } })
   const plies = buildPlies(SANS, evals)
   plies[10].best = { san: 'Nxf7', line: ['Nxf7', 'Kxf7', 'Qf3+'] }
   const facts = momentFacts(plies, 10)
@@ -47,7 +47,9 @@ describe('the prompt of a key moment (S5)', () => {
     expect(text).toContain('+1.5')
     expect(text).toContain('Nxf7 Kxf7 Qf3+')
     expect(text).toContain('6...Kxf7')
-    expect(text).toContain('sacrifice: gives a knight for a pawn (net −2) but the evaluation goes from +0.3 to +1.5: the plan is the attack.')
+    expect(text).toContain('sacrifice of a minor piece (a knight for a pawn): a knight is offered on f7 and taken at once; net −2 over 4 plies, and the evaluation goes from +0.3 to +1.5: the plan is the attack.')
+    expect(text).toContain('Exchange sequence opened by the move (4 plies')
+    expect(text).toContain('lead of White 0 → −2')
     expect(text).toContain('White 38, Black 38')
   })
 
@@ -66,7 +68,7 @@ describe('the prompt of a key moment (S5)', () => {
 })
 
 describe('the answer of the model (S5)', () => {
-  const plies = buildPlies(SANS, flat(SANS.length, 30, { 11: { cp: 150 }, 12: { cp: 180 } }))
+  const plies = buildPlies(SANS, flat(SANS.length, 30, { 11: { cp: 150 }, 12: { cp: 180 }, 13: { cp: 180 }, 14: { cp: 150 } }))
   plies[10].best = { san: 'Nxf7', line: ['Nxf7', 'Kxf7', 'Qf3+'] }
   const facts = momentFacts(plies, 10)
 
@@ -120,7 +122,7 @@ describe('commentGameWithAi (S5)', () => {
     expect(requests.length).toBeGreaterThan(0)
     expect(requests.every((r) => r.json)).toBe(true)
     const sac = requests.find((r) => r.messages[0].text.includes('6.Nxf7'))!
-    expect(sac.messages[0].text).toContain('sacrifice: gives a knight for a pawn')
+    expect(sac.messages[0].text).toContain('sacrifice of a minor piece (a knight for a pawn)')
     // the layout of the existing flow: the moves are still written
     expect(body).toContain('6. Nxf7')
   })
