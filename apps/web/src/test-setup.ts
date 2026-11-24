@@ -11,6 +11,8 @@ if (typeof Worker === 'undefined') {
     onmessage: ((event: MessageEvent) => void) | null = null
     postMessage = vi.fn()
     terminate = vi.fn()
+    addEventListener = vi.fn()
+    removeEventListener = vi.fn()
   }
 }
 
